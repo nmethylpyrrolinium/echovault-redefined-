@@ -2218,6 +2218,16 @@ window.addEventListener('resize', () => {
   if (state.currentView === 'timeline') Timeline.render();
 }, {passive:true});
 
+
+/* ── EXTERNAL BRIDGE ── */
+window.EchoVaultBridge = {
+  getState: () => state,
+  MOOD_COLORS,
+  ARCHETYPE_NAMES,
+  ARCHETYPE_DESCS,
+  SOUNDPRINTS
+};
+
 /* ── INIT ── */
 function init() {
   state.echoes = Storage.load();
