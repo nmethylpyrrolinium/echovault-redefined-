@@ -5,6 +5,7 @@
 const STORAGE_KEY  = 'echovault_echoes_v2';
 const USER_KEY     = 'echoUser';
 const OB_KEY       = 'echoOnboarded';
+const BACKEND_STATE_KEY = 'echoBackendState';
 
 const MOOD_COLORS = {
   calm:'#5b8fa8', chaos:'#c44b4b', reflective:'#7c6fa0',
@@ -119,6 +120,96 @@ const Storage = (() => {
   return {load, save, exportVault, importVault};
 })();
 
+
+
+/* ── BACKEND (SUPABASE + LOCAL FALLBACK) ── */
+const Backend = (() => {
+  let client = null;
+  let userId = null;
+  let ready = false;
+
+  function config() {
+    const inline = window.ECHOVAULT_SUPABASE || {};
+    return {
+      url: inline.url || localStorage.getItem('echovault_supabase_url') || '',
+      anonKey: inline.anonKey || localStorage.getItem('echovault_supabase_anon_key') || ''
+    };
+  }
+
+  async function init() {
+    const cfg = config();
+    if (!window.supabase || !cfg.url || !cfg.anonKey) return false;
+    try {
+      client = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { persistSession: true, autoRefreshToken: true } });
+      const { data } = await client.auth.getSession();
+      if (!data.session) await client.auth.signInAnonymously();
+      const session = (await client.auth.getSession()).data.session;
+      userId = session?.user?.id || null;
+      ready = Boolean(userId);
+      localStorage.setItem(BACKEND_STATE_KEY, ready ? 'connected' : 'local');
+      return ready;
+    } catch (e) {
+      localStorage.setItem(BACKEND_STATE_KEY, 'local');
+      return false;
+    }
+  }
+
+  async function loadEchoes() {
+    if (!ready) return null;
+    try {
+      const { data, error } = await client.from('echoes').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+      if (error || !Array.isArray(data)) return null;
+      return data.map(r => ({
+        id: r.echo_id || r.id || Date.now() + Math.floor(Math.random() * 1000),
+        mood: r.mood, intensity: r.intensity, silence: r.silence,
+        thought: r.thought, void: Boolean(r.is_void), date: r.created_at || new Date().toISOString()
+      }));
+    } catch (e) { return null; }
+  }
+
+  async function saveEcho(echo) {
+    if (!ready) return;
+    try {
+      await client.from('echoes').upsert({
+        user_id: userId, echo_id: echo.id, mood: echo.mood, intensity: echo.intensity, silence: echo.silence,
+        thought: echo.thought, is_void: echo.void, created_at: echo.date
+      });
+    } catch (e) {}
+  }
+
+  async function saveUserState(payload) {
+    if (!ready) return;
+    try {
+      await client.from('user_state').upsert({ user_id: userId, ...payload, updated_at: new Date().toISOString() });
+    } catch (e) {}
+  }
+
+  async function loadUserState() {
+    if (!ready) return null;
+    try {
+      const { data } = await client.from('user_state').select('*').eq('user_id', userId).maybeSingle();
+      return data || null;
+    } catch (e) { return null; }
+  }
+
+  async function setIdentity(name) {
+    if (!ready) return;
+    try {
+      await client.from('identity').upsert({ user_id: userId, display_name: name, updated_at: new Date().toISOString() });
+    } catch (e) {}
+  }
+
+  async function loadIdentity() {
+    if (!ready) return null;
+    try {
+      const { data } = await client.from('identity').select('display_name').eq('user_id', userId).maybeSingle();
+      return data?.display_name || null;
+    } catch (e) { return null; }
+  }
+
+  return { init, loadEchoes, saveEcho, saveUserState, loadUserState, setIdentity, loadIdentity };
+})();
+
 /* ── TOAST ── */
 const Toast = (() => {
   const el = document.getElementById('toast');
@@ -172,98 +263,103 @@ const Nav = (() => {
 const Login = (() => {
   const screen   = document.getElementById('login-screen');
   const lsOrb    = document.getElementById('ls-orb');
-  const lsBreath = document.getElementById('ls-breath');
-  const lsName   = document.getElementById('ls-name');
   const lsReturn = document.getElementById('ls-return');
   const stressOrb= document.getElementById('stress-orb');
-  const nameInput= document.getElementById('name-input');
-  const nameBtn  = document.getElementById('name-enter-btn');
+  const hintEl   = document.getElementById('entry-hint');
+
+  let holdStart = 0;
+  let entered = false;
 
   function showStep(el) {
-    [lsOrb,lsBreath,lsName,lsReturn].forEach(s => s.classList.remove('active'));
+    [lsOrb, lsReturn].forEach(s => s.classList.remove('active'));
     el.classList.add('active');
   }
 
-  function enterApp(name) {
-    screen.classList.add('hidden');
+  function enterApp() {
+    if (entered) return;
+    entered = true;
+    screen.classList.add('entering');
+    setTimeout(() => screen.classList.add('hidden'), 220);
     setTimeout(() => {
       screen.style.display = 'none';
-      // Show onboarding if new user
-      if (!localStorage.getItem(OB_KEY)) {
-        Onboarding.start();
-      }
-    }, 950);
+      if (!localStorage.getItem(OB_KEY)) Onboarding.start();
+    }, 920);
   }
 
-  function init() {
-    const savedUser = localStorage.getItem(USER_KEY);
-
-    if (savedUser) {
-      // Returning user
-      document.getElementById('return-name').textContent = savedUser;
-      showStep(lsReturn);
-      document.getElementById('return-enter-btn').addEventListener('click', () => enterApp(savedUser));
+  function progressTick() {
+    if (!holdStart || entered) return;
+    const p = Math.min(1, (Date.now() - holdStart) / 1150);
+    document.documentElement.style.setProperty('--entry-core-progress', String(1 + p * 0.18));
+    document.documentElement.style.setProperty('--entry-core-alpha', String(0.28 + p * 0.62));
+    hintEl.textContent = p < 1 ? 'hold…' : 'entering…';
+    if (p >= 1) {
+      enterApp();
       return;
     }
+    requestAnimationFrame(progressTick);
+  }
 
-    // New user flow
+  function bindNewUser() {
     stressOrb.addEventListener('pointerdown', () => {
+      holdStart = Date.now();
       stressOrb.classList.add('pressed');
+      progressTick();
     });
-    ['pointerup','pointerleave'].forEach(ev =>
-      stressOrb.addEventListener(ev, () => stressOrb.classList.remove('pressed')));
-
-    let pressStart = 0;
-    stressOrb.addEventListener('pointerdown', () => { pressStart = Date.now(); });
-    stressOrb.addEventListener('pointerup', () => {
-      if (Date.now() - pressStart > 80) {
-        showStep(lsBreath);
-        BreathAnim.start();
-        setTimeout(() => { showStep(lsName); setTimeout(() => nameInput.focus(), 300); }, 4200);
-      }
-    });
+    ['pointerup','pointerleave','pointercancel'].forEach(ev => stressOrb.addEventListener(ev, () => {
+      holdStart = 0;
+      stressOrb.classList.remove('pressed');
+      hintEl.textContent = 'hold to enter';
+      document.documentElement.style.setProperty('--entry-core-progress', '1');
+      document.documentElement.style.setProperty('--entry-core-alpha', '.3');
+    }));
     stressOrb.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        stressOrb.dispatchEvent(new PointerEvent('pointerdown'));
-        setTimeout(() => stressOrb.dispatchEvent(new PointerEvent('pointerup')), 200);
+        holdStart = Date.now();
+        progressTick();
       }
     });
+  }
 
-    nameInput.addEventListener('input', () => {
-      nameBtn.classList.toggle('visible', nameInput.value.trim().length > 0);
-    });
-    nameInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && nameInput.value.trim()) enter();
-    });
-    nameBtn.addEventListener('click', enter);
+  async function init() {
+    const savedUser = localStorage.getItem(USER_KEY);
+    const remoteIdentity = await Backend.loadIdentity();
+    const identityName = remoteIdentity || savedUser;
 
-    function enter() {
-      const name = nameInput.value.trim();
-      if (!name) return;
-      localStorage.setItem(USER_KEY, name);
-      enterApp(name);
+    if (identityName) {
+      localStorage.setItem(USER_KEY, identityName);
+      showStep(lsReturn);
+      setTimeout(enterApp, 1450);
+      return;
     }
+
+    bindNewUser();
+    setTimeout(async () => {
+      const guestName = 'Echo Traveler';
+      localStorage.setItem(USER_KEY, guestName);
+      await Backend.setIdentity(guestName);
+    }, 10);
   }
 
   return {init};
 })();
 
 /* ── BREATH ANIMATION (login) ── */
+
 const BreathAnim = (() => {
   const canvas = document.getElementById('breath-anim-canvas');
-  const ctx    = canvas.getContext('2d');
+  const ctx    = canvas ? canvas.getContext('2d') : null;
   let phase = 0, raf = null, running = false;
 
   function start() {
-    if (running) return;
+    if (!canvas || !ctx || running) return;
     running = true;
     phase = 0;
     tick();
   }
 
   function tick() {
-    if (!running) return;
+    if (!running || !ctx) return;
     ctx.clearRect(0,0,200,200);
     phase += 0.018;
     const cx=100, cy=100;
@@ -355,6 +451,7 @@ const Onboarding = (() => {
   function finish() {
     overlay.classList.remove('open');
     localStorage.setItem(OB_KEY, '1');
+    Backend.saveUserState({ onboarded: true });
   }
 
   nextBtn.addEventListener('click', () => {
@@ -760,9 +857,12 @@ const IdentityCore = (() => {
           const r     = 30 + (count/total)*40 + Math.random()*25;
           particles.push({
             angle, r, baseAngle, mood,
-            speed: 0.004 + Math.random()*0.003,
-            size: 1.5 + Math.random()*2.5,
-            alpha: 0.55 + Math.random()*.4
+            speed: 0.002 + Math.random()*0.005,
+            size: 1.2 + Math.random()*3.5,
+            alpha: 0.35 + Math.random()*.55,
+            wobble: Math.random()*Math.PI*2,
+            wobbleSpeed: 0.006 + Math.random()*0.016,
+            depth: 0.72 + Math.random()*0.45
           });
         }
       });
@@ -770,7 +870,8 @@ const IdentityCore = (() => {
         const angle = (i/8)*Math.PI*2;
         particles.push({
           angle, r: 8+Math.random()*12, baseAngle:angle, mood:'gold',
-          speed:0.008+Math.random()*0.006, size:1+Math.random()*1.5, alpha:.45+Math.random()*.3
+          speed:0.008+Math.random()*0.006, size:1+Math.random()*1.5, alpha:.45+Math.random()*.3,
+          wobble: Math.random()*Math.PI*2, wobbleSpeed: 0.02 + Math.random()*0.02, depth: 1.1
         });
       }
     }
@@ -801,11 +902,17 @@ const IdentityCore = (() => {
 
     particles.forEach(p => {
       p.angle += p.speed;
-      const px = cx + Math.cos(p.angle) * p.r;
-      const py = cy + Math.sin(p.angle) * p.r;
+      p.wobble += p.wobbleSpeed;
+      const driftR = p.r + Math.sin(p.wobble) * (2.5 + p.depth * 5.5);
+      const wobbleX = Math.cos(p.wobble * 0.7 + p.angle) * (1.4 + p.depth * 2.4);
+      const wobbleY = Math.sin(p.wobble * 1.1 - p.angle) * (1.2 + p.depth * 2.6);
+      const px = cx + Math.cos(p.angle) * driftR + wobbleX;
+      const py = cy + Math.sin(p.angle) * (driftR * (0.86 + p.depth * 0.08)) + wobbleY;
       const color = p.mood === 'gold' ? '#c9a84c' : MOOD_COLORS[p.mood] || '#c9a84c';
-      ctx.beginPath(); ctx.arc(px, py, p.size, 0, Math.PI*2);
-      ctx.fillStyle = color + Math.floor(p.alpha*255).toString(16).padStart(2,'0');
+      const alpha = Math.max(.1, Math.min(.95, p.alpha + Math.sin(p.wobble * 0.5) * 0.12));
+      const rr = p.size * (0.8 + p.depth * 0.28 + Math.sin(p.wobble + phase) * 0.08);
+      ctx.beginPath(); ctx.arc(px, py, rr, 0, Math.PI*2);
+      ctx.fillStyle = color + Math.floor(alpha*255).toString(16).padStart(2,'0');
       ctx.fill();
     });
 
@@ -1055,6 +1162,7 @@ const EntryForm = (() => {
     };
     state.echoes.unshift(echo);
     Storage.save(state.echoes);
+    Backend.saveEcho(echo);
 
     const cx = window.innerWidth/2, cy = window.innerHeight/2;
     Ripple.spawn(cx, cy, MOOD_COLORS[echo.mood], echo.void);
@@ -2182,6 +2290,7 @@ function setPeriod(p, btn) {
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   Wrapped.render();
+  Backend.saveUserState({ wrapped_period: p });
 }
 document.getElementById('export-btn').addEventListener('click', () => Storage.exportVault(state.echoes));
 document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file').click());
@@ -2212,8 +2321,20 @@ window.addEventListener('resize', () => {
 }, {passive:true});
 
 /* ── INIT ── */
-function init() {
+async function init() {
   state.echoes = Storage.load();
+  await Backend.init();
+
+  const remoteEchoes = await Backend.loadEchoes();
+  if (Array.isArray(remoteEchoes) && remoteEchoes.length) {
+    state.echoes = remoteEchoes;
+    Storage.save(state.echoes);
+  }
+
+  const userState = await Backend.loadUserState();
+  if (userState?.wrapped_period) state.wrappedPeriod = userState.wrapped_period;
+  if (userState?.onboarded) localStorage.setItem(OB_KEY, '1');
+
   Cosmos.init();
   Cosmos.draw();
   Breathing.start();
