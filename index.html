@@ -354,6 +354,95 @@
 <!-- WHIP IDLE LABEL -->
 <div class="whip-idle-label" id="whip-idle-label" aria-hidden="true">still here — feel something</div>
 
+
+<!-- ═══════════════════════════════════
+     SETTINGS PANEL
+════════════════════════════════════ -->
+<div id="settings-overlay" role="dialog" aria-modal="true" aria-label="Settings" aria-hidden="true">
+  <div id="settings-panel">
+
+    <!-- Header -->
+    <div class="settings-header">
+      <div class="settings-title">Your Universe</div>
+      <div class="settings-subtitle">shape how the cosmos knows you</div>
+      <button class="settings-close" id="settings-close-btn" aria-label="Close settings">×</button>
+    </div>
+
+    <!-- Avatar upload -->
+    <div class="settings-section">
+      <div class="settings-section-label">Identity</div>
+      <div class="avatar-upload-zone" id="avatar-zone" role="button" tabindex="0" aria-label="Upload profile picture">
+        <div class="avatar-preview" id="avatar-preview">
+          <div class="avatar-initials" id="avatar-initials">—</div>
+          <img class="avatar-img" id="avatar-img" src="" alt="" style="display:none">
+          <div class="avatar-overlay">
+            <div class="avatar-overlay-icon">✦</div>
+            <div class="avatar-overlay-text">change</div>
+          </div>
+        </div>
+        <div class="avatar-info">
+          <div class="avatar-info-name" id="avatar-info-name">your face in the cosmos</div>
+          <div class="avatar-info-hint">tap to upload · jpg, png, webp · max 2mb</div>
+        </div>
+        <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" aria-label="Choose profile picture">
+      </div>
+      <div class="avatar-upload-progress" id="avatar-progress" style="display:none">
+        <div class="avatar-progress-bar" id="avatar-progress-bar"></div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-label">Name</div>
+      <div class="settings-row">
+        <div class="settings-field">
+          <label class="settings-field-label" for="settings-display-name">Display name</label>
+          <input class="settings-input" id="settings-display-name" type="text" placeholder="how the universe calls you…" maxlength="40">
+        </div>
+        <div class="settings-field">
+          <label class="settings-field-label" for="settings-username">Username</label>
+          <input class="settings-input" id="settings-username" type="text" placeholder="@handle" maxlength="24">
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-label">Bio</div>
+      <textarea class="settings-textarea" id="settings-bio" placeholder="A fragment of who you are…" maxlength="180" rows="3"></textarea>
+      <div class="settings-char-count"><span id="bio-chars">0</span>/180</div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-label">Location <span class="settings-optional">(optional)</span></div>
+      <input class="settings-input" id="settings-location" type="text" placeholder="somewhere in the cosmos…" maxlength="60">
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-label">Emotional Archetype</div>
+      <div class="archetype-display" id="archetype-display">
+        <div class="archetype-orb" id="archetype-orb"></div>
+        <div class="archetype-info">
+          <div class="archetype-name" id="archetype-name-display">The Unknown</div>
+          <div class="archetype-desc" id="archetype-desc-display">Create echoes to discover your archetype.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-label">Your Universe at a Glance</div>
+      <div class="settings-stats-grid" id="settings-stats"></div>
+    </div>
+
+    <div class="settings-section settings-danger-zone">
+      <div class="settings-section-label">Danger Zone</div>
+      <button class="settings-danger-btn" id="settings-clear-btn">Clear all echoes</button>
+    </div>
+
+    <button class="settings-save-btn" id="settings-save-btn">Save Changes</button>
+    <div class="settings-save-status" id="settings-save-status"></div>
+
+  </div>
+</div>
+
 <script src="script.js"></script>
 <script src="wrapped-cinematic-module.js"></script>
 
