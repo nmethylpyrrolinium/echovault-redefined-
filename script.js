@@ -139,8 +139,8 @@ const ProfileStore = (() => {
     try { profile = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
     const legacy = localStorage.getItem(USER_KEY);
     if (legacy && !profile.display_name) {
-      profile.display_name = legacy;
-      write(profile);
+      profile = { ...profile, display_name: legacy };
+      localStorage.setItem(KEY, JSON.stringify({ ...profile, updated_at:new Date().toISOString() }));
     }
     return profile;
   }
@@ -159,8 +159,15 @@ const Auth = (() => {
   let user = null;
   async function init(){
     if (!client) return;
-    const {data} = await client.auth.getSession(); user = data?.session?.user || null;
-    client.auth.onAuthStateChange((_e, s)=>{ user = s?.user || null; UserChip.refresh(); });
+    try {
+      const {data,error} = await client.auth.getSession();
+      if (error) throw error;
+      user = data?.session?.user || null;
+      client.auth.onAuthStateChange((_e, s)=>{ user = s?.user || null; UserChip.refresh(); });
+    } catch (error) {
+      console.warn('Supabase auth unavailable; falling back to local mode behavior.', error);
+      user = null;
+    }
   }
   async function signIn(email,password){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {data,error}=await client.auth.signInWithPassword({email,password}); if(error)return {ok:false,error:error.message}; user=data.user; return {ok:true,data}; }
   async function sendEmailOtp(email){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {error}=await client.auth.signInWithOtp({email,options:{shouldCreateUser:true,emailRedirectTo:window.location.href}}); if(error) return {ok:false,error:error.message}; return {ok:true}; }
@@ -263,7 +270,7 @@ const Settings = (() => {
     if (descEl) descEl.textContent = dom ? ARCHETYPE_DESCS[dom] : 'Create echoes to discover your archetype.';
     if (orbEl && dom) orbEl.style.background = `radial-gradient(circle at 38% 35%,${MOOD_COLORS[dom]},${MOOD_COLORS[dom]}44)`;
   }
-  function init() {
+  async function init() {
     const profile = ProfileStore.read();
     document.getElementById('settings-display-name').value = profile.display_name || localStorage.getItem(USER_KEY) || '';
     document.getElementById('settings-username').value = profile.username || '';
@@ -360,7 +367,7 @@ const Login = (() => {
     authSendCode.style.display = passwordMode ? 'none' : 'inline-flex';
     authTogglePassword.textContent = passwordMode ? 'Use email code instead' : 'Use password instead';
     setOtpUiStep(false);
-    authModeNote.textContent = passwordMode ? 'Password mode enabled. Email + password required.' : "Default: email code sign-in. We'll send a one-time code.";
+    authModeNote.textContent = passwordMode ? 'Password mode enabled. Email + password required.' : 'Code shown? Enter it below. Link shown? Open it to unlock your vault.';
   }
   function startOtpCooldown(seconds=60){ otpCooldownUntil = Date.now() + seconds*1000; tickCooldown(); }
   function tickCooldown(){
@@ -378,7 +385,7 @@ const Login = (() => {
     setButtonLoading(authSendCode, false, 'Send Vault Code', 'Sending…');
     if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
     setOtpUiStep(true);
-    Toast.show('Code sent. Check your email.');
+    Toast.show('Email sent — check for a code or magic link.');
     startOtpCooldown(60);
   }
 
@@ -388,8 +395,8 @@ const Login = (() => {
     setButtonLoading(authVerifyCode, true, 'Verify Code', 'Verifying…');
     const res = await Auth.verifyEmailOtp(email, token);
     setButtonLoading(authVerifyCode, false, 'Verify Code', 'Verifying…');
-    if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
-    if (!res.data?.session) return Toast.show('Session not created. Try requesting a new code.', 4200);
+    if (!res.ok) return Toast.show('Invalid or expired code. If your email only has a magic link, open that link instead.', 4200);
+    if (!res.data?.session) return Toast.show('Session not created. If your email has a magic link, open it instead.', 4200);
     const profile = await Auth.fetchProfile(); if (profile) ProfileStore.write(profile);
     await Auth.upsertProfile({ ...ProfileStore.read(), display_name: nameInput.value.trim() || ProfileStore.read().display_name });
     UserChip.refresh(); Toast.show('Vault unlocked. Welcome back.'); enterApp();
@@ -413,7 +420,7 @@ const Login = (() => {
     stressOrb.addEventListener('pointerdown', () => { pressStart = Date.now(); });
     stressOrb.addEventListener('pointerup', () => { if (Date.now() - pressStart > 80) { showStep(lsBreath); BreathAnim.start(); setTimeout(() => { showStep(lsName); setAuthMode('otp'); setTimeout(() => authEmail?.focus(), 300); }, 4200); } });
 
-    authLocal?.addEventListener('click', () => { const name = nameInput.value.trim() || localStorage.getItem(USER_KEY) || 'local voyager'; localStorage.setItem(USER_KEY, name); UserChip.refresh(); enterApp(); });
+    authLocal?.addEventListener('click', () => { const name = nameInput.value.trim() || localStorage.getItem(USER_KEY) || 'local voyager'; localStorage.setItem(USER_KEY, name); ProfileStore.write({ display_name: name }); UserChip.refresh(); enterApp(); });
     authTogglePassword?.addEventListener('click', () => setAuthMode(authUiMode === 'otp' ? 'password' : 'otp'));
     authSendCode?.addEventListener('click', () => sendEmailOtp(authEmail.value.trim()));
     authVerifyCode?.addEventListener('click', () => verifyEmailOtp(authEmail.value.trim(), authOtp.value.trim()));
@@ -2556,7 +2563,7 @@ window.EchoVaultBridge = {
 };
 
 /* ── INIT ── */
-function init() {
+async function init() {
   state.echoes = Storage.load();
   Cosmos.init();
   Cosmos.draw();
@@ -2564,7 +2571,11 @@ function init() {
   Weather.update();
   GhostLayer.initFromEchoes(state.echoes);
   IdentityCore.update();
-  Auth.init();
+  try {
+    await Auth.init();
+  } catch (error) {
+    console.warn('Auth initialization failed; continuing in local mode.', error);
+  }
   UserChip.refresh();
   PWAInstall.init();
   Login.init();
