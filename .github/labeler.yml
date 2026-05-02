@@ -1,0 +1,15 @@
+frontend:
+  - 'index.html'
+  - 'styles.css'
+  - 'script.js'
+  - 'wrapped-cinematic-module.js'
+
+workflows:
+  - '.github/workflows/**'
+
+docs:
+  - 'README.md'
+  - 'LICENSE'
+
+legacy-pages:
+  - 'legacy-pages/**'
