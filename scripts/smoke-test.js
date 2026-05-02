@@ -19,6 +19,19 @@ if (!script.includes('.storage.from(')) failures.push('script.js missing avatar 
 if (!style.includes('#user-chip') || !style.includes('@media(max-width:768px)')) failures.push('styles.css missing responsive user-chip handling');
 if (!readme.includes('phfwaxuyauuyskzruqbk.supabase.co') || !readme.includes('local mode')) failures.push('README missing Supabase/local fallback notes');
 
+
+if (!script.includes('auth-local-btn')) failures.push('script.js missing auth-local-btn for Continue Locally');
+if (script.includes('profile.display_name = legacy;') && script.includes('write(profile);')) failures.push('ProfileStore.read() still calls write(profile) during legacy migration');
+if (!(script.includes('await Auth.init();') && script.indexOf('await Auth.init();') < script.indexOf('Login.init();'))) failures.push('Auth.init is not awaited/chained before Login.init');
+if (!script.toLowerCase().includes('code or magic link')) failures.push('script.js missing code-or-magic-link guidance text');
+if (!readme.includes('{{ .Token }}')) failures.push('README missing {{ .Token }} instructions');
+if (!readme.includes('{{ .ConfirmationURL }}')) failures.push('README missing {{ .ConfirmationURL }} instructions');
+if (!readme.includes('Magic Link')) failures.push('README missing Magic Link wording');
+if (!readme.includes('Email OTP')) failures.push('README missing Email OTP wording');
+if (!readme.includes('60 seconds')) failures.push('README missing 60 seconds rate limit note');
+if (!script.includes('signInWithOtp')) failures.push('script.js missing signInWithOtp');
+if (!script.includes('verifyOtp')) failures.push('script.js missing verifyOtp');
+if (!script.includes('emailRedirectTo')) failures.push('script.js missing emailRedirectTo');
 if (failures.length) {
   console.error('Smoke test failed:');
   failures.forEach((f)=>console.error('- '+f));
