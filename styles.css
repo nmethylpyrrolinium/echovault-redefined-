@@ -711,9 +711,6 @@ body.midnight{
   85%{opacity:var(--ghost-opacity,0.04)}
   100%{transform:translateY(-25vh) scale(1.1);opacity:0}
 }
-  10%{opacity:.05}90%{opacity:.05}
-  100%{transform:translateY(-20vh);opacity:0}
-}
 
 /* ── SILENCE PARTICLE ── */
 .sil-particle{
