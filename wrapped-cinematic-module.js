@@ -590,6 +590,16 @@ const CinematicWrapped = (() => {
     setTimeout(()=>{ doSwitch(); setTimeout(()=>{wipe.style.opacity='0';},350); },300);
   }
 
+
+  function showCinematicFallback(stage, reason = 'Cinematic mode could not load. Showing standard Wrapped view.') {
+    const empty = stage.querySelector('#cw-empty');
+    if (empty) {
+      empty.style.display = 'flex';
+      empty.innerHTML = `<div style="font-size:52px;margin-bottom:18px;opacity:.45">⚠️</div><div style="font-family:'Cinzel Decorative',serif;font-size:20px;color:rgba(255,255,255,.72);margin-bottom:10px">Cinematic unavailable</div><div style="font-size:14px;font-style:italic;color:rgba(255,255,255,.5);max-width:340px">${reason}</div>`;
+    }
+    stage.querySelector('#cw-nav')?.style.setProperty('display', 'none');
+  }
+
   // ── OPEN / CLOSE ──
   function open() {
     wrappedData = computeWrappedData();
@@ -598,17 +608,21 @@ const CinematicWrapped = (() => {
 
     const stage = buildOverlay();
 
-    // Check for Three.js
-    if(typeof THREE === 'undefined') {
-      const s=document.createElement('script');
-      s.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-      s.onload=()=>{ initThree(stage.querySelector('#cw-canvas')); buildOrbsForScene(0); };
-      document.head.appendChild(s);
-    } else {
-      setTimeout(()=>{ initThree(stage.querySelector('#cw-canvas')); buildOrbsForScene(0); },50);
-    }
-
     populateScenes(stage);
+
+    if (!window.THREE) {
+      showCinematicFallback(stage, 'Three.js is missing. You can still use Wrapped stats.');
+    } else {
+      setTimeout(() => {
+        try {
+          initThree(stage.querySelector('#cw-canvas'));
+          buildOrbsForScene(0);
+        } catch (err) {
+          console.warn('Cinematic Wrapped failed to initialize.', err);
+          showCinematicFallback(stage, 'WebGL initialization failed. You can still use Wrapped stats.');
+        }
+      }, 50);
+    }
 
     requestAnimationFrame(()=>{
       stage.style.opacity='1';
