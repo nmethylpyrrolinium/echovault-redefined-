@@ -95,12 +95,20 @@
     </div>
   </div>
 
-  <!-- Step 3: Name Input -->
+  <!-- Step 3: Auth -->
   <div class="login-step" id="ls-name">
-    <div class="name-step-title">What do they call you?</div>
-    <div class="name-step-sub">Your universe will remember.</div>
-    <input class="name-input" id="name-input" type="text" placeholder="your name…" maxlength="32" autocomplete="off">
-    <button class="name-enter-btn" id="name-enter-btn">Enter My Universe</button>
+    <div class="name-step-title">Enter your vault</div>
+    <div class="name-step-sub">Sign in with Supabase or continue in local mode.</div>
+    <div id="auth-form">
+      <input class="name-input" id="auth-email" type="email" placeholder="email" autocomplete="email">
+      <input class="name-input" id="auth-password" type="password" placeholder="password" autocomplete="current-password">
+      <input class="name-input" id="name-input" type="text" placeholder="display name…" maxlength="32" autocomplete="name">
+      <div class="auth-actions">
+        <button class="name-enter-btn visible" id="auth-signin-btn">Sign in</button>
+        <button class="name-enter-btn visible" id="auth-signup-btn">Create account</button>
+        <button class="name-enter-btn visible" id="auth-local-btn">Continue locally</button>
+      </div>
+    </div>
   </div>
 
   <!-- Step 4: Returning user (shown instead of steps 1-3) -->

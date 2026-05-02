@@ -132,6 +132,31 @@ const Toast = (() => {
   return {show};
 })();
 
+const ProfileStore = (() => {
+  const KEY = 'echovault_profile_v1';
+  function read() { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } }
+  function write(profile) { localStorage.setItem(KEY, JSON.stringify({...read(), ...profile, updated_at:new Date().toISOString()})); }
+  return { read, write };
+})();
+
+const Auth = (() => {
+  const config = window.ECHOVAULT_CONFIG || {};
+  const hasSupabase = Boolean(window.supabase && config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
+  const client = hasSupabase ? window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY) : null;
+  let mode = hasSupabase ? 'supabase' : 'local';
+  let user = null;
+  async function signIn(email, password) { if (!client) return false; const {data,error}=await client.auth.signInWithPassword({email,password}); if(error){Toast.show(error.message); return false;} user=data.user; return true; }
+  async function signUp(email, password, displayName) { if (!client) return false; const {data,error}=await client.auth.signUp({email,password,options:{data:{display_name:displayName}}}); if(error){Toast.show(error.message); return false;} user=data.user; return true; }
+  async function signOut() { if (client) await client.auth.signOut(); user = null; localStorage.removeItem(USER_KEY); }
+  async function init() {
+    if (client) {
+      const {data} = await client.auth.getSession(); user = data?.session?.user || null;
+      client.auth.onAuthStateChange((_e, s)=>{ user = s?.user || null; UserChip.refresh(); });
+    }
+  }
+  return { init, signIn, signUp, signOut, hasSupabase, get user(){return user;}, get mode(){return mode;}, client };
+})();
+
 /* ── NAVIGATION ── */
 const Nav = (() => {
   const views   = ['home','entry','timeline','wrapped','fun'];
@@ -217,9 +242,33 @@ const Settings = (() => {
     if (orbEl && dom) orbEl.style.background = `radial-gradient(circle at 38% 35%,${MOOD_COLORS[dom]},${MOOD_COLORS[dom]}44)`;
   }
   function init() {
+    const profile = ProfileStore.read();
+    document.getElementById('settings-display-name').value = profile.display_name || localStorage.getItem(USER_KEY) || '';
+    document.getElementById('settings-username').value = profile.username || '';
+    document.getElementById('settings-bio').value = profile.bio || '';
+    document.getElementById('settings-location').value = profile.location || '';
+    document.getElementById('bio-chars').textContent = (profile.bio || '').length;
     document.getElementById('settings-close-btn')?.addEventListener('click', close);
     overlay?.addEventListener('click', e => { if (e.target===overlay) close(); });
+    document.getElementById('settings-bio')?.addEventListener('input', (e) => {
+      document.getElementById('bio-chars').textContent = e.target.value.length;
+    });
+    document.getElementById('avatar-zone')?.addEventListener('click', () => document.getElementById('avatar-input')?.click());
+    document.getElementById('avatar-input')?.addEventListener('change', (e) => {
+      const f = e.target.files?.[0]; if (!f) return;
+      if (!['image/jpeg','image/png','image/webp','image/gif'].includes(f.type) || f.size > 2*1024*1024) { Toast.show('Avatar must be jpeg/png/webp/gif under 2MB'); return; }
+      const r = new FileReader(); r.onload = () => { document.getElementById('avatar-img').src = r.result; document.getElementById('avatar-img').hidden = false; ProfileStore.write({avatar_data_url:r.result}); }; r.readAsDataURL(f);
+    });
     document.getElementById('settings-save-btn')?.addEventListener('click', () => {
+      const payload = {
+        display_name: document.getElementById('settings-display-name').value.trim(),
+        username: document.getElementById('settings-username').value.trim(),
+        bio: document.getElementById('settings-bio').value.trim(),
+        location: document.getElementById('settings-location').value.trim()
+      };
+      ProfileStore.write(payload);
+      localStorage.setItem(USER_KEY, payload.display_name || payload.username || localStorage.getItem(USER_KEY) || 'you');
+      UserChip.refresh();
       const status = document.getElementById('settings-save-status');
       if (status) { status.textContent = '✓ saved to your universe'; status.classList.add('show'); setTimeout(() => status.classList.remove('show'), 2500); }
     });
@@ -245,14 +294,18 @@ const Login = (() => {
   const lsReturn = document.getElementById('ls-return');
   const stressOrb= document.getElementById('stress-orb');
   const nameInput= document.getElementById('name-input');
-  const nameBtn  = document.getElementById('name-enter-btn');
+  const authEmail = document.getElementById('auth-email');
+  const authPassword = document.getElementById('auth-password');
+  const authSignIn = document.getElementById('auth-signin-btn');
+  const authSignUp = document.getElementById('auth-signup-btn');
+  const authLocal = document.getElementById('auth-local-btn');
 
   function showStep(el) {
     [lsOrb,lsBreath,lsName,lsReturn].forEach(s => s.classList.remove('active'));
     el.classList.add('active');
   }
 
-  function enterApp(name) {
+  function enterApp() {
     screen.classList.add('hidden');
     setTimeout(() => {
       screen.style.display = 'none';
@@ -270,7 +323,7 @@ const Login = (() => {
       // Returning user
       document.getElementById('return-name').textContent = savedUser;
       showStep(lsReturn);
-      document.getElementById('return-enter-btn').addEventListener('click', () => enterApp(savedUser));
+      document.getElementById('return-enter-btn').addEventListener('click', () => enterApp());
       return;
     }
 
@@ -287,7 +340,7 @@ const Login = (() => {
       if (Date.now() - pressStart > 80) {
         showStep(lsBreath);
         BreathAnim.start();
-        setTimeout(() => { showStep(lsName); setTimeout(() => nameInput.focus(), 300); }, 4200);
+        setTimeout(() => { showStep(lsName); setTimeout(() => authEmail?.focus(), 300); }, 4200);
       }
     });
     stressOrb.addEventListener('keydown', e => {
@@ -298,23 +351,50 @@ const Login = (() => {
       }
     });
 
-    nameInput.addEventListener('input', () => {
-      nameBtn.classList.toggle('visible', nameInput.value.trim().length > 0);
-    });
-    nameInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && nameInput.value.trim()) enter();
-    });
-    nameBtn.addEventListener('click', enter);
-
-    function enter() {
-      const name = nameInput.value.trim();
-      if (!name) return;
+    authLocal?.addEventListener('click', () => {
+      const name = nameInput.value.trim() || localStorage.getItem(USER_KEY) || 'local voyager';
       localStorage.setItem(USER_KEY, name);
-      enterApp(name);
-    }
+      UserChip.refresh();
+      enterApp();
+    });
+    authSignIn?.addEventListener('click', async () => {
+      if (Auth.hasSupabase && await Auth.signIn(authEmail.value.trim(), authPassword.value)) enterApp();
+    });
+    authSignUp?.addEventListener('click', async () => {
+      if (!Auth.hasSupabase) { Toast.show('Supabase config missing; use local mode.'); return; }
+      if (await Auth.signUp(authEmail.value.trim(), authPassword.value, nameInput.value.trim())) {
+        localStorage.setItem(USER_KEY, nameInput.value.trim());
+        enterApp();
+      }
+    });
   }
 
   return {init};
+})();
+
+const PWAInstall = (() => {
+  let deferredInstallPrompt = null;
+  const banner = document.getElementById('pwa-banner');
+  const installBtn = document.getElementById('pwa-install-btn');
+  const dismissBtn = document.getElementById('pwa-dismiss-btn');
+  const DISMISS_KEY = 'echovault_pwa_dismissed';
+  const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  function hide() { banner?.classList.remove('show'); }
+  function show() { if (!localStorage.getItem(DISMISS_KEY) && !isStandalone() && deferredInstallPrompt) banner?.classList.add('show'); }
+  function init() {
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; show(); });
+    installBtn?.addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      hide();
+      deferredInstallPrompt = null;
+    });
+    dismissBtn?.addEventListener('click', () => { localStorage.setItem(DISMISS_KEY, '1'); hide(); });
+    window.addEventListener('appinstalled', () => { hide(); deferredInstallPrompt = null; });
+    if (isStandalone()) hide();
+  }
+  return { init };
 })();
 
 /* ── BREATH ANIMATION (login) ── */
@@ -2311,6 +2391,16 @@ const UserChip = (() => {
   const chip = document.getElementById('user-chip');
   const menu = chip?.querySelector('.chip-menu');
   const settingsBtn = document.getElementById('chip-settings-btn');
+  function refresh() {
+    const name = localStorage.getItem(USER_KEY) || Auth.user?.user_metadata?.display_name || 'you';
+    const email = Auth.user?.email || 'local mode';
+    chip?.classList.add('visible');
+    document.getElementById('chip-name').textContent = name;
+    document.getElementById('chip-display-name').textContent = name;
+    document.getElementById('chip-email').textContent = email;
+    const initials = name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase();
+    document.getElementById('chip-avatar').textContent = initials || 'EV';
+  }
 
   function toggleMenu(forceOpen) {
     if (!menu) return;
@@ -2342,9 +2432,9 @@ const UserChip = (() => {
 
   document.getElementById('chip-export-btn')?.addEventListener('click', () => Storage.exportVault(state.echoes));
   document.getElementById('chip-signout-btn')?.addEventListener('click', () => {
-    localStorage.removeItem(USER_KEY);
-    window.location.reload();
+    Auth.signOut().then(() => window.location.reload());
   });
+  return { refresh };
 })();
 
 document.getElementById('import-file').addEventListener('change', function() {
@@ -2392,6 +2482,9 @@ function init() {
   Weather.update();
   GhostLayer.initFromEchoes(state.echoes);
   IdentityCore.update();
+  Auth.init();
+  UserChip.refresh();
+  PWAInstall.init();
   Login.init();
 }
 
