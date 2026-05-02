@@ -1153,3 +1153,17 @@ body.midnight{
   .hero-actions{flex-direction:column;width:100%;max-width:280px}
   .btn-primary,.btn-ghost{width:100%;text-align:center}
 }
+/* ═══════════════════════════════════
+   PWA + AUTH + SETTINGS — v2
+═══════════════════════════════════ */
+#pwa-banner{position:fixed;bottom:0;left:0;right:0;z-index:800;transform:translateY(110%);transition:transform .5s var(--ease);background:var(--surface2);border-top:1px solid var(--border2);padding:14px 16px;display:flex;align-items:center;gap:12px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+#pwa-banner.show{transform:translateY(0)}
+/* GPU compositing for smooth mobile */
+#cosmos-canvas,#ripple-canvas,#connection-canvas,#whip-canvas{will-change:transform;transform:translateZ(0)}
+.echo-bubble{will-change:transform,opacity;transform:translateZ(0)}
+#identity-core-canvas,#identity-orb{will-change:transform}
+body{overscroll-behavior:none;-webkit-overflow-scrolling:touch}
+.app-shell{-webkit-overflow-scrolling:touch}
+@media(max-width:768px){
+  .auth-input,.thought-area,.name-input{font-size:16px!important}
+}
