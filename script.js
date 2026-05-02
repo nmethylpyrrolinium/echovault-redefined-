@@ -163,6 +163,8 @@ const Auth = (() => {
     client.auth.onAuthStateChange((_e, s)=>{ user = s?.user || null; UserChip.refresh(); });
   }
   async function signIn(email,password){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {data,error}=await client.auth.signInWithPassword({email,password}); if(error)return {ok:false,error:error.message}; user=data.user; return {ok:true,data}; }
+  async function sendEmailOtp(email){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {error}=await client.auth.signInWithOtp({email,options:{shouldCreateUser:true,emailRedirectTo:window.location.href}}); if(error) return {ok:false,error:error.message}; return {ok:true}; }
+  async function verifyEmailOtp(email,token){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {data,error}=await client.auth.verifyOtp({email,token,type:'email'}); if(error) return {ok:false,error:error.message}; user=data?.user||data?.session?.user||null; return {ok:true,data}; }
   async function signUp(email,password,displayName){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {data,error}=await client.auth.signUp({email,password,options:{data:{display_name:displayName||undefined},emailRedirectTo:window.location.href}}); if(error)return {ok:false,error:error.message}; user=data.user||null; return {ok:true,data}; }
   async function signOut(){ if(client) await client.auth.signOut(); user=null; localStorage.removeItem(USER_KEY); }
   async function fetchProfile(){ if(!client||!user) return null; const {data}=await client.from('profiles').select('*').eq('id',user.id).maybeSingle(); return data||null; }
@@ -174,7 +176,7 @@ const Auth = (() => {
     if(error){Toast.show('Profile sync failed; kept local copy.'); return {ok:false,error:error.message};}
     return {ok:true};
   }
-  return { init, signIn, signUp, signOut, hasSupabase, fetchProfile, upsertProfile, client, SUPABASE_AVATAR_BUCKET, get user(){return user;}, get mode(){return mode;} };
+  return { init, signIn, signUp, sendEmailOtp, verifyEmailOtp, signOut, hasSupabase, fetchProfile, upsertProfile, client, SUPABASE_AVATAR_BUCKET, get user(){return user;}, get mode(){return mode;} };
 })();
 
 /* ── NAVIGATION ── */
@@ -317,93 +319,132 @@ const Login = (() => {
   const stressOrb= document.getElementById('stress-orb');
   const nameInput= document.getElementById('name-input');
   const authEmail = document.getElementById('auth-email');
+  const authOtp = document.getElementById('auth-otp');
   const authPassword = document.getElementById('auth-password');
+  const authSendCode = document.getElementById('auth-send-code-btn');
+  const authVerifyCode = document.getElementById('auth-verify-code-btn');
+  const authResendCode = document.getElementById('auth-resend-code-btn');
+  const authTogglePassword = document.getElementById('auth-toggle-password-btn');
   const authSignIn = document.getElementById('auth-signin-btn');
   const authSignUp = document.getElementById('auth-signup-btn');
   const authLocal = document.getElementById('auth-local-btn');
   const authModeNote = document.getElementById('auth-mode-note');
 
-  function showStep(el) {
-    [lsOrb,lsBreath,lsName,lsReturn].forEach(s => s.classList.remove('active'));
-    el.classList.add('active');
+  let otpCooldownUntil = 0;
+  let signupCooldownUntil = 0;
+  let authUiMode = 'otp';
+
+  const normalizeAuthError = (msg='') => {
+    const lower = msg.toLowerCase();
+    if (lower.includes('429') || lower.includes('rate') || lower.includes('security purposes')) return 'Too many attempts. Wait about a minute before trying again.';
+    if (lower.includes('email not confirmed')) return 'Email not confirmed. Use the code/link from your email first.';
+    if (lower.includes('invalid login credentials')) return 'Invalid details. Try the email code flow or check your password.';
+    return msg || 'Something went wrong. Please try again.';
+  };
+
+  function showStep(el){ [lsOrb,lsBreath,lsName,lsReturn].forEach(s => s.classList.remove('active')); el.classList.add('active'); }
+  function enterApp(){ screen.classList.add('hidden'); setTimeout(() => { screen.style.display='none'; if (!localStorage.getItem(OB_KEY)) Onboarding.start(); }, 950); }
+  function setButtonLoading(btn, loading, idleText, busyText){ if(!btn) return; btn.disabled=loading; btn.textContent=loading?busyText:idleText; }
+  function setOtpUiStep(codeSent){
+    authOtp.style.display = codeSent ? 'block' : 'none';
+    authVerifyCode.style.display = codeSent ? 'inline-flex' : 'none';
+    authResendCode.style.display = codeSent ? 'inline-flex' : 'none';
+  }
+  function setAuthMode(mode){
+    authUiMode = mode;
+    const passwordMode = mode === 'password';
+    authPassword.style.display = passwordMode ? 'block' : 'none';
+    nameInput.style.display = passwordMode ? 'block' : 'none';
+    authSignIn.style.display = passwordMode ? 'inline-flex' : 'none';
+    authSignUp.style.display = passwordMode ? 'inline-flex' : 'none';
+    authSendCode.style.display = passwordMode ? 'none' : 'inline-flex';
+    authTogglePassword.textContent = passwordMode ? 'Use email code instead' : 'Use password instead';
+    setOtpUiStep(false);
+    authModeNote.textContent = passwordMode ? 'Password mode enabled. Email + password required.' : "Default: email code sign-in. We'll send a one-time code.";
+  }
+  function startOtpCooldown(seconds=60){ otpCooldownUntil = Date.now() + seconds*1000; tickCooldown(); }
+  function tickCooldown(){
+    if (!authResendCode || authResendCode.style.display === 'none') return;
+    const remaining = Math.max(0, Math.ceil((otpCooldownUntil - Date.now())/1000));
+    authResendCode.disabled = remaining > 0;
+    authResendCode.textContent = remaining > 0 ? `Resend code (${remaining}s)` : 'Resend code';
+    if (remaining > 0) setTimeout(tickCooldown, 250);
   }
 
-  function enterApp() {
-    screen.classList.add('hidden');
-    setTimeout(() => {
-      screen.style.display = 'none';
-      // Show onboarding if new user
-      if (!localStorage.getItem(OB_KEY)) {
-        Onboarding.start();
-      }
-    }, 950);
+  async function sendEmailOtp(email){
+    if (!email || !/.+@.+\..+/.test(email)) return Toast.show('Enter a valid email.');
+    setButtonLoading(authSendCode, true, 'Send Vault Code', 'Sending…');
+    const res = await Auth.sendEmailOtp(email);
+    setButtonLoading(authSendCode, false, 'Send Vault Code', 'Sending…');
+    if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
+    setOtpUiStep(true);
+    Toast.show('Code sent. Check your email.');
+    startOtpCooldown(60);
+  }
+
+  async function verifyEmailOtp(email, token){
+    if (!email || !/.+@.+\..+/.test(email)) return Toast.show('Enter a valid email.');
+    if (!token || !/^\d{6}$/.test(token)) return Toast.show('Enter the 6-digit code.');
+    setButtonLoading(authVerifyCode, true, 'Verify Code', 'Verifying…');
+    const res = await Auth.verifyEmailOtp(email, token);
+    setButtonLoading(authVerifyCode, false, 'Verify Code', 'Verifying…');
+    if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
+    if (!res.data?.session) return Toast.show('Session not created. Try requesting a new code.', 4200);
+    const profile = await Auth.fetchProfile(); if (profile) ProfileStore.write(profile);
+    await Auth.upsertProfile({ ...ProfileStore.read(), display_name: nameInput.value.trim() || ProfileStore.read().display_name });
+    UserChip.refresh(); Toast.show('Vault unlocked. Welcome back.'); enterApp();
+  }
+
+  async function resendEmailOtp(email){
+    const remaining = Math.max(0, Math.ceil((otpCooldownUntil - Date.now())/1000));
+    if (remaining > 0) return Toast.show(`Please wait ${remaining}s before resending.`);
+    await sendEmailOtp(email);
   }
 
   function init() {
     const savedUser = localStorage.getItem(USER_KEY);
-
     if (Auth.user) { UserChip.refresh(); enterApp(); return; }
     if (!Auth.hasSupabase && authModeNote) authModeNote.textContent = 'Supabase is not configured — local mode only.';
-    if (savedUser) {
-      // Returning user
-      document.getElementById('return-name').textContent = savedUser;
-      showStep(lsReturn);
-      document.getElementById('return-enter-btn').addEventListener('click', () => enterApp());
-      return;
-    }
+    if (savedUser && !Auth.hasSupabase) { document.getElementById('return-name').textContent = savedUser; showStep(lsReturn); document.getElementById('return-enter-btn').addEventListener('click', () => enterApp()); return; }
 
-    // New user flow
-    stressOrb.addEventListener('pointerdown', () => {
-      stressOrb.classList.add('pressed');
-    });
-    ['pointerup','pointerleave'].forEach(ev =>
-      stressOrb.addEventListener(ev, () => stressOrb.classList.remove('pressed')));
-
+    stressOrb.addEventListener('pointerdown', () => stressOrb.classList.add('pressed'));
+    ['pointerup','pointerleave'].forEach(ev => stressOrb.addEventListener(ev, () => stressOrb.classList.remove('pressed')));
     let pressStart = 0;
     stressOrb.addEventListener('pointerdown', () => { pressStart = Date.now(); });
-    stressOrb.addEventListener('pointerup', () => {
-      if (Date.now() - pressStart > 80) {
-        showStep(lsBreath);
-        BreathAnim.start();
-        setTimeout(() => { showStep(lsName); setTimeout(() => authEmail?.focus(), 300); }, 4200);
-      }
-    });
-    stressOrb.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        stressOrb.dispatchEvent(new PointerEvent('pointerdown'));
-        setTimeout(() => stressOrb.dispatchEvent(new PointerEvent('pointerup')), 200);
-      }
-    });
+    stressOrb.addEventListener('pointerup', () => { if (Date.now() - pressStart > 80) { showStep(lsBreath); BreathAnim.start(); setTimeout(() => { showStep(lsName); setAuthMode('otp'); setTimeout(() => authEmail?.focus(), 300); }, 4200); } });
 
-    authLocal?.addEventListener('click', () => {
-      const name = nameInput.value.trim() || localStorage.getItem(USER_KEY) || 'local voyager';
-      localStorage.setItem(USER_KEY, name);
-      UserChip.refresh();
-      enterApp();
-    });
+    authLocal?.addEventListener('click', () => { const name = nameInput.value.trim() || localStorage.getItem(USER_KEY) || 'local voyager'; localStorage.setItem(USER_KEY, name); UserChip.refresh(); enterApp(); });
+    authTogglePassword?.addEventListener('click', () => setAuthMode(authUiMode === 'otp' ? 'password' : 'otp'));
+    authSendCode?.addEventListener('click', () => sendEmailOtp(authEmail.value.trim()));
+    authVerifyCode?.addEventListener('click', () => verifyEmailOtp(authEmail.value.trim(), authOtp.value.trim()));
+    authResendCode?.addEventListener('click', () => resendEmailOtp(authEmail.value.trim()));
+
     authSignIn?.addEventListener('click', async () => {
       const email=authEmail.value.trim(); const password=authPassword.value;
       if (!email || !/.+@.+\..+/.test(email)) return Toast.show('Enter a valid email.');
       if (!password) return Toast.show('Password is required.');
-      authSignIn.disabled=true; authSignUp.disabled=true; authSignIn.textContent='Signing in…';
+      setButtonLoading(authSignIn, true, 'Sign in', 'Signing in…'); authSignUp.disabled=true;
       const res = await Auth.signIn(email,password);
-      authSignIn.disabled=false; authSignUp.disabled=false; authSignIn.textContent='Sign in';
-      if (!res.ok) return Toast.show(res.error || 'Sign in failed.');
+      setButtonLoading(authSignIn, false, 'Sign in', 'Signing in…'); authSignUp.disabled=false;
+      if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
       const profile = await Auth.fetchProfile(); if (profile) ProfileStore.write(profile);
       UserChip.refresh(); enterApp();
     });
+
     authSignUp?.addEventListener('click', async () => {
+      const remaining = Math.max(0, Math.ceil((signupCooldownUntil - Date.now())/1000));
+      if (remaining > 0) return Toast.show(`Please wait ${remaining}s before creating another account.`);
       const email=authEmail.value.trim(); const password=authPassword.value; const displayName=nameInput.value.trim();
       if (!email || !/.+@.+\..+/.test(email)) return Toast.show('Enter a valid email.');
       if (!password) return Toast.show('Password is required.');
       if (password.length < 6) return Toast.show('Password must be at least 6 characters.');
-      authSignIn.disabled=true; authSignUp.disabled=true; authSignUp.textContent='Creating…';
+      setButtonLoading(authSignUp, true, 'Create account', 'Creating…'); authSignIn.disabled=true;
       const res = await Auth.signUp(email,password,displayName);
-      authSignIn.disabled=false; authSignUp.disabled=false; authSignUp.textContent='Create account';
-      if (!res.ok) return Toast.show(res.error || 'Sign up failed.');
+      setButtonLoading(authSignUp, false, 'Create account', 'Creating…'); authSignIn.disabled=false;
+      signupCooldownUntil = Date.now() + 60000;
+      if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
       await Auth.upsertProfile({ ...ProfileStore.read(), display_name: displayName || ProfileStore.read().display_name });
-      if (res.data?.session) { UserChip.refresh(); enterApp(); } else { Toast.show('Account created — check your email to confirm.', 4500); }
+      if (res.data?.session) { UserChip.refresh(); enterApp(); } else { Toast.show('Account created. Check your email to confirm, or use Email Code.', 5000); }
     });
   }
 
