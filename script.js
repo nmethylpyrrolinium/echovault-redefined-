@@ -134,27 +134,47 @@ const Toast = (() => {
 
 const ProfileStore = (() => {
   const KEY = 'echovault_profile_v1';
-  function read() { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } }
+  function read() {
+    let profile = {};
+    try { profile = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
+    const legacy = localStorage.getItem(USER_KEY);
+    if (legacy && !profile.display_name) {
+      profile.display_name = legacy;
+      write(profile);
+    }
+    return profile;
+  }
   function write(profile) { localStorage.setItem(KEY, JSON.stringify({...read(), ...profile, updated_at:new Date().toISOString()})); }
   return { read, write };
 })();
 
 const Auth = (() => {
   const config = window.ECHOVAULT_CONFIG || {};
-  const hasSupabase = Boolean(window.supabase && config.SUPABASE_URL && config.SUPABASE_ANON_KEY);
-  const client = hasSupabase ? window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY) : null;
+  const SUPABASE_URL = config.SUPABASE_URL;
+  const SUPABASE_ANON_KEY = config.SUPABASE_ANON_KEY;
+  const SUPABASE_AVATAR_BUCKET = config.SUPABASE_AVATAR_BUCKET || 'avatars';
+  const hasSupabase = Boolean(window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY);
+  const client = hasSupabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } }) : null;
   let mode = hasSupabase ? 'supabase' : 'local';
   let user = null;
-  async function signIn(email, password) { if (!client) return false; const {data,error}=await client.auth.signInWithPassword({email,password}); if(error){Toast.show(error.message); return false;} user=data.user; return true; }
-  async function signUp(email, password, displayName) { if (!client) return false; const {data,error}=await client.auth.signUp({email,password,options:{data:{display_name:displayName}}}); if(error){Toast.show(error.message); return false;} user=data.user; return true; }
-  async function signOut() { if (client) await client.auth.signOut(); user = null; localStorage.removeItem(USER_KEY); }
-  async function init() {
-    if (client) {
-      const {data} = await client.auth.getSession(); user = data?.session?.user || null;
-      client.auth.onAuthStateChange((_e, s)=>{ user = s?.user || null; UserChip.refresh(); });
-    }
+  async function init(){
+    if (!client) return;
+    const {data} = await client.auth.getSession(); user = data?.session?.user || null;
+    client.auth.onAuthStateChange((_e, s)=>{ user = s?.user || null; UserChip.refresh(); });
   }
-  return { init, signIn, signUp, signOut, hasSupabase, get user(){return user;}, get mode(){return mode;}, client };
+  async function signIn(email,password){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {data,error}=await client.auth.signInWithPassword({email,password}); if(error)return {ok:false,error:error.message}; user=data.user; return {ok:true,data}; }
+  async function signUp(email,password,displayName){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {data,error}=await client.auth.signUp({email,password,options:{data:{display_name:displayName||undefined},emailRedirectTo:window.location.href}}); if(error)return {ok:false,error:error.message}; user=data.user||null; return {ok:true,data}; }
+  async function signOut(){ if(client) await client.auth.signOut(); user=null; localStorage.removeItem(USER_KEY); }
+  async function fetchProfile(){ if(!client||!user) return null; const {data}=await client.from('profiles').select('*').eq('id',user.id).maybeSingle(); return data||null; }
+  async function upsertProfile(profile){
+    ProfileStore.write(profile);
+    if(!client||!user) return {ok:true};
+    const payload={id:user.id,display_name:profile.display_name||null,username:profile.username||null,bio:profile.bio||null,location:profile.location||null,avatar_url:profile.avatar_url||null,emotional_archetype:profile.emotional_archetype||null,updated_at:new Date().toISOString()};
+    const {error}=await client.from('profiles').upsert(payload,{onConflict:'id'});
+    if(error){Toast.show('Profile sync failed; kept local copy.'); return {ok:false,error:error.message};}
+    return {ok:true};
+  }
+  return { init, signIn, signUp, signOut, hasSupabase, fetchProfile, upsertProfile, client, SUPABASE_AVATAR_BUCKET, get user(){return user;}, get mode(){return mode;} };
 })();
 
 /* ── NAVIGATION ── */
@@ -253,11 +273,13 @@ const Settings = (() => {
     document.getElementById('settings-bio')?.addEventListener('input', (e) => {
       document.getElementById('bio-chars').textContent = e.target.value.length;
     });
-    document.getElementById('avatar-zone')?.addEventListener('click', () => document.getElementById('avatar-input')?.click());
-    document.getElementById('avatar-input')?.addEventListener('change', (e) => {
+    const avatarInput = document.getElementById('avatar-file-input');
+    document.getElementById('avatar-zone')?.addEventListener('click', () => avatarInput?.click());
+    document.getElementById('avatar-zone')?.addEventListener('keydown', (e) => { if (e.key==='Enter' || e.key===' ') { e.preventDefault(); avatarInput?.click(); }});
+    avatarInput?.addEventListener('change', async (e) => {
       const f = e.target.files?.[0]; if (!f) return;
       if (!['image/jpeg','image/png','image/webp','image/gif'].includes(f.type) || f.size > 2*1024*1024) { Toast.show('Avatar must be jpeg/png/webp/gif under 2MB'); return; }
-      const r = new FileReader(); r.onload = () => { document.getElementById('avatar-img').src = r.result; document.getElementById('avatar-img').hidden = false; ProfileStore.write({avatar_data_url:r.result}); }; r.readAsDataURL(f);
+      const r = new FileReader(); r.onload = async () => { const avatarImg=document.getElementById('avatar-img'); const initials=document.getElementById('avatar-initials'); avatarImg.src = r.result; avatarImg.style.display='block'; initials.style.display='none'; ProfileStore.write({avatar_data_url:r.result}); if (Auth.user && Auth.client) { try { const ext=(f.name.split('.').pop()||'png').toLowerCase(); const path=`${Auth.user.id}/avatar-${Date.now()}.${ext}`; const {error}=await Auth.client.storage.from(Auth.SUPABASE_AVATAR_BUCKET).upload(path,f,{upsert:true}); if (error) throw error; const {data} = Auth.client.storage.from(Auth.SUPABASE_AVATAR_BUCKET).getPublicUrl(path); const profile={...ProfileStore.read(), avatar_url:data.publicUrl}; ProfileStore.write(profile); await Auth.upsertProfile(profile); } catch(err){ Toast.show('Avatar upload failed; kept local preview.'); } } UserChip.refresh(); e.target.value=''; }; r.readAsDataURL(f);
     });
     document.getElementById('settings-save-btn')?.addEventListener('click', () => {
       const payload = {
@@ -299,6 +321,7 @@ const Login = (() => {
   const authSignIn = document.getElementById('auth-signin-btn');
   const authSignUp = document.getElementById('auth-signup-btn');
   const authLocal = document.getElementById('auth-local-btn');
+  const authModeNote = document.getElementById('auth-mode-note');
 
   function showStep(el) {
     [lsOrb,lsBreath,lsName,lsReturn].forEach(s => s.classList.remove('active'));
@@ -319,6 +342,8 @@ const Login = (() => {
   function init() {
     const savedUser = localStorage.getItem(USER_KEY);
 
+    if (Auth.user) { UserChip.refresh(); enterApp(); return; }
+    if (!Auth.hasSupabase && authModeNote) authModeNote.textContent = 'Supabase is not configured — local mode only.';
     if (savedUser) {
       // Returning user
       document.getElementById('return-name').textContent = savedUser;
@@ -358,14 +383,27 @@ const Login = (() => {
       enterApp();
     });
     authSignIn?.addEventListener('click', async () => {
-      if (Auth.hasSupabase && await Auth.signIn(authEmail.value.trim(), authPassword.value)) enterApp();
+      const email=authEmail.value.trim(); const password=authPassword.value;
+      if (!email || !/.+@.+\..+/.test(email)) return Toast.show('Enter a valid email.');
+      if (!password) return Toast.show('Password is required.');
+      authSignIn.disabled=true; authSignUp.disabled=true; authSignIn.textContent='Signing in…';
+      const res = await Auth.signIn(email,password);
+      authSignIn.disabled=false; authSignUp.disabled=false; authSignIn.textContent='Sign in';
+      if (!res.ok) return Toast.show(res.error || 'Sign in failed.');
+      const profile = await Auth.fetchProfile(); if (profile) ProfileStore.write(profile);
+      UserChip.refresh(); enterApp();
     });
     authSignUp?.addEventListener('click', async () => {
-      if (!Auth.hasSupabase) { Toast.show('Supabase config missing; use local mode.'); return; }
-      if (await Auth.signUp(authEmail.value.trim(), authPassword.value, nameInput.value.trim())) {
-        localStorage.setItem(USER_KEY, nameInput.value.trim());
-        enterApp();
-      }
+      const email=authEmail.value.trim(); const password=authPassword.value; const displayName=nameInput.value.trim();
+      if (!email || !/.+@.+\..+/.test(email)) return Toast.show('Enter a valid email.');
+      if (!password) return Toast.show('Password is required.');
+      if (password.length < 6) return Toast.show('Password must be at least 6 characters.');
+      authSignIn.disabled=true; authSignUp.disabled=true; authSignUp.textContent='Creating…';
+      const res = await Auth.signUp(email,password,displayName);
+      authSignIn.disabled=false; authSignUp.disabled=false; authSignUp.textContent='Create account';
+      if (!res.ok) return Toast.show(res.error || 'Sign up failed.');
+      await Auth.upsertProfile({ ...ProfileStore.read(), display_name: displayName || ProfileStore.read().display_name });
+      if (res.data?.session) { UserChip.refresh(); enterApp(); } else { Toast.show('Account created — check your email to confirm.', 4500); }
     });
   }
 
@@ -2392,14 +2430,17 @@ const UserChip = (() => {
   const menu = chip?.querySelector('.chip-menu');
   const settingsBtn = document.getElementById('chip-settings-btn');
   function refresh() {
-    const name = localStorage.getItem(USER_KEY) || Auth.user?.user_metadata?.display_name || 'you';
+    const profile = ProfileStore.read();
+    const name = profile.display_name || Auth.user?.user_metadata?.display_name || localStorage.getItem(USER_KEY) || 'you';
     const email = Auth.user?.email || 'local mode';
+    if (!Auth.user && !localStorage.getItem(USER_KEY) && !profile.display_name) { chip?.classList.remove('visible'); return; }
     chip?.classList.add('visible');
     document.getElementById('chip-name').textContent = name;
     document.getElementById('chip-display-name').textContent = name;
     document.getElementById('chip-email').textContent = email;
-    const initials = name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase();
-    document.getElementById('chip-avatar').textContent = initials || 'EV';
+    const avatarEl = document.getElementById('chip-avatar');
+    const avatarUrl = profile.avatar_url || profile.avatar_data_url;
+    if (avatarUrl) { avatarEl.innerHTML = `<img src="${avatarUrl}" alt="">`; } else { const initials = name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase(); avatarEl.textContent = initials || 'EV'; }
   }
 
   function toggleMenu(forceOpen) {

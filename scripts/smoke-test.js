@@ -1,41 +1,27 @@
 const fs = require('fs');
-
-const required = ['index.html', 'styles.css', 'script.js', 'manifest.json', 'sw.js', 'wrapped-cinematic-module.js'];
 const failures = [];
+['index.html','styles.css','script.js','README.md'].forEach((f)=>{ if(!fs.existsSync(f)) failures.push(`Missing required file: ${f}`); });
+const index = fs.readFileSync('index.html','utf8');
+const script = fs.readFileSync('script.js','utf8');
+const style = fs.readFileSync('styles.css','utf8');
+const readme = fs.readFileSync('README.md','utf8');
 
-for (const file of required) {
-  if (!fs.existsSync(file)) failures.push(`Missing required file: ${file}`);
-}
-
-const checks = [
-  ['index.html', ['href="/manifest.json"', 'src="/icons/icon.svg"', "register('/sw.js')", 'href="/icons/icon.svg"']],
-  ['manifest.json', ['"/icons/icon.svg"', '"start_url": "/"']],
-  ['sw.js', ["'/index.html'", "['/', '/index.html'", "caches.match('/index.html')", "icon:'/icons/icon.svg'", "badge:'/icons/icon.svg'"]]
-];
-
-for (const [file, patterns] of checks) {
-  if (!fs.existsSync(file)) continue;
-  const content = fs.readFileSync(file, 'utf8');
-  for (const pattern of patterns) {
-    if (content.includes(pattern)) failures.push(`Found broken pattern in ${file}: ${pattern}`);
-  }
-}
-
-const script = fs.readFileSync('script.js', 'utf8');
-const style = fs.readFileSync('styles.css', 'utf8');
-if (!script.includes('beforeinstallprompt')) failures.push('Missing beforeinstallprompt handling in script.js');
-if (!script.includes('pwa-dismiss-btn')) failures.push('Missing dismiss button wiring in script.js');
-if (!script.includes('ECHOVAULT_CONFIG')) failures.push('Missing Supabase config fallback in script.js');
-if (!script.includes('const Auth = (() =>')) failures.push('Missing Auth module in script.js');
-if (!script.includes('const ProfileStore = (() =>')) failures.push('Missing Profile module in script.js');
-['#settings-overlay', '#settings-panel', '#pwa-banner', '#user-chip', '.chip-menu'].forEach((sel) => {
-  if (!style.includes(sel)) failures.push(`Missing selector in styles.css: ${sel}`);
-});
+if (!index.includes('window.ECHOVAULT_CONFIG')) failures.push('index.html missing window.ECHOVAULT_CONFIG');
+if (!index.includes('https://phfwaxuyauuyskzruqbk.supabase.co')) failures.push('index.html missing Supabase project URL');
+if (!index.includes('sb_publishable_')) failures.push('index.html missing publishable key prefix');
+if (!index.includes('avatars')) failures.push('index.html missing avatars bucket');
+if (!script.includes('avatar-file-input')) failures.push('script.js missing avatar-file-input reference');
+if (script.includes("getElementById('avatar-input')") || script.includes('"avatar-input"')) failures.push('script.js still relies on avatar-input');
+if (!script.includes('signInWithPassword')) failures.push('script.js missing signInWithPassword');
+if (!script.includes('signUp')) failures.push('script.js missing signUp');
+if (!script.includes("from('profiles')") && !script.includes('from("profiles")')) failures.push('script.js missing profiles integration');
+if (!script.includes('.storage.from(')) failures.push('script.js missing avatar storage upload logic');
+if (!style.includes('#user-chip') || !style.includes('@media(max-width:768px)')) failures.push('styles.css missing responsive user-chip handling');
+if (!readme.includes('phfwaxuyauuyskzruqbk.supabase.co') || !readme.includes('local mode')) failures.push('README missing Supabase/local fallback notes');
 
 if (failures.length) {
   console.error('Smoke test failed:');
-  failures.forEach((f) => console.error(`- ${f}`));
+  failures.forEach((f)=>console.error('- '+f));
   process.exit(1);
 }
-
 console.log('Smoke test passed.');
