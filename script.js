@@ -175,6 +175,67 @@ const Nav = (() => {
   return {show};
 })();
 
+
+/* ══════════════════════════════════════════
+   SETTINGS — profile, avatar, bio, stats
+══════════════════════════════════════════ */
+const Settings = (() => {
+  const overlay = document.getElementById('settings-overlay');
+  function open() {
+    overlay?.setAttribute('aria-hidden','false');
+    overlay?.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    populateStats();
+    populateArchetype();
+  }
+  function close() {
+    overlay?.classList.remove('open');
+    overlay?.setAttribute('aria-hidden','true');
+    document.body.style.overflow = '';
+  }
+  function populateStats() {
+    const grid = document.getElementById('settings-stats'); if (!grid) return;
+    const total = state.echoes.length;
+    const avgInt = total ? (state.echoes.reduce((a,e)=>a+e.intensity,0)/total).toFixed(1) : '—';
+    const voidCnt = state.echoes.filter(e=>e.void).length;
+    const mc = {}; state.echoes.forEach(e=>{ mc[e.mood]=(mc[e.mood]||0)+1; });
+    const dom = Object.entries(mc).sort((a,b)=>b[1]-a[1])[0]?.[0];
+    const daysSince = total ? Math.floor((Date.now()-new Date(state.echoes[state.echoes.length-1].date))/86400000) : 0;
+    grid.innerHTML = [
+      {val:total,label:'echoes'},{val:avgInt,label:'avg intensity'},{val:voidCnt,label:'void entries'},
+      {val:dom||'—',label:'dominant mood',color:MOOD_COLORS[dom]},{val:daysSince,label:'days journaling'},{val: total ? Object.keys(mc).length : '—', label:'moods explored'}
+    ].map(s=>`<div class="settings-stat"><div class="settings-stat-val" ${s.color?`style="color:${s.color}"`:''}>${s.val}</div><div class="settings-stat-label">${s.label}</div></div>`).join('');
+  }
+  function populateArchetype() {
+    const mc = {}; state.echoes.slice(0,30).forEach(e=>{ mc[e.mood]=(mc[e.mood]||0)+1; });
+    const dom = Object.entries(mc).sort((a,b)=>b[1]-a[1])[0]?.[0];
+    const nameEl = document.getElementById('archetype-name-display');
+    const descEl = document.getElementById('archetype-desc-display');
+    const orbEl  = document.getElementById('archetype-orb');
+    if (nameEl) nameEl.textContent = dom ? ARCHETYPE_NAMES[dom] : 'The Unknown';
+    if (descEl) descEl.textContent = dom ? ARCHETYPE_DESCS[dom] : 'Create echoes to discover your archetype.';
+    if (orbEl && dom) orbEl.style.background = `radial-gradient(circle at 38% 35%,${MOOD_COLORS[dom]},${MOOD_COLORS[dom]}44)`;
+  }
+  function init() {
+    document.getElementById('settings-close-btn')?.addEventListener('click', close);
+    overlay?.addEventListener('click', e => { if (e.target===overlay) close(); });
+    document.getElementById('settings-save-btn')?.addEventListener('click', () => {
+      const status = document.getElementById('settings-save-status');
+      if (status) { status.textContent = '✓ saved to your universe'; status.classList.add('show'); setTimeout(() => status.classList.remove('show'), 2500); }
+    });
+    document.getElementById('settings-clear-btn')?.addEventListener('click', () => {
+      if (!window.confirm('This will permanently delete all your echoes. This cannot be undone.')) return;
+      state.echoes = []; Storage.save([]);
+      Toast.show('All echoes cleared.', 3000);
+      close(); Weather.update(); IdentityOrb.update(); IdentityCore.update();
+      if (state.currentView === 'timeline') Nav.show('timeline');
+    });
+    document.addEventListener('keydown', e => { if (e.key==='Escape'&&overlay?.classList.contains('open')) close(); });
+    document.getElementById('nav-logo-btn')?.addEventListener('contextmenu', e => { e.preventDefault(); open(); });
+  }
+  init(); return { open, close };
+})();
+
 /* ── LOGIN SYSTEM ── */
 const Login = (() => {
   const screen   = document.getElementById('login-screen');
@@ -462,9 +523,17 @@ const Ripple = (() => {
 
   function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 
-  function spawn(x, y, color, isVoid = false) {
-    rings.push({x, y, r:0, maxR: isVoid ? 200 : 140, color,
-      a:1, speed: isVoid ? 1.2 : 2, isVoid});
+  function spawn(x, y, color, isVoid = false, intensity = 5) {
+    const count = isVoid ? 4 : Math.ceil(intensity / 3);
+    for (let i = 0; i < count; i++) {
+      rings.push({
+        x, y, r: i * 8,
+        maxR: isVoid ? 220 + i * 30 : 120 + intensity * 8 + i * 20,
+        color, a: 1 - i * 0.15,
+        speed: (isVoid ? 1.1 : 1.8 + intensity * 0.08) - i * 0.1,
+        isVoid, delay: i * 3
+      });
+    }
   }
 
   function tick() {
@@ -472,20 +541,21 @@ const Ripple = (() => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     rings = rings.filter(r => r.a > 0.01);
     rings.forEach(ring => {
+      if (ring.delay > 0) { ring.delay--; return; }
       ring.r += ring.speed;
-      ring.a  = Math.max(0, 1 - ring.r / ring.maxR);
+      ring.a = Math.max(0, (1 - ring.r / ring.maxR) * (ring.isVoid ? 0.6 : 0.7));
       if (ring.isVoid) {
         for (let i=0; i<3; i++) {
-          const rr = ring.r - i*18;
+          const rr = ring.r - i * 20;
           if (rr < 0) continue;
           ctx.beginPath(); ctx.arc(ring.x, ring.y, rr, 0, Math.PI*2);
-          ctx.strokeStyle = `rgba(74,74,90,${ring.a * .5})`;
-          ctx.lineWidth = 1.5; ctx.stroke();
+          ctx.strokeStyle = `rgba(74,74,90,${ring.a * .55})`;
+          ctx.lineWidth = 1; ctx.stroke();
         }
       } else {
         ctx.beginPath(); ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI*2);
-        ctx.strokeStyle = ring.color + Math.floor(ring.a * 80).toString(16).padStart(2,'0');
-        ctx.lineWidth = 1.2; ctx.stroke();
+        ctx.strokeStyle = ring.color + Math.floor(ring.a * 90).toString(16).padStart(2,'0');
+        ctx.lineWidth = 1; ctx.stroke();
       }
     });
     requestAnimationFrame(tick);
@@ -596,7 +666,7 @@ const Whip = (() => {
         x===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
       }
       ctx.strokeStyle = `rgba(201,168,76,${alpha*.7})`;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1;
       ctx.shadowColor = 'rgba(201,168,76,.4)'; ctx.shadowBlur = 8;
       ctx.stroke(); ctx.shadowBlur = 0;
       const grd = ctx.createRadialGradient(cx,cy,0,cx,cy,120);
@@ -624,23 +694,50 @@ const Whip = (() => {
 const SilenceParticles = (() => {
   const layer = document.getElementById('silence-layer');
   function spawn(silenceLevel) {
-    const count = Math.floor(silenceLevel * 1.5);
+    const count = Math.floor(silenceLevel * 2.2);
     for (let i=0; i<count; i++) {
       setTimeout(() => {
         const p = document.createElement('div');
         p.className = 'sil-particle';
-        const size = Math.random()*3+1;
+        const size = Math.random()*4+1;
+        const hue = silenceLevel > 7 ? '124,111,160' : '124,111,160';
+        const opacity = 0.4 + (silenceLevel/10)*0.4;
         p.style.cssText = `
-          width:${size}px;height:${size}px;background:rgba(124,111,160,.65);
-          left:${Math.random()*100}%;bottom:${Math.random()*30}%;
-          animation-duration:${3+Math.random()*3}s;animation-delay:${Math.random()}s;
+          width:${size}px;height:${size}px;
+          background:rgba(${hue},${opacity});
+          left:${Math.random()*100}%;
+          bottom:${Math.random()*40}%;
+          animation-duration:${3.5+Math.random()*4}s;
+          animation-delay:${Math.random()*0.8}s;
         `;
         layer.appendChild(p);
-        setTimeout(() => p.remove(), 7000);
-      }, i * 120);
+        setTimeout(() => p.remove(), 8000);
+      }, i * 90);
     }
   }
   return {spawn};
+})();
+
+/* ── CURSOR AURA (desktop only) ── */
+const CursorAura = (() => {
+  if (window.innerWidth < 768 || !window.matchMedia('(pointer:fine)').matches) return {update:()=>{}};
+  const aura = document.createElement('div');
+  aura.style.cssText = `
+    position:fixed;width:280px;height:280px;border-radius:50%;
+    pointer-events:none;z-index:1;
+    background:radial-gradient(circle,rgba(201,168,76,.018) 0%,transparent 70%);
+    transform:translate(-50%,-50%);
+    transition:background .8s ease, opacity .4s;
+    will-change:transform;opacity:0;
+  `;
+  document.body.appendChild(aura);
+  let mx=0,my=0,ax=0,ay=0,raf=null,visible=false;
+  document.addEventListener('mousemove', e => { mx=e.clientX; my=e.clientY; if (!visible) { aura.style.opacity='1'; visible=true; } }, {passive:true});
+  document.addEventListener('mouseleave', () => { aura.style.opacity='0'; visible=false; });
+  function tick() { ax += (mx-ax) * 0.08; ay += (my-ay) * 0.08; aura.style.transform = `translate(${ax-140}px,${ay-140}px)`; raf = requestAnimationFrame(tick); }
+  tick();
+  function update(mood) { if (!mood) return; const c = MOOD_COLORS[mood]; aura.style.background = `radial-gradient(circle,${c}18 0%,transparent 70%)`; }
+  return {update};
 })();
 
 /* ── GHOST LAYER ── */
@@ -648,17 +745,24 @@ const GhostLayer = (() => {
   const layer = document.getElementById('ghost-layer');
   function spawn(echo) {
     const color = MOOD_COLORS[echo.mood];
-    const size  = 50 + echo.intensity * 14;
+    const size  = 60 + echo.intensity * 18;
     const ghost = document.createElement('div');
     ghost.className = 'ghost-memory';
-    const dur = 16 + Math.random()*18;
+    const dur = 18 + Math.random() * 22;
+    const blurAmt = size / 3.5 + echo.intensity * 1.5;
+    const baseOpacity = 0.04 + (echo.intensity / 10) * 0.05;
     ghost.style.cssText = `
-      left:${Math.random()*82+9}%;width:${size}px;height:${size}px;
-      background:${color};filter:blur(${size/4}px);
-      animation-duration:${dur}s;animation-delay:${Math.random()*4}s;
+      left:${Math.random()*80+10}%;
+      width:${size}px;height:${size}px;
+      background:${color};
+      filter:blur(${blurAmt}px);
+      opacity:0;
+      animation:tideFloat ${dur}s linear infinite;
+      animation-delay:${Math.random()*6}s;
+      --ghost-opacity:${baseOpacity};
     `;
     layer.appendChild(ghost);
-    setTimeout(() => ghost.remove(), (dur+5)*1000);
+    setTimeout(() => ghost.remove(), (dur+8)*1000);
   }
   function initFromEchoes(echoes) {
     echoes.slice(0,7).forEach((e,i) => setTimeout(() => spawn(e), i*1800));
@@ -1014,6 +1118,7 @@ const EntryForm = (() => {
       document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       selectedMood = btn.dataset.mood;
+      CursorAura.update(selectedMood);
       const rect = btn.getBoundingClientRect();
       spawnResidue(rect.left+rect.width/2, rect.top+rect.height/2, MOOD_COLORS[selectedMood]);
     });
@@ -1064,7 +1169,7 @@ const EntryForm = (() => {
     Storage.save(state.echoes);
 
     const cx = window.innerWidth/2, cy = window.innerHeight/2;
-    Ripple.spawn(cx, cy, MOOD_COLORS[echo.mood], echo.void);
+    Ripple.spawn(cx, cy, MOOD_COLORS[echo.mood], echo.void, echo.intensity);
     if (echo.void) spawnVoidPulse(cx, cy);
     spawnBurst(cx, cy, MOOD_COLORS[echo.mood]);
     GhostLayer.spawn(echo);
@@ -1350,12 +1455,21 @@ const Weather = (() => {
     const dom = Object.entries(mc).sort((a,b)=>b[1]-a[1])[0][0];
     const avg = si/recent.length;
     const map = {
-      calm:      avg>6?['🌊','Deep calm — a still ocean.']:['🌫️','Soft fog and quiet thoughts.'],
-      chaos:     avg>7?['⛈️',"Full storm. You're in it."]:['🌩️','Thunder in the distance.'],
-      reflective:['🌙','Reflective skies. Turning inward.'],
-      anxious:   avg>6?['🌀','Turbulence. Hold on.']:['💨','Restless winds.'],
-      joyful:    ['🌸','Clear skies, soft light.'],
-      empty:     ['🌑','The quiet dark. It passes.']
+      calm: avg>7 ? ['🌊','Deep ocean calm — an almost sacred stillness.']
+                  : avg>4 ? ['🌫️','Soft fog. The kind that muffles the world kindly.']
+                  : ['🌤','Quiet skies. Your breathing is the loudest thing.'],
+      chaos: avg>7 ? ['⛈️',"Full electrical storm. You're magnificent in it."]
+                   : avg>4 ? ['🌩️','Thunder thinking. The static before the strike.']
+                   : ['💨','Restless air. Something is circling.'],
+      reflective: avg>6 ? ['🌘','Deep lunar. The kind of night made for becoming.']
+                        : ['🌙','Reflective skies. The inward horizon is clear.'],
+      anxious: avg>7 ? ['🌀','Spiraling turbulence. You are weathering this.']
+                     : avg>4 ? ['🫁','Shallow air. Your body knows before your mind does.']
+                     : ['💨','A low restlessness. Present, but manageable.'],
+      joyful: avg>7 ? ['✨','Radiant skies. Light bending just for you today.']
+                    : ['🌸','Warm and flowering. A rare atmospheric softness.'],
+      empty: avg>6 ? ['🌑','The absolute dark. Curiously weightless in it.']
+                   : ['🌒','The edge of the void. Moon barely showing.']
     };
     const w = map[dom]||['☁️','Processing…'];
     document.getElementById('weather-emoji').textContent = w[0];
@@ -1465,7 +1579,7 @@ const ShatterSoftly = (() => {
     ctx.beginPath();
     ctx.ellipse(W/2, H/2, 90, 85, -0.1, 0, Math.PI * 2);
     ctx.strokeStyle = `rgba(255,255,255,${0.35 - progress * 0.2})`;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1;
     ctx.stroke();
 
     // Inner highlight
