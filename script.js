@@ -139,12 +139,15 @@ const ProfileStore = (() => {
     try { profile = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
     const legacy = localStorage.getItem(USER_KEY);
     if (legacy && !profile.display_name) {
-      profile.display_name = legacy;
-      write(profile);
+      profile = {...profile, display_name: legacy};
+      localStorage.setItem(KEY, JSON.stringify({...profile, updated_at:new Date().toISOString()}));
     }
     return profile;
   }
-  function write(profile) { localStorage.setItem(KEY, JSON.stringify({...read(), ...profile, updated_at:new Date().toISOString()})); }
+  function write(profile) {
+    const existing = read();
+    localStorage.setItem(KEY, JSON.stringify({...existing, ...profile, updated_at:new Date().toISOString()}));
+  }
   return { read, write };
 })();
 
@@ -2440,7 +2443,16 @@ const UserChip = (() => {
     document.getElementById('chip-email').textContent = email;
     const avatarEl = document.getElementById('chip-avatar');
     const avatarUrl = profile.avatar_url || profile.avatar_data_url;
-    if (avatarUrl) { avatarEl.innerHTML = `<img src="${avatarUrl}" alt="">`; } else { const initials = name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase(); avatarEl.textContent = initials || 'EV'; }
+    avatarEl.replaceChildren();
+    if (avatarUrl) {
+      const img = document.createElement('img');
+      img.setAttribute('src', avatarUrl);
+      img.setAttribute('alt', '');
+      avatarEl.appendChild(img);
+    } else {
+      const initials = name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase();
+      avatarEl.textContent = initials || 'EV';
+    }
   }
 
   function toggleMenu(forceOpen) {
