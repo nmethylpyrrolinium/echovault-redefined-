@@ -11,6 +11,13 @@ jobs:
   label:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout PR head for label config
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: false
+
       - name: Apply labels from .github/labeler.yml
         uses: actions/labeler@v5
         with:
