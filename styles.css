@@ -1154,7 +1154,6 @@ body.midnight{
   .hero-actions{flex-direction:column;width:100%;max-width:280px}
   .btn-primary,.btn-ghost{width:100%;text-align:center}
 }
- codex/implement-pwa,-auth,-icons-and-sounds-seom4q
 /* ═══════════════════════════════════
    PWA + AUTH + SETTINGS — v2
 ═══════════════════════════════════ */
@@ -1171,7 +1170,7 @@ body{overscroll-behavior:none;-webkit-overflow-scrolling:touch}
 }
 #pwa-install-btn{background:var(--gold);color:var(--void);border:none;padding:8px 18px;border-radius:20px;font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;flex-shrink:0;transition:background .2s}
 #pwa-install-btn:hover{background:#d4b45a}
-#pwa-dismiss-btn{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:0 4px;flex-shrink:0;line-height:1;transition:color .2s}
+#pwa-dismiss-btn{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:0 4px;flex-shrink:0;line-height:1;transition:color .2s;position:relative;z-index:2;pointer-events:auto}
 #pwa-dismiss-btn:hover{color:var(--text)}
 .pwa-title{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text)}
 .pwa-sub{font-size:12px;font-style:italic;color:var(--muted);margin-top:2px}
@@ -1196,7 +1195,10 @@ body{overscroll-behavior:none;-webkit-overflow-scrolling:touch}
 #sync-toast.show{opacity:1;transform:translateX(0)}
 .sync-dot{width:6px;height:6px;border-radius:50%;background:var(--joyful);animation:sdot 1.2s ease-in-out infinite}
 #offline-banner{position:fixed;bottom:70px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--surface2);border:1px solid rgba(196,75,75,.3);border-radius:20px;padding:8px 18px;font-family:var(--font-mono);font-size:9px;color:rgba(196,75,75,.8);letter-spacing:.1em;text-transform:uppercase;z-index:50;opacity:0;pointer-events:none;transition:all .4s}
-#offline-banner.show{opacity:1;transform:translateX(-50%) translateY(0)
+#offline-banner.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+#auth-form{width:min(440px,92vw);display:flex;flex-direction:column;gap:12px}
+.auth-actions{display:grid;grid-template-columns:1fr;gap:10px}
 
 
 /* Mood button active pulse */
@@ -1254,4 +1256,4 @@ body{overscroll-behavior:none;-webkit-overflow-scrolling:touch}
 .settings-save-btn:hover{background:#d4b45a;transform:translateY(-1px);box-shadow:0 8px 28px rgba(201,168,76,.3)}
 .settings-save-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .settings-save-status{font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;text-align:center;padding:12px 24px 24px;color:var(--joyful);opacity:0;transition:opacity .4s;}
-.settings-save-status.show{opacity:1} main
+.settings-save-status.show{opacity:1}
