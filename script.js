@@ -2306,6 +2306,47 @@ function setPeriod(p, btn) {
 }
 document.getElementById('export-btn').addEventListener('click', () => Storage.exportVault(state.echoes));
 document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file').click());
+
+const UserChip = (() => {
+  const chip = document.getElementById('user-chip');
+  const menu = chip?.querySelector('.chip-menu');
+  const settingsBtn = document.getElementById('chip-settings-btn');
+
+  function toggleMenu(forceOpen) {
+    if (!menu) return;
+    const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !menu.classList.contains('open');
+    menu.classList.toggle('open', shouldOpen);
+  }
+
+  chip?.addEventListener('click', (e) => {
+    if (e.target.closest('.chip-item')) return;
+    toggleMenu();
+  });
+  chip?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleMenu();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!chip?.contains(e.target)) toggleMenu(false);
+  });
+
+  settingsBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleMenu(false);
+    Settings.open();
+  });
+
+  document.getElementById('chip-export-btn')?.addEventListener('click', () => Storage.exportVault(state.echoes));
+  document.getElementById('chip-signout-btn')?.addEventListener('click', () => {
+    localStorage.removeItem(USER_KEY);
+    window.location.reload();
+  });
+})();
+
 document.getElementById('import-file').addEventListener('change', function() {
   if (this.files[0]) {
     Storage.importVault(this.files[0], (arr) => {

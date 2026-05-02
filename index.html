@@ -5,19 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>EchoVault — Your Emotional Universe</title>
 <!-- PWA -->
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#050508">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EchoVault">
 <!-- Icons -->
-<link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <!-- SEO -->
 <meta name="description" content="A living archive of who you are becoming. Not a diary — a cosmos of memory and feeling.">
 <meta property="og:title" content="EchoVault — Your Emotional Universe">
 <meta property="og:description" content="A living archive of who you are becoming.">
-<meta property="og:image" content="/icons/icon.svg">
+<meta property="og:image" content="icons/icon.svg">
 <meta property="og:type" content="website">
 <!-- Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,7 +29,7 @@
 <body>
 <!-- PWA install banner -->
 <div id="pwa-banner">
-  <img src="/icons/icon.svg" alt="" width="36" height="36" style="border-radius:8px;flex-shrink:0">
+  <img src="icons/icon.svg" alt="" width="36" height="36" style="border-radius:8px;flex-shrink:0">
   <div style="flex:1"><div class="pwa-title">Add EchoVault to Home Screen</div><div class="pwa-sub">Works offline · Feels like an app</div></div>
   <button id="pwa-install-btn">Install</button>
   <button id="pwa-dismiss-btn" aria-label="Dismiss">×</button>
@@ -444,11 +444,12 @@
 </div>
 
 <script src="script.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="wrapped-cinematic-module.js"></script>
 
 <script>
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
 </script>
 </body>
