@@ -1,0 +1,11 @@
+frontend:
+  - changed-files:
+      - any-glob-to-any-file: ['index.html', 'styles.css']
+
+logic:
+  - changed-files:
+      - any-glob-to-any-file: ['script.js']
+
+cinematic:
+  - changed-files:
+      - any-glob-to-any-file: ['wrapped-cinematic-module.js', 'wrapped-cinematic.html']
