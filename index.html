@@ -24,6 +24,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400&family=Cinzel+Decorative:wght@400&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+window.ECHOVAULT_CONFIG = {
+  SUPABASE_URL: "https://phfwaxuyauuyskzruqbk.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_L1KAnz1Y3hM0inwbCjv-8g_uDYg7eAv",
+  SUPABASE_AVATAR_BUCKET: "avatars"
+};
+</script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -103,6 +110,7 @@
       <input class="name-input" id="auth-email" type="email" placeholder="email" autocomplete="email">
       <input class="name-input" id="auth-password" type="password" placeholder="password" autocomplete="current-password">
       <input class="name-input" id="name-input" type="text" placeholder="display name…" maxlength="32" autocomplete="name">
+      <div class="auth-note" id="auth-mode-note" aria-live="polite"></div>
       <div class="auth-actions">
         <button class="name-enter-btn visible" id="auth-signin-btn">Sign in</button>
         <button class="name-enter-btn visible" id="auth-signup-btn">Create account</button>
