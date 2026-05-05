@@ -23,15 +23,23 @@ if (!readme.includes('phfwaxuyauuyskzruqbk.supabase.co') || !readme.includes('lo
 if (!script.includes('auth-local-btn')) failures.push('script.js missing auth-local-btn for Continue Locally');
 if (script.includes('profile.display_name = legacy;') && script.includes('write(profile);')) failures.push('ProfileStore.read() still calls write(profile) during legacy migration');
 if (!(script.includes('await Auth.init();') && script.indexOf('await Auth.init();') < script.indexOf('Login.init();'))) failures.push('Auth.init is not awaited/chained before Login.init');
+if (!script.includes('getAuthRedirectUrl')) failures.push('script.js missing getAuthRedirectUrl helper');
+if (!script.includes('https://nmethylpyrrolinium.github.io/echovault.com/')) failures.push('script.js missing production auth redirect URL');
 if (!script.toLowerCase().includes('code or magic link')) failures.push('script.js missing code-or-magic-link guidance text');
 if (!readme.includes('{{ .Token }}')) failures.push('README missing {{ .Token }} instructions');
 if (!readme.includes('{{ .ConfirmationURL }}')) failures.push('README missing {{ .ConfirmationURL }} instructions');
 if (!readme.includes('Magic Link')) failures.push('README missing Magic Link wording');
+if (!readme.includes('Site URL')) failures.push('README missing Site URL setup instructions');
+if (!readme.includes('redirect URL')) failures.push('README missing redirect URL setup instructions');
 if (!readme.includes('Email OTP')) failures.push('README missing Email OTP wording');
 if (!readme.includes('60 seconds')) failures.push('README missing 60 seconds rate limit note');
 if (!script.includes('signInWithOtp')) failures.push('script.js missing signInWithOtp');
 if (!script.includes('verifyOtp')) failures.push('script.js missing verifyOtp');
 if (!script.includes('emailRedirectTo')) failures.push('script.js missing emailRedirectTo');
+if (!style.includes('env(safe-area-inset-top')) failures.push('styles.css missing safe-area top handling');
+if (!style.includes('env(safe-area-inset-bottom')) failures.push('styles.css missing safe-area bottom handling');
+if (!(style.includes('display-mode: standalone') || style.includes('is-standalone'))) failures.push('styles.css missing standalone display-mode handling');
+if (/id="avatar-file-input"[^>]*display\s*:\s*none/i.test(index)) failures.push('avatar-file-input still uses display:none');
 if (failures.length) {
   console.error('Smoke test failed:');
   failures.forEach((f)=>console.error('- '+f));

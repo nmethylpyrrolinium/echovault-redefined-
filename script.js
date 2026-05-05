@@ -170,9 +170,9 @@ const Auth = (() => {
     }
   }
   async function signIn(email,password){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {data,error}=await client.auth.signInWithPassword({email,password}); if(error)return {ok:false,error:error.message}; user=data.user; return {ok:true,data}; }
-  async function sendEmailOtp(email){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {error}=await client.auth.signInWithOtp({email,options:{shouldCreateUser:true,emailRedirectTo:window.location.href}}); if(error) return {ok:false,error:error.message}; return {ok:true}; }
+  async function sendEmailOtp(email){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {error}=await client.auth.signInWithOtp({email,options:{shouldCreateUser:true,emailRedirectTo:getAuthRedirectUrl()}}); if(error) return {ok:false,error:error.message}; return {ok:true}; }
   async function verifyEmailOtp(email,token){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {data,error}=await client.auth.verifyOtp({email,token,type:'email'}); if(error) return {ok:false,error:error.message}; user=data?.user||data?.session?.user||null; return {ok:true,data}; }
-  async function signUp(email,password,displayName){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {data,error}=await client.auth.signUp({email,password,options:{data:{display_name:displayName||undefined},emailRedirectTo:window.location.href}}); if(error)return {ok:false,error:error.message}; user=data.user||null; return {ok:true,data}; }
+  async function signUp(email,password,displayName){ if(!client) return {ok:false,error:'Supabase is not configured — local mode only.'}; const {data,error}=await client.auth.signUp({email,password,options:{data:{display_name:displayName||undefined},emailRedirectTo:getAuthRedirectUrl()}}); if(error)return {ok:false,error:error.message}; user=data.user||null; return {ok:true,data}; }
   async function signOut(){ if(client) await client.auth.signOut(); user=null; localStorage.removeItem(USER_KEY); }
   async function fetchProfile(){ if(!client||!user) return null; const {data}=await client.from('profiles').select('*').eq('id',user.id).maybeSingle(); return data||null; }
   async function upsertProfile(profile){
@@ -183,7 +183,7 @@ const Auth = (() => {
     if(error){Toast.show('Profile sync failed; kept local copy.'); return {ok:false,error:error.message};}
     return {ok:true};
   }
-  return { init, signIn, signUp, sendEmailOtp, verifyEmailOtp, signOut, hasSupabase, fetchProfile, upsertProfile, client, SUPABASE_AVATAR_BUCKET, get user(){return user;}, get mode(){return mode;} };
+  return { init, signIn, signUp, sendEmailOtp, verifyEmailOtp, signOut, hasSupabase, fetchProfile, upsertProfile, client, SUPABASE_AVATAR_BUCKET, getAuthRedirectUrl, get user(){return user;}, get mode(){return mode;} };
 })();
 
 /* ── NAVIGATION ── */
@@ -385,7 +385,7 @@ const Login = (() => {
     setButtonLoading(authSendCode, false, 'Send Vault Code', 'Sending…');
     if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
     setOtpUiStep(true);
-    Toast.show('Email sent — check for a code or magic link.');
+    Toast.show('Email sent. Use the code if shown, or open the magic link (code or magic link both work).');
     startOtpCooldown(60);
   }
 
@@ -465,9 +465,14 @@ const PWAInstall = (() => {
   const dismissBtn = document.getElementById('pwa-dismiss-btn');
   const DISMISS_KEY = 'echovault_pwa_dismissed';
   const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  function syncStandaloneClass() {
+    document.documentElement.classList.toggle('is-standalone', Boolean(isStandalone()));
+  }
   function hide() { banner?.classList.remove('show'); }
   function show() { if (!localStorage.getItem(DISMISS_KEY) && !isStandalone() && deferredInstallPrompt) banner?.classList.add('show'); }
   function init() {
+    syncStandaloneClass();
+    window.matchMedia('(display-mode: standalone)').addEventListener?.('change', syncStandaloneClass);
     window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; show(); });
     installBtn?.addEventListener('click', async () => {
       if (!deferredInstallPrompt) return;
@@ -2584,3 +2589,9 @@ async function init() {
 init();
 
 })();
+  const PRODUCTION_REDIRECT_URL = 'https://nmethylpyrrolinium.github.io/echovault.com/';
+  function getAuthRedirectUrl() {
+    const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    if (isLocalhost) return PRODUCTION_REDIRECT_URL;
+    return new URL('./', window.location.href).toString();
+  }
