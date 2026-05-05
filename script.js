@@ -2151,7 +2151,7 @@ const Rituals = (() => {
     if (type === 'museum') {
       const w=WeatherMap.compute(state.echoes); WeatherMap.render(document.getElementById('weather-map-canvas'),w);
       document.getElementById('dl-weather')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderWeatherCard(w),'weather-card.png'));
-      document.getElementById('dl-arch')?.addEventListener('click',()=>{const p=ArchetypeEngine.profile(PatternEngine.analyze(state.echoes));CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderArchetypeCard(p),'archetype-card.png');});
+      document.getElementById('dl-arch')?.addEventListener('click',()=>{const p=ArchetypeEngine.compute(PatternEngine.analyze(state.echoes));CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderArchetypeCard(p),'archetype-card.png');});
       document.getElementById('dl-sound')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderSoundprintCard({mood:state.echoes[0]?.mood}),'soundprint-card.png'));
       document.querySelectorAll('.relic-dl').forEach(btn=>btn.addEventListener('click',()=>{const r=RelicEngine.fromEchoes(state.echoes).find(x=>x.id===btn.dataset.id);const c=CinematicCardRenderer.renderRelicCard(r);CinematicCardRenderer.downloadCanvas(c,`${r.title}.png`);ArtifactArchive.saveArtifact({type:'relic',title:r.title,subtitle:r.description,data:r,imageDataUrl:c.toDataURL('image/png')});}));
     }
@@ -2498,7 +2498,7 @@ const Rituals = (() => {
     if(!state.echoes.length) return `<div class="dna-card"><div class="dna-title">Emotional Museum</div><p>The museum is quiet. Create echoes to awaken its rooms.</p></div>`;
     const relics=RelicEngine.fromEchoes(state.echoes);
     const weather=WeatherMap.compute(state.echoes);
-    const arch=ArchetypeEngine.profile(PatternEngine.analyze(state.echoes));
+    const arch=ArchetypeEngine.compute(PatternEngine.analyze(state.echoes));
     const tracks=SOUNDPRINTS[weather.mood]||SOUNDPRINTS.reflective;
     return `<div class="museum-shell"><h3>Emotional Museum</h3><p>Walk through the artifacts your echoes became.</p><div class="museum-grid"><section><h4>Weather Room</h4><canvas id="weather-map-canvas" style="width:100%;height:220px"></canvas><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button></section><section><h4>Archetype Hall</h4><p>${arch.archetypeName}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></section><section><h4>Soundprint Wall</h4><p>${tracks.slice(0,3).map(t=>t.song).join(' · ')}</p><button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button></section><section><h4>Memory Relics</h4>${relics.map(r=>`<div class='relic-item'><b>${r.title}</b> <span>${r.rarity}</span><small>${r.coordinates}</small><button class='receipt-action-btn relic-dl' data-id='${r.id}'>Download Card</button></div>`).join('')}</section><section><h4>Receipt Archive</h4><div id='artifact-list'>${ArtifactArchive.listArtifacts().slice(0,6).map(a=>`<div>${a.title}</div>`).join('')||'No saved artifacts yet.'}</div></section><section><h4>Void Lanterns</h4><p>Collect quiet lights from still echoes.</p></section></div></div>`;
   }
