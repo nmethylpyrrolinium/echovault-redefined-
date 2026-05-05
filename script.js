@@ -2112,10 +2112,41 @@ const CinematicCardRenderer = (() => {
   return {renderRelicCard,renderWeatherCard,renderArchetypeCard,renderSoundprintCard,downloadCanvas,saveCardAsArtifact};
 })();
 
-const WeatherMap = (() => ({
-  compute(echoes=[]){const recent=echoes.slice(0,14);const mood=recent[0]?.mood||'empty';return {name:`${mood} front`,summary:`${recent.length} echoes shaping this weather.`,mood};},
-  render(canvas,data){if(!canvas)return;const ctx=canvas.getContext('2d');const w=canvas.width=canvas.clientWidth||320,h=canvas.height=220;ctx.clearRect(0,0,w,h);ctx.fillStyle='#0e1224';ctx.fillRect(0,0,w,h);for(let i=0;i<80;i++){ctx.fillStyle=`rgba(214,179,106,${Math.random()*0.2})`;ctx.beginPath();ctx.arc(Math.random()*w,Math.random()*h,Math.random()*2,0,6.28);ctx.fill();}ctx.fillStyle='#d6b36a';ctx.font='16px sans-serif';ctx.fillText(data.name,14,24);} 
-}))();
+const WeatherMap = (() => {
+  const WEATHER_COPY = {
+    calm: ['Calm Tides','Blue rings drift in steady breath.'],
+    chaos: ['Chaos Front','Electric fractures move through the atmosphere.'],
+    reflective: ['Reflective Night','Moon arcs and orbit trails hold a thoughtful sky.'],
+    anxious: ['Restless Wind','Amber spirals circle with alert motion.'],
+    joyful: ['Bloom Current','Petals and rising light open brighter air.'],
+    empty: ['Quiet Haze','Soft fog stretches into spacious silence.']
+  };
+  function compute(echoes=[]) {
+    const recent = echoes.slice(0,14);
+    const patterns = PatternEngine.analyze(recent);
+    const mood = patterns?.dominantMood || recent[0]?.mood || 'empty';
+    const [name, summary] = WEATHER_COPY[mood] || WEATHER_COPY.empty;
+    return { name, summary, mood, intensity: patterns.averageIntensity||0, silence: patterns.averageSilence||0, density: Math.max(10, recent.length*6), total: recent.length };
+  }
+  function render(canvas, data) {
+    if (!canvas || !data) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = Math.max(280, canvas.clientWidth || 320);
+    const h = canvas.height = Math.max(190, canvas.clientHeight || 220);
+    ctx.clearRect(0,0,w,h);
+    const g = ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'#0a0f1d'); g.addColorStop(1,'#120d18'); ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+    const fog = Math.min(.38, .08 + data.silence/20); ctx.fillStyle=`rgba(190,190,210,${fog})`; ctx.fillRect(0,0,w,h);
+    const mood = data.mood;
+    for (let i=0;i<data.density;i++) { const x=Math.random()*w,y=Math.random()*h; ctx.fillStyle='rgba(214,179,106,.14)'; ctx.beginPath(); ctx.arc(x,y,Math.random()*1.8,0,6.28); ctx.fill(); }
+    if (mood==='calm') { ctx.strokeStyle='rgba(110,165,210,.4)'; for (let i=0;i<5;i++){ctx.beginPath(); ctx.arc(w*(.2+i*.16),h*.55,26+i*8,0,6.28); ctx.stroke();}}
+    if (mood==='chaos') { for(let i=0;i<14;i++){ctx.strokeStyle='rgba(216,82,120,.65)'; ctx.beginPath(); const x=Math.random()*w,y=Math.random()*h; ctx.moveTo(x,y); ctx.lineTo(x+Math.random()*34-17,y+Math.random()*30-15); ctx.stroke();}}
+    if (mood==='reflective') { ctx.strokeStyle='rgba(148,120,220,.45)'; ctx.beginPath(); ctx.arc(w*.5,h*.5,64,0.5,5.8); ctx.stroke(); }
+    if (mood==='anxious') { for(let i=0;i<8;i++){ctx.strokeStyle='rgba(210,150,78,.45)'; ctx.beginPath(); ctx.arc(w*(.2+i*.1),h*.58,18+i*4,0.2,4.9); ctx.stroke();}}
+    if (mood==='joyful') { for(let i=0;i<16;i++){ctx.fillStyle='rgba(152,210,120,.55)'; ctx.fillRect(Math.random()*w,Math.random()*h,2,2);}}
+    ctx.fillStyle='#d6b36a'; ctx.font='600 14px "DM Mono"'; ctx.fillText(data.name,14,20);
+  }
+  return { compute, render };
+})();
 const Rituals = (() => {
   const modal   = document.getElementById('fun-modal');
   const content = document.getElementById('fun-modal-content');
@@ -2181,17 +2212,23 @@ const Rituals = (() => {
   }
 
   function postBuild(type) {
-    if (type === 'vsvs')    setTimeout(startConflictAnimation, 100);
+    if (type === 'vsvs') setTimeout(startConflictAnimation, 100);
     if (type === 'shatter') setTimeout(() => ShatterSoftly.init(), 80);
     if (type === 'museum') {
-      const w=WeatherMap.compute(state.echoes); WeatherMap.render(document.getElementById('weather-map-canvas'),w);
+      const w = WeatherMap.compute(state.echoes);
+      WeatherMap.render(document.getElementById('weather-map-canvas'), w);
+      document.querySelectorAll('.museum-tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.museum-tab,.museum-room').forEach(el=>el.classList.remove('active'));btn.classList.add('active');document.querySelector(`[data-room-panel="${btn.dataset.room}"]`)?.classList.add('active');}));
       document.getElementById('dl-weather')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderWeatherCard(w),'weather-card.png'));
+      document.getElementById('save-weather')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'weather',title:w.name,subtitle:w.summary,data:w});Toast.show('Weather artifact saved ✓');});
       document.getElementById('dl-arch')?.addEventListener('click',()=>{const p=ArchetypeEngine.compute(PatternEngine.analyze(state.echoes));CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderArchetypeCard(p),'archetype-card.png');});
       document.getElementById('dl-sound')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderSoundprintCard({mood:state.echoes[0]?.mood}),'soundprint-card.png'));
-      document.querySelectorAll('.relic-dl').forEach(btn=>btn.addEventListener('click',()=>{const r=RelicEngine.fromEchoes(state.echoes).find(x=>x.id===btn.dataset.id);const c=CinematicCardRenderer.renderRelicCard(r);CinematicCardRenderer.downloadCanvas(c,`${r.title}.png`);ArtifactArchive.saveArtifact({type:'relic',title:r.title,subtitle:r.description,data:r,imageDataUrl:c.toDataURL('image/png')});}));
+      document.querySelectorAll('.relic-dl').forEach(btn=>btn.addEventListener('click',()=>{const r=RelicEngine.fromEchoes(state.echoes).find(x=>x.id===btn.dataset.id);if(!r)return;const c=CinematicCardRenderer.renderRelicCard(r);CinematicCardRenderer.downloadCanvas(c,`${r.title}.png`);}));
+      document.querySelectorAll('.relic-save').forEach(btn=>btn.addEventListener('click',()=>{const r=RelicEngine.fromEchoes(state.echoes).find(x=>x.id===btn.dataset.id);if(!r)return;ArtifactArchive.saveArtifact({type:'relic',title:r.title,subtitle:r.description,data:r});Toast.show('Relic saved ✓');}));
+      document.querySelectorAll('.art-del').forEach(btn=>btn.addEventListener('click',()=>{if(confirm('Remove this artifact from your local museum?')){ArtifactArchive.deleteArtifact(btn.dataset.id);btn.closest('.artifact-row')?.remove();}}));
+      document.querySelectorAll('.art-fav').forEach(btn=>btn.addEventListener('click',()=>{ArtifactArchive.toggleFavorite(btn.dataset.id);btn.classList.toggle('active');}));
     }
-    if (type === 'lantern') {document.getElementById('save-lantern')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'lantern',title:'Void Lantern',subtitle:'A saved gentle light.',data:{mood:'empty'}});Toast.show('Lantern saved to museum ✓');});}
-    if (type === 'stormjar') {document.getElementById('save-storm')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'storm',title:'Storm Jar',subtitle:'Sparks preserved.',data:{mood:'chaos'}});Toast.show('Storm saved to museum ✓');});}
+    if (type === 'lantern') initLanternInteraction();
+    if (type === 'stormjar') initStormJarInteraction();
     if (type === 'sound') {
       const relieverOrb = document.getElementById('reliever-orb');
       if (relieverOrb) {
@@ -2246,6 +2283,9 @@ const Rituals = (() => {
     }
   }
 
+
+  function initLanternInteraction(){const canvas=document.getElementById('lantern-canvas');if(!canvas)return;const ctx=canvas.getContext('2d');let glow=0,taps=0;const mood=PatternEngine.analyze(state.echoes).dominantMood||'reflective';const draw=()=>{const w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#07090f';ctx.fillRect(0,0,w,h);ctx.fillStyle=`rgba(232,188,98,${.2+glow*.12})`;ctx.beginPath();ctx.arc(w/2,h/2,36+glow*3,0,6.28);ctx.fill();for(let i=0;i<glow*5;i++){ctx.fillStyle='rgba(220,190,120,.5)';ctx.fillRect(w/2+(Math.random()*50-25),h/2-20-Math.random()*100,2,2);}};draw();canvas.addEventListener('click',()=>{taps++;glow=Math.min(8,glow+1);draw();if(taps>=3){document.getElementById('lantern-msg').textContent='Still here is still a signal.';document.getElementById('lantern-actions').hidden=false;}});document.getElementById('save-lantern')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'lantern',title:'Void Lantern',subtitle:'Still here is still a signal.',data:{glowLevel:glow,mood,created_at:new Date().toISOString()}});Toast.show('Lantern saved to museum ✓');});document.getElementById('dl-lantern')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderRelicCard({title:'Void Lantern',rarity:'luminous',coordinates:'EV-LIGHT',mood}),'void-lantern-card.png'));}
+  function initStormJarInteraction(){const canvas=document.getElementById('storm-canvas');if(!canvas)return;const ctx=canvas.getContext('2d');const p=PatternEngine.analyze(state.echoes);let sparks=Math.max(8,Math.round((p.averageIntensity||4)*2));let taps=0;const draw=()=>{const w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#080a12';ctx.fillRect(0,0,w,h);ctx.strokeStyle='rgba(180,200,255,.6)';ctx.strokeRect(w/2-70,h/2-90,140,180);for(let i=0;i<sparks;i++){ctx.strokeStyle='rgba(222,82,120,.65)';ctx.beginPath();const x=w/2-50+Math.random()*100,y=h/2-70+Math.random()*140;ctx.moveTo(x,y);ctx.lineTo(x+Math.random()*18-9,y+Math.random()*18-9);ctx.stroke();}};draw();canvas.addEventListener('click',()=>{taps++;sparks=Math.min(40,sparks+3);draw();if(taps>=2){document.getElementById('storm-msg').textContent='The storm has shape now.';document.getElementById('storm-actions').hidden=false;}});document.getElementById('save-storm')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'stormjar',title:'Storm Jar',subtitle:'The storm has shape now.',data:{sparkCount:sparks,mood:'chaos',created_at:new Date().toISOString()}});Toast.show('Storm saved to museum ✓');});document.getElementById('dl-storm')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderWeatherCard({name:'Storm Jar',summary:'The storm has shape now.',mood:'chaos'}),'storm-jar-card.png'));}
   function close() { modal.classList.remove('open'); }
 
   /* Character image pool */
@@ -2527,15 +2567,21 @@ const Rituals = (() => {
   }
 
 
-  function buildLantern(){return `<div class="dna-card"><div class="dna-title">Void Lantern</div><p>Recommended because high silence echoes were detected.</p><button class="receipt-action-btn" id="save-lantern">Save Artifact</button></div>`;}
-  function buildStormJar(){return `<div class="dna-card"><div class="dna-title">Storm Jar</div><p>Recommended because chaos and high intensity were detected.</p><button class="receipt-action-btn" id="save-storm">Save Artifact</button></div>`;}
+  function buildLantern(){
+    return `<div class="ritual-scene lantern-scene"><h3>Void Lantern</h3><p>Tap to give the quiet a small light.</p><canvas id="lantern-canvas" width="520" height="300"></canvas><div id="lantern-msg" class="ritual-msg">Stillness can hold a signal.</div><div class="ritual-actions" id="lantern-actions" hidden><button class="receipt-action-btn" id="save-lantern">Save Lantern Artifact</button><button class="receipt-action-btn" id="dl-lantern">Download Lantern Card</button></div></div>`;
+  }
+  function buildStormJar(){
+    return `<div class="ritual-scene storm-scene"><h3>Storm Jar</h3><p>Put the weather somewhere it can’t swallow you.</p><canvas id="storm-canvas" width="520" height="300"></canvas><div id="storm-msg" class="ritual-msg">Tap the jar to give the storm a shape.</div><div class="ritual-actions" id="storm-actions" hidden><button class="receipt-action-btn" id="save-storm">Save Storm Artifact</button><button class="receipt-action-btn" id="dl-storm">Download Storm Card</button></div></div>`;
+  }
   function buildMuseum(){
-    if(!state.echoes.length) return `<div class="dna-card"><div class="dna-title">Emotional Museum</div><p>The museum is quiet. Create echoes to awaken its rooms.</p></div>`;
-    const relics=RelicEngine.fromEchoes(state.echoes);
-    const weather=WeatherMap.compute(state.echoes);
-    const arch=ArchetypeEngine.compute(PatternEngine.analyze(state.echoes));
+    const echoes = state.echoes || [];
+    if(!echoes.length) return `<div class="museum-shell"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-empty">The museum is quiet. Create echoes to awaken its rooms.</div></div>`;
+    const relics=RelicEngine.fromEchoes(echoes);
+    const weather=WeatherMap.compute(echoes);
+    const arch=ArchetypeEngine.compute(PatternEngine.analyze(echoes));
     const tracks=SOUNDPRINTS[weather.mood]||SOUNDPRINTS.reflective;
-    return `<div class="museum-shell"><h3>Emotional Museum</h3><p>Walk through the artifacts your echoes became.</p><div class="museum-grid"><section><h4>Weather Room</h4><canvas id="weather-map-canvas" style="width:100%;height:220px"></canvas><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button></section><section><h4>Archetype Hall</h4><p>${arch.archetypeName}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></section><section><h4>Soundprint Wall</h4><p>${tracks.slice(0,3).map(t=>t.song).join(' · ')}</p><button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button></section><section><h4>Memory Relics</h4>${relics.map(r=>`<div class='relic-item'><b>${r.title}</b> <span>${r.rarity}</span><small>${r.coordinates}</small><button class='receipt-action-btn relic-dl' data-id='${r.id}'>Download Card</button></div>`).join('')}</section><section><h4>Receipt Archive</h4><div id='artifact-list'>${ArtifactArchive.listArtifacts().slice(0,6).map(a=>`<div>${a.title}</div>`).join('')||'No saved artifacts yet.'}</div></section><section><h4>Void Lanterns</h4><p>Collect quiet lights from still echoes.</p></section></div></div>`;
+    const saved=ArtifactArchive.listArtifacts();
+    return `<div class="museum-shell"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-meta"><span>${echoes.length} echoes</span><span>${saved.length} artifacts</span><span>${weather.name}</span><span>${arch.archetypeName}</span></div></header><nav class="museum-tabs">${['weather','archetype','soundprint','relics','receipts','archive','lanterns'].map(r=>`<button class="museum-tab ${r==='weather'?'active':''}" data-room="${r}">${r}</button>`).join('')}</nav><div class="museum-room active" data-room-panel="weather"><h4>Weather Room</h4><p>${weather.summary}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div></div><div class="museum-room" data-room-panel="archetype"><h4>Archetype Hall</h4><p>${arch.archetypeName} · ${arch.archetypeDescription}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></div><div class="museum-room" data-room-panel="soundprint"><h4>Soundprint Wall</h4>${tracks.slice(0,3).map(t=>`<div class='track-item'><div><b>${t.song}</b><small>${t.artist}</small></div><a class='track-link spotify' href='${t.spotify}' target='_blank' rel='noopener noreferrer'>Spotify</a><a class='track-link youtube' href='${t.youtube}' target='_blank' rel='noopener noreferrer'>YouTube</a></div>`).join('')}<button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button></div><div class="museum-room" data-room-panel="relics"><h4>Memory Relics</h4>${relics.map(r=>`<article class='relic-item'><b>${r.title}</b><span class='rarity'>${r.rarity}</span><small>${r.coordinates}</small><p>${r.description}</p><button class='receipt-action-btn relic-dl' data-id='${r.id}'>Download Card</button><button class='receipt-action-btn relic-save' data-id='${r.id}'>Save Artifact</button></article>`).join('')}</div><div class="museum-room" data-room-panel="receipts"><h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button></div><div class="museum-room" data-room-panel="archive"><h4>Artifact Archive</h4><div id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${a.title}</b><small>${a.type}</small><button class='receipt-action-btn art-fav' data-id='${a.id}'>☆</button><button class='receipt-action-btn art-del' data-id='${a.id}'>Delete</button></div>`).join('') || 'No artifacts saved yet. Create one from a ritual.'}</div></div><div class="museum-room" data-room-panel="lanterns"><h4>Void Lanterns</h4><p>Still here is still a signal.</p></div></div>`;
   }
   function startConflictAnimation() {
     const canvas = document.getElementById('conflict-canvas');
@@ -2768,6 +2814,10 @@ function refreshEchoDependentUI() {
   if (state.currentView === 'wrapped') {
     Wrapped.render();
   }
+  const weather = WeatherMap.compute(state.echoes);
+  const e=document.getElementById('museum-echo-count'); if(e) e.textContent=`${state.echoes.length} echoes`;
+  const a=document.getElementById('museum-artifact-count'); if(a) a.textContent=`${ArtifactArchive.listArtifacts().length} artifacts`;
+  const w=document.getElementById('museum-weather'); if(w) w.textContent=weather.name.toLowerCase();
 }
 
 const EchoSync = (() => {
