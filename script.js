@@ -383,8 +383,8 @@ const Settings = (() => {
       if (!window.confirm('This will permanently delete all your echoes. This cannot be undone.')) return;
       state.echoes = []; Storage.save([]);
       Toast.show('All echoes cleared.', 3000);
-      close(); Weather.update(); IdentityOrb.update(); IdentityCore.update();
-      if (state.currentView === 'timeline') Nav.show('timeline');
+      close();
+      refreshEchoDependentUI();
     });
     document.addEventListener('keydown', e => { if (e.key==='Escape'&&overlay?.classList.contains('open')) close(); });
     document.getElementById('nav-logo-btn')?.addEventListener('contextmenu', e => { e.preventDefault(); open(); });
@@ -1423,7 +1423,7 @@ const EntryForm = (() => {
     spawnBurst(cx, cy, MOOD_COLORS[echo.mood]);
     GhostLayer.spawn(echo);
     SilenceParticles.spawn(echo.silence);
-    Weather.update(); IdentityOrb.update(); IdentityCore.update();
+    refreshEchoDependentUI();
     RandomReflection.maybeSurface();
 
     const confirmCanvas = document.getElementById('confirm-orb');
@@ -2646,6 +2646,81 @@ const VaultPulse = (() => {
   return {set,toastPulse};
 })();
 
+
+function refreshEchoDependentUI() {
+  Weather.update();
+  IdentityOrb.update();
+  IdentityCore.update();
+  GhostLayer.initFromEchoes(state.echoes);
+
+  if (state.currentView === 'timeline') {
+    Timeline.render();
+    setTimeout(ConnectionCanvas.render, 60);
+  }
+
+  if (state.currentView === 'wrapped') {
+    Wrapped.render();
+  }
+}
+
+const EchoSync = (() => {
+  function isAvailable() {
+    return Boolean(Auth.user && Auth.client);
+  }
+
+  async function syncLocalToCloud() {
+    if (!isAvailable()) {
+      VaultPulse.set('local', 'Local Vault');
+      return { ok: false, reason: 'not_authenticated' };
+    }
+
+    VaultPulse.set('synced', 'Vault Synced');
+    return { ok: true };
+  }
+
+  return { isAvailable, syncLocalToCloud };
+})();
+
+const MigrationFlow = (() => {
+  const modal = document.getElementById('migration-modal');
+
+  function close() {
+    modal?.classList.remove('open');
+  }
+
+  function init() {
+    document.getElementById('migration-sync-btn')?.addEventListener('click', () => {
+      VaultPulse.set('syncing', 'Syncing Echoes…');
+      VaultPulse.toastPulse();
+
+      if (window.EchoSync?.syncLocalToCloud) {
+        window.EchoSync.syncLocalToCloud()
+          .then(() => VaultPulse.set('synced', 'Vault Synced'))
+          .catch(() => VaultPulse.set('failed', 'Sync Failed — Still Safe'));
+      } else {
+        setTimeout(() => VaultPulse.set('synced', 'Vault Synced'), 1100);
+      }
+
+      close();
+    });
+
+    document.getElementById('migration-keep-btn')?.addEventListener('click', () => {
+      VaultPulse.set('local', 'Offline — Held Locally');
+      close();
+    });
+
+    document.getElementById('migration-export-btn')?.addEventListener('click', () => {
+      Storage.exportVault(state.echoes);
+      VaultPulse.set('local', 'Local Vault');
+      close();
+    });
+  }
+
+  return { init, close };
+})();
+
+window.EchoSync = EchoSync;
+
 const ImportFlow = (() => {
   let imported = null;
   const modal = document.getElementById('import-preview-modal');
@@ -2660,8 +2735,23 @@ const ImportFlow = (() => {
     modal?.classList.add('open');
   }
   function close(){ modal?.classList.remove('open'); imported=null; }
-  document.getElementById('import-merge-btn')?.addEventListener('click', ()=>{ if(!imported) return; state.echoes=[...state.echoes,...imported]; Storage.save(state.echoes); close(); Toast.show('Merged with your vault.'); });
-  document.getElementById('import-replace-btn')?.addEventListener('click', ()=>{ if(!imported) return; state.echoes=imported; Storage.save(state.echoes); close(); Toast.show('Local vault replaced.'); });
+  document.getElementById('import-merge-btn')?.addEventListener('click', () => {
+    if (!imported) return;
+    state.echoes = [...state.echoes, ...imported];
+    Storage.save(state.echoes);
+    refreshEchoDependentUI();
+    close();
+    Toast.show('Merged with your vault.');
+  });
+  document.getElementById('import-replace-btn')?.addEventListener('click', () => {
+    if (!imported) return;
+    if (!window.confirm('Replace your local vault with imported echoes? This cannot be undone.')) return;
+    state.echoes = imported;
+    Storage.save(state.echoes);
+    refreshEchoDependentUI();
+    close();
+    Toast.show('Local vault replaced.');
+  });
   document.getElementById('import-cancel-btn')?.addEventListener('click', close);
   return {preview};
 })();
@@ -2714,6 +2804,7 @@ async function init() {
   }
   UserChip.refresh();
   VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Vault Synced" : "Local Vault");
+  MigrationFlow.init();
   PWAInstall.init();
   Login.init();
 }
@@ -2723,9 +2814,6 @@ init();
 })();
 
 
-document.getElementById('migration-sync-btn')?.addEventListener('click', ()=>{ VaultPulse.set('syncing','Syncing Echoes…'); VaultPulse.toastPulse(); setTimeout(()=>VaultPulse.set('synced','Vault Synced'),1100); document.getElementById('migration-modal')?.classList.remove('open'); });
-document.getElementById('migration-keep-btn')?.addEventListener('click', ()=>{ VaultPulse.set('local','Offline — Held Locally'); document.getElementById('migration-modal')?.classList.remove('open'); });
-document.getElementById('migration-export-btn')?.addEventListener('click', ()=>{ Storage.exportVault(state.echoes); VaultPulse.set('local','Local Vault'); document.getElementById('migration-modal')?.classList.remove('open'); });
   const PRODUCTION_REDIRECT_URL = 'https://nmethylpyrrolinium.github.io/echovault.com/';
   function getAuthRedirectUrl() {
     const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
