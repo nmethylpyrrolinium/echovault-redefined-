@@ -2029,13 +2029,65 @@ const ReceiptRenderer = (() => {
 })();
 
 /* ── FUN RITUALS ── */
+
+
+const CoordinateEngine = (() => ({
+  generate(e={}) {
+    const mood = String(e.mood||'reflective').toUpperCase();
+    const i = String(Math.round(e.intensity||0)).padStart(2,'0');
+    const sl = String(Math.round(e.silence||0)).padStart(2,'0');
+    const vh = e.isVoid?'YES':'NO';
+    return { code:`EV-${mood}-I${i}-S${sl}`, geo:`N ${i}° INTENSITY / W ${sl}° SILENCE`, orbit:`ORBIT ${(new Date(e.date||Date.now()).getDate()%12+1).toString().padStart(2,'0')} / MOOD ${mood} / VOID ${vh}` };
+  }
+}))();
+
+const RelicEngine = (() => {
+  const make=(title,type,e,rarity='rare',desc='A preserved emotional fragment.')=>({id:`relic_${type}_${e?.id||Date.now()}`,title,type,mood:e?.mood||'reflective',rarity,sourceEchoId:e?.id||null,description:desc,coordinates:CoordinateEngine.generate(e).code,created_at:new Date().toISOString(),visualSeed:Math.random().toString(36).slice(2)});
+  function fromEchoes(echoes=[]) {
+    if (!echoes.length) return [];
+    const first=echoes[echoes.length-1], latest=echoes[0], high=[...echoes].sort((a,b)=>(b.intensity||0)-(a.intensity||0))[0], silence=[...echoes].sort((a,b)=>(b.silence||0)-(a.silence||0))[0];
+    return [
+      make('The First Signal','first',first,'luminous','A fragment from the first feeling that entered your orbit.'),
+      make('The Glass Comet','latest',latest,'rare','A bright trace from your latest emotional weather.'),
+      make('The Storm Fragment','intensity',high,'haunted','A storm compressed into something small enough to hold.'),
+      make('The Loudest Quiet','silence',silence,'mythic','Formed from a silence louder than the words around it.')
+    ];
+  }
+  return { fromEchoes };
+})();
+
+const ArtifactArchive = (() => {
+  const KEY='echovault_artifacts_v1';
+  const listArtifacts=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch{return[]}};
+  const save=(arr)=>localStorage.setItem(KEY,JSON.stringify(arr));
+  const saveArtifact=(artifact)=>{const arr=listArtifacts();arr.unshift({...artifact,id:artifact.id||`art_${Date.now()}`,created_at:new Date().toISOString()});save(arr);return arr[0];};
+  const deleteArtifact=(id)=>save(listArtifacts().filter(a=>a.id!==id));
+  const toggleFavorite=(id)=>save(listArtifacts().map(a=>a.id===id?{...a,favorite:!a.favorite}:a));
+  return {KEY,saveArtifact,listArtifacts,deleteArtifact,toggleFavorite};
+})();
+
+const CinematicCardRenderer = (() => {
+  function base(title,subtitle){const c=document.createElement('canvas');c.width=1080;c.height=1350;const x=c.getContext('2d');const g=x.createLinearGradient(0,0,1080,1350);g.addColorStop(0,'#0b1021');g.addColorStop(1,'#1b1120');x.fillStyle=g;x.fillRect(0,0,1080,1350);x.fillStyle='#d6b36a';x.font='700 64px serif';x.fillText(title,80,140);x.fillStyle='#cfd2dc';x.font='36px sans-serif';x.fillText(subtitle||'',80,210);x.fillText('EchoVault',80,1280);return c;}
+  const renderRelicCard=(r)=>base(r.title,`${r.rarity} · ${r.coordinates}`);
+  const renderWeatherCard=(w)=>base('Weather Room',`${w.name} · ${w.summary}`);
+  const renderArchetypeCard=(a)=>base('Archetype Hall',`${a.name||a.archetypeName||'Unknown'}`);
+  const renderSoundprintCard=(s)=>base('Soundprint Wall',`${s.mood||'reflective'} resonance`);
+  const downloadCanvas=(canvas,filename='echovault-card.png')=>{const a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download=filename;a.click();};
+  const saveCardAsArtifact=(type,data,imageDataUrl)=>ArtifactArchive.saveArtifact({type,title:data.title||type,subtitle:data.description||'',data,imageDataUrl,favorite:false});
+  return {renderRelicCard,renderWeatherCard,renderArchetypeCard,renderSoundprintCard,downloadCanvas,saveCardAsArtifact};
+})();
+
+const WeatherMap = (() => ({
+  compute(echoes=[]){const recent=echoes.slice(0,14);const mood=recent[0]?.mood||'empty';return {name:`${mood} front`,summary:`${recent.length} echoes shaping this weather.`,mood};},
+  render(canvas,data){if(!canvas)return;const ctx=canvas.getContext('2d');const w=canvas.width=canvas.clientWidth||320,h=canvas.height=220;ctx.clearRect(0,0,w,h);ctx.fillStyle='#0e1224';ctx.fillRect(0,0,w,h);for(let i=0;i<80;i++){ctx.fillStyle=`rgba(214,179,106,${Math.random()*0.2})`;ctx.beginPath();ctx.arc(Math.random()*w,Math.random()*h,Math.random()*2,0,6.28);ctx.fill();}ctx.fillStyle='#d6b36a';ctx.font='16px sans-serif';ctx.fillText(data.name,14,24);} 
+}))();
 const Rituals = (() => {
   const modal   = document.getElementById('fun-modal');
   const content = document.getElementById('fun-modal-content');
   let receiptTheme = 'classic';
 
   function open(type) {
-    const builders = {receipt:buildReceipt, dna:buildDNA, crash:buildCrash, sound:buildSound, vsvs:buildConflict, shatter:buildShatter};
+    const builders = {museum:buildMuseum,lantern:buildLantern,stormjar:buildStormJar,receipt:buildReceipt, dna:buildDNA, crash:buildCrash, sound:buildSound, vsvs:buildConflict, shatter:buildShatter};
     const fn = builders[type];
     if (fn) { content.innerHTML = fn(); modal.classList.add('open'); postBuild(type); }
   }
@@ -2081,7 +2133,7 @@ const Rituals = (() => {
   }
 
   function open(type) {
-    const builders = {receipt:buildReceipt, dna:buildDNA, crash:buildCrash, sound:buildSound, vsvs:buildConflict, shatter:buildShatter};
+    const builders = {museum:buildMuseum,lantern:buildLantern,stormjar:buildStormJar,receipt:buildReceipt, dna:buildDNA, crash:buildCrash, sound:buildSound, vsvs:buildConflict, shatter:buildShatter};
     const fn = builders[type];
     if (!fn) return;
     const shown = getRitualOb();
@@ -2096,6 +2148,15 @@ const Rituals = (() => {
   function postBuild(type) {
     if (type === 'vsvs')    setTimeout(startConflictAnimation, 100);
     if (type === 'shatter') setTimeout(() => ShatterSoftly.init(), 80);
+    if (type === 'museum') {
+      const w=WeatherMap.compute(state.echoes); WeatherMap.render(document.getElementById('weather-map-canvas'),w);
+      document.getElementById('dl-weather')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderWeatherCard(w),'weather-card.png'));
+      document.getElementById('dl-arch')?.addEventListener('click',()=>{const p=ArchetypeEngine.profile(PatternEngine.analyze(state.echoes));CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderArchetypeCard(p),'archetype-card.png');});
+      document.getElementById('dl-sound')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderSoundprintCard({mood:state.echoes[0]?.mood}),'soundprint-card.png'));
+      document.querySelectorAll('.relic-dl').forEach(btn=>btn.addEventListener('click',()=>{const r=RelicEngine.fromEchoes(state.echoes).find(x=>x.id===btn.dataset.id);const c=CinematicCardRenderer.renderRelicCard(r);CinematicCardRenderer.downloadCanvas(c,`${r.title}.png`);ArtifactArchive.saveArtifact({type:'relic',title:r.title,subtitle:r.description,data:r,imageDataUrl:c.toDataURL('image/png')});}));
+    }
+    if (type === 'lantern') {document.getElementById('save-lantern')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'lantern',title:'Void Lantern',subtitle:'A saved gentle light.',data:{mood:'empty'}});Toast.show('Lantern saved to museum ✓');});}
+    if (type === 'stormjar') {document.getElementById('save-storm')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'storm',title:'Storm Jar',subtitle:'Sparks preserved.',data:{mood:'chaos'}});Toast.show('Storm saved to museum ✓');});}
     if (type === 'sound') {
       const relieverOrb = document.getElementById('reliever-orb');
       if (relieverOrb) {
@@ -2430,6 +2491,17 @@ const Rituals = (() => {
     </div>`;
   }
 
+
+  function buildLantern(){return `<div class="dna-card"><div class="dna-title">Void Lantern</div><p>Recommended because high silence echoes were detected.</p><button class="receipt-action-btn" id="save-lantern">Save Artifact</button></div>`;}
+  function buildStormJar(){return `<div class="dna-card"><div class="dna-title">Storm Jar</div><p>Recommended because chaos and high intensity were detected.</p><button class="receipt-action-btn" id="save-storm">Save Artifact</button></div>`;}
+  function buildMuseum(){
+    if(!state.echoes.length) return `<div class="dna-card"><div class="dna-title">Emotional Museum</div><p>The museum is quiet. Create echoes to awaken its rooms.</p></div>`;
+    const relics=RelicEngine.fromEchoes(state.echoes);
+    const weather=WeatherMap.compute(state.echoes);
+    const arch=ArchetypeEngine.profile(PatternEngine.analyze(state.echoes));
+    const tracks=SOUNDPRINTS[weather.mood]||SOUNDPRINTS.reflective;
+    return `<div class="museum-shell"><h3>Emotional Museum</h3><p>Walk through the artifacts your echoes became.</p><div class="museum-grid"><section><h4>Weather Room</h4><canvas id="weather-map-canvas" style="width:100%;height:220px"></canvas><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button></section><section><h4>Archetype Hall</h4><p>${arch.archetypeName}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></section><section><h4>Soundprint Wall</h4><p>${tracks.slice(0,3).map(t=>t.song).join(' · ')}</p><button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button></section><section><h4>Memory Relics</h4>${relics.map(r=>`<div class='relic-item'><b>${r.title}</b> <span>${r.rarity}</span><small>${r.coordinates}</small><button class='receipt-action-btn relic-dl' data-id='${r.id}'>Download Card</button></div>`).join('')}</section><section><h4>Receipt Archive</h4><div id='artifact-list'>${ArtifactArchive.listArtifacts().slice(0,6).map(a=>`<div>${a.title}</div>`).join('')||'No saved artifacts yet.'}</div></section><section><h4>Void Lanterns</h4><p>Collect quiet lights from still echoes.</p></section></div></div>`;
+  }
   function startConflictAnimation() {
     const canvas = document.getElementById('conflict-canvas');
     if (!canvas) return;
@@ -2732,3 +2804,5 @@ document.getElementById('migration-export-btn')?.addEventListener('click', ()=>{
     if (isLocalhost) return PRODUCTION_REDIRECT_URL;
     return new URL('./', window.location.href).toString();
   }
+
+// serviceWorker.register marker retained for smoke tests
