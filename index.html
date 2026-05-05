@@ -489,6 +489,15 @@ window.ECHOVAULT_CONFIG = {
       <div class="settings-stats-grid" id="settings-stats"></div>
     </div>
 
+    <div class="settings-section">
+      <div class="settings-section-label">Testing & Recovery</div>
+      <div class="settings-actions">
+        <button class="settings-secondary-btn" id="refresh-app-cache-btn">Refresh App Cache</button>
+        <button class="settings-secondary-btn" id="clear-local-session-btn">Clear Local Session Only</button>
+        <button class="settings-secondary-btn" id="settings-export-btn">Export Backup</button>
+      </div>
+    </div>
+
     <div class="settings-section settings-danger-zone">
       <div class="settings-section-label">Danger Zone</div>
       <button class="settings-danger-btn" id="settings-clear-btn">Clear all echoes</button>
@@ -504,10 +513,5 @@ window.ECHOVAULT_CONFIG = {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="wrapped-cinematic-module.js"></script>
 
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
-}
-</script>
 </body>
 </html>

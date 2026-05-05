@@ -133,6 +133,17 @@ if (!script.includes('signInWithOtp')) failures.push('script.js missing signInWi
 if (!script.includes('beforeinstallprompt')) failures.push('script.js missing beforeinstallprompt');
 if (!script.includes('echovault_echoes_v2')) failures.push('script.js missing echovault_echoes_v2 key');
 
+
+if (!(script.includes('APP_VERSION') || fs.readFileSync('sw.js','utf8').includes('APP_VERSION'))) failures.push('APP_VERSION missing in script.js/sw.js');
+if (fs.readFileSync('sw.js','utf8').includes("echovault-v3")) failures.push('sw.js still uses old echovault-v3 cache name');
+if (!script.includes('AppEnvironment')) failures.push('script.js missing AppEnvironment');
+if (!(style.includes('is-standalone') || style.includes('display-mode: standalone'))) failures.push('standalone CSS handling missing');
+if (!style.includes('.nav-links{overflow-x:auto') && !style.includes('overflow-x: auto')) failures.push('nav links overflow-x auto missing');
+if (!style.includes('#user-chip .chip-sync-label{display:none')) failures.push('mobile user chip sync label hide missing');
+if (!(style.includes('auto-fit') && style.includes('min(260px'))) failures.push('fun-grid responsive auto-fit missing');
+if (!(style.includes('.cinematic-modal') && style.includes('max-height') && style.includes('overflow-y:auto'))) failures.push('cinematic/fun modal max-height overflow missing');
+if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache control missing');
+
 // Keep dependency footprint small
 const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].includes(d))) {

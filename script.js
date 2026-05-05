@@ -1,6 +1,24 @@
 (function EchoVault() {
 'use strict';
 
+const APP_VERSION = 'phase-4-5-ui-stability';
+const SW_CACHE_VERSION = 'echovault-v4-ui-stability';
+
+const AppEnvironment = (() => {
+  function isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  }
+  function applyClasses() {
+    document.documentElement.classList.toggle('is-standalone', isStandalone());
+    document.documentElement.classList.toggle('is-ios', /iPad|iPhone|iPod/.test(navigator.userAgent));
+    document.documentElement.classList.toggle('is-android', /Android/.test(navigator.userAgent));
+    document.documentElement.classList.toggle('is-mobile', window.innerWidth < 768);
+    document.documentElement.classList.toggle('is-tablet', window.innerWidth >= 768 && window.innerWidth < 1100);
+    document.documentElement.classList.toggle('is-desktop', window.innerWidth >= 1100);
+  }
+  return { isStandalone, applyClasses };
+})();
+
 /* ── CONSTANTS ── */
 const STORAGE_KEY  = 'echovault_echoes_v2';
 const USER_KEY     = 'echoUser';
@@ -379,7 +397,22 @@ const Settings = (() => {
       const status = document.getElementById('settings-save-status');
       if (status) { status.textContent = '✓ saved to your universe'; status.classList.add('show'); setTimeout(() => status.classList.remove('show'), 2500); }
     });
-    document.getElementById('settings-clear-btn')?.addEventListener('click', () => {
+    document.getElementById('refresh-app-cache-btn')?.addEventListener('click', async () => {
+    try {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      location.reload();
+    } catch (e) { Toast.show('Cache refresh failed.'); }
+  });
+  document.getElementById('clear-local-session-btn')?.addEventListener('click', () => {
+    ['echoUser','echoOnboarded','echovault_profile_v1','ev_auth_mode'].forEach((k) => localStorage.removeItem(k));
+    Toast.show('Local session cleared.');
+  });
+  document.getElementById('settings-export-btn')?.addEventListener('click', () => Storage.exportVault(state.echoes));
+
+  document.getElementById('settings-clear-btn')?.addEventListener('click', () => {
       if (!window.confirm('This will permanently delete all your echoes. This cannot be undone.')) return;
       state.echoes = []; Storage.save([]);
       Toast.show('All echoes cleared.', 3000);
@@ -550,7 +583,9 @@ const PWAInstall = (() => {
   function show() { if (!localStorage.getItem(DISMISS_KEY) && !isStandalone() && deferredInstallPrompt) banner?.classList.add('show'); }
   function init() {
     syncStandaloneClass();
+    AppEnvironment.applyClasses();
     window.matchMedia('(display-mode: standalone)').addEventListener?.('change', syncStandaloneClass);
+    window.addEventListener('resize', AppEnvironment.applyClasses);
     window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; show(); });
     installBtn?.addEventListener('click', async () => {
       if (!deferredInstallPrompt) return;
@@ -2890,8 +2925,55 @@ async function init() {
   MigrationFlow.init();
   PWAInstall.init();
   Login.init();
+  await ServiceWorkerManager.register();
+  DebugPanel.ensure();
 }
 
+
+
+const DebugPanel = (() => {
+  function ensure() {
+    if (!location.search.includes('debug=1')) return;
+    let panel = document.getElementById('debug-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'debug-panel';
+      panel.className = 'debug-panel';
+      document.body.appendChild(panel);
+    }
+    const profile = ProfileStore.read();
+    panel.innerHTML = `v${APP_VERSION}<br>mode:${Auth.isLocalMode() ? 'local' : 'supabase'}<br>standalone:${AppEnvironment.isStandalone() ? 'yes':'no'}<br>echoes:${state.echoes.length}<br>profile:${profile.display_name || 'anon'}<br>sw:${navigator.serviceWorker?.controller ? 'active' : 'none'}`;
+    console.info('[EchoVault Debug]', { appVersion: APP_VERSION, storageMode: Auth.isLocalMode() ? 'local' : 'supabase', standalone: AppEnvironment.isStandalone(), echoCount: state.echoes.length, cacheVersion: SW_CACHE_VERSION });
+  }
+  return { ensure };
+})();
+
+const ServiceWorkerManager = (() => {
+  let reloaded = false;
+  async function register() {
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.register('sw.js');
+    const onNewWorker = (worker) => {
+      if (!worker) return;
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          Toast.show('EchoVault updated — reload to refresh', 3500);
+          if (!reloaded && !sessionStorage.getItem('ev_sw_reloaded')) {
+            reloaded = true;
+            sessionStorage.setItem('ev_sw_reloaded', '1');
+            setTimeout(() => location.reload(), 900);
+          }
+        }
+      });
+    };
+    onNewWorker(reg.installing);
+    reg.addEventListener('updatefound', () => onNewWorker(reg.installing));
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type === 'SW_ACTIVATED') DebugPanel.ensure();
+    });
+  }
+  return { register };
+})();
 init();
 
 })();
