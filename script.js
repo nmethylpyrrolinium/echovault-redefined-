@@ -2152,12 +2152,6 @@ const Rituals = (() => {
   const content = document.getElementById('fun-modal-content');
   let receiptTheme = 'classic';
 
-  function open(type) {
-    const builders = {museum:buildMuseum,lantern:buildLantern,stormjar:buildStormJar,receipt:buildReceipt, dna:buildDNA, crash:buildCrash, sound:buildSound, vsvs:buildConflict, shatter:buildShatter};
-    const fn = builders[type];
-    if (fn) { content.innerHTML = fn(); modal.classList.add('open'); postBuild(type); }
-  }
-
   const RITUAL_OB_SHOWN_KEY = 'echoRitualOb';
 
   function getRitualOb(type) {
@@ -2226,6 +2220,11 @@ const Rituals = (() => {
       document.querySelectorAll('.relic-save').forEach(btn=>btn.addEventListener('click',()=>{const r=RelicEngine.fromEchoes(state.echoes).find(x=>x.id===btn.dataset.id);if(!r)return;ArtifactArchive.saveArtifact({type:'relic',title:r.title,subtitle:r.description,data:r});Toast.show('Relic saved ✓');}));
       document.querySelectorAll('.art-del').forEach(btn=>btn.addEventListener('click',()=>{if(confirm('Remove this artifact from your local museum?')){ArtifactArchive.deleteArtifact(btn.dataset.id);btn.closest('.artifact-row')?.remove();}}));
       document.querySelectorAll('.art-fav').forEach(btn=>btn.addEventListener('click',()=>{ArtifactArchive.toggleFavorite(btn.dataset.id);btn.classList.toggle('active');}));
+      document.getElementById('save-receipt-latest')?.addEventListener('click',()=>{
+        const data = ReceiptRenderer.openLatest();
+        ArtifactArchive.saveArtifact({ type:'receipt', title:'Mood Receipt', subtitle:data.insight, data });
+        Toast.show('Receipt saved ✓');
+      });
     }
     if (type === 'lantern') initLanternInteraction();
     if (type === 'stormjar') initStormJarInteraction();
