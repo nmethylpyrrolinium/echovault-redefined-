@@ -2102,11 +2102,15 @@ const ArtifactArchive = (() => {
 })();
 
 const CinematicCardRenderer = (() => {
-  function base(title,subtitle){const c=document.createElement('canvas');c.width=1080;c.height=1350;const x=c.getContext('2d');const g=x.createLinearGradient(0,0,1080,1350);g.addColorStop(0,'#0b1021');g.addColorStop(1,'#1b1120');x.fillStyle=g;x.fillRect(0,0,1080,1350);x.fillStyle='#d6b36a';x.font='700 64px serif';x.fillText(title,80,140);x.fillStyle='#cfd2dc';x.font='36px sans-serif';x.fillText(subtitle||'',80,210);x.fillText('EchoVault',80,1280);return c;}
-  const renderRelicCard=(r)=>base(r.title,`${r.rarity} · ${r.coordinates}`);
-  const renderWeatherCard=(w)=>base('Weather Room',`${w.name} · ${w.summary}`);
-  const renderArchetypeCard=(a)=>base('Archetype Hall',`${a.name||a.archetypeName||'Unknown'}`);
-  const renderSoundprintCard=(s)=>base('Soundprint Wall',`${s.mood||'reflective'} resonance`);
+  const MOOD_AURA = { calm:'#6ba2d0', chaos:'#cf5a74', reflective:'#8f79d8', anxious:'#c8935a', joyful:'#8bc97f', empty:'#7f8798' };
+  function drawGrain(ctx, width, height) { for (let i=0;i<2200;i++){const a=Math.random()*.09;ctx.fillStyle=`rgba(255,255,255,${a})`;ctx.fillRect(Math.random()*width,Math.random()*height,1,1);} }
+  function drawMoodAura(ctx, mood, x, y, radius){const c=MOOD_AURA[mood]||MOOD_AURA.reflective;const g=ctx.createRadialGradient(x,y,0,x,y,radius);g.addColorStop(0,`${c}66`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,radius,0,6.28);ctx.fill();}
+  function drawEchoVaultMark(ctx){ctx.fillStyle='rgba(214,179,106,.9)';ctx.font='500 24px "DM Mono"';ctx.fillText('ECHOVAULT',80,1275);ctx.strokeStyle='rgba(214,179,106,.4)';ctx.beginPath();ctx.moveTo(80,1248);ctx.lineTo(1000,1248);ctx.stroke();}
+  function base(title,subtitle,mood='reflective',type='artifact'){const c=document.createElement('canvas');c.width=1080;c.height=1350;const x=c.getContext('2d');const g=x.createLinearGradient(0,0,1080,1350);g.addColorStop(0,'#0b1021');g.addColorStop(1,'#160f1d');x.fillStyle=g;x.fillRect(0,0,1080,1350);drawMoodAura(x,mood,540,520,420);drawGrain(x,1080,1350);x.fillStyle='#d6b36a';x.font='700 62px "Playfair Display"';x.fillText(title,80,148);x.strokeStyle='rgba(214,179,106,.35)';x.beginPath();x.moveTo(80,182);x.lineTo(1000,182);x.stroke();x.fillStyle='#cfd2dc';x.font='32px "Cormorant Garamond"';x.fillText(subtitle||'',80,244);x.fillStyle='rgba(255,255,255,.74)';x.font='500 20px "DM Mono"';x.fillText(type.toUpperCase(),80,292);x.fillText(new Date().toLocaleDateString(),860,292);drawEchoVaultMark(x);return c;}
+  const renderRelicCard=(r)=>{const c=base(r.title,`${r.rarity} · ${r.coordinates}`,r.mood,'relic');const x=c.getContext('2d');x.fillStyle='rgba(255,255,255,.85)';x.beginPath();x.arc(540,710,110,0,6.28);x.fill();x.fillStyle='rgba(12,14,18,.9)';x.beginPath();x.arc(540,710,76,0,6.28);x.fill();return c;};
+  const renderWeatherCard=(w)=>{const c=base('Weather Room',`${w.name} · ${w.summary}`,w.mood,'weather');const x=c.getContext('2d');for(let i=0;i<14;i++){x.strokeStyle='rgba(255,255,255,.2)';x.beginPath();x.arc(540,720,120+i*22,0,6.28);x.stroke();}return c;};
+  const renderArchetypeCard=(a)=>base('Archetype Hall',`${a.name||a.archetypeName||'Unknown'}`,a.dominantMood||'reflective','archetype');
+  const renderSoundprintCard=(s)=>{const c=base('Soundprint Wall',`${s.mood||'reflective'} resonance`,s.mood||'reflective','soundprint');const x=c.getContext('2d');x.fillStyle='rgba(20,22,28,.85)';x.fillRect(300,560,480,480);x.strokeStyle='rgba(214,179,106,.5)';x.strokeRect(300,560,480,480);return c;};
   const downloadCanvas=(canvas,filename='echovault-card.png')=>{const a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download=filename;a.click();};
   const saveCardAsArtifact=(type,data,imageDataUrl)=>ArtifactArchive.saveArtifact({type,title:data.title||type,subtitle:data.description||'',data,imageDataUrl,favorite:false});
   return {renderRelicCard,renderWeatherCard,renderArchetypeCard,renderSoundprintCard,downloadCanvas,saveCardAsArtifact};
