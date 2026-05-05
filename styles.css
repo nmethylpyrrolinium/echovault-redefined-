@@ -1292,3 +1292,19 @@ html.is-standalone .view{padding-top:calc(112px + var(--safe-top))}
 .privacy-card span{font-size:13px;color:var(--muted)}
 #import-preview-content{display:grid;gap:8px;margin-bottom:14px;color:var(--muted);font-family:var(--font-mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase}
 @media(max-width:768px){#user-chip{top:calc(62px + env(safe-area-inset-top));right:12px}.privacy-grid{grid-template-columns:1fr}}
+
+:root{--nav-height:72px;--chip-offset-top:calc(var(--nav-height) + var(--safe-top) + 10px);--page-x:clamp(16px,4vw,32px);--tap-size:44px}
+nav{padding:calc(16px + var(--safe-top)) var(--page-x) 16px;min-height:var(--nav-height)}
+.view{padding:calc(var(--nav-height) + var(--safe-top) + 24px) var(--page-x) calc(80px + var(--safe-bottom))}
+.nav-links{overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:calc(100vw - 280px)}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-links button{min-height:var(--tap-size)}
+.fun-grid{grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr))}
+.fun-modal,.cinematic-modal{max-height:calc(100dvh - var(--safe-top) - var(--safe-bottom));max-height:calc(100vh - var(--safe-top) - var(--safe-bottom));overflow-y:auto;padding-bottom:calc(16px + var(--safe-bottom))}
+.fun-modal-card,.cinematic-card,.museum-shell,.weather-map canvas,.relic-card{max-width:100%}
+#settings-panel{max-width:min(600px,100vw - 16px);max-height:calc(100dvh - var(--safe-top) - 12px);left:0;right:0;margin:0 auto}
+html.is-standalone{--nav-height:86px}
+html.is-standalone nav{padding-top:calc(14px + var(--safe-top))}
+html.is-standalone .view{padding-top:calc(var(--nav-height) + var(--safe-top) + 36px)}
+@media(max-width:768px){.nav-logo{font-size:11px}.nav-links{max-width:calc(100vw - 140px)}#user-chip{top:auto;bottom:calc(18px + var(--safe-bottom));right:14px;max-width:calc(100vw - 28px)}#user-chip .chip-sync-label{display:none}.chip-menu{top:auto;bottom:calc(100% + 10px);right:0;max-width:calc(100vw - 28px)}}
+.debug-panel{position:fixed;left:10px;bottom:calc(10px + var(--safe-bottom));z-index:9999;background:rgba(0,0,0,.7);color:#fff;padding:8px;border-radius:8px;font:11px/1.35 var(--font-mono)}

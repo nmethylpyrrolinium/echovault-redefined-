@@ -1,5 +1,5 @@
-const CACHE = 'echovault-v3';
-const BASE = new URL(self.registration.scope).pathname;
+const APP_VERSION = 'phase-4-5-ui-stability';
+const CACHE = 'echovault-v4-ui-stability';
 
 const toScopeUrl = (path) => new URL(path, self.registration.scope).toString();
 const PRECACHE = ['./', 'index.html', 'styles.css', 'script.js', 'manifest.json', 'icons/icon.svg', 'wrapped-cinematic-module.js'];
@@ -20,6 +20,8 @@ self.addEventListener('activate', (e) => {
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ includeUncontrolled: true }))
+      .then((clients) => clients.forEach((client) => client.postMessage({ type: 'SW_ACTIVATED', appVersion: APP_VERSION, cache: CACHE })))
   );
 });
 
@@ -32,10 +34,10 @@ self.addEventListener('fetch', (e) => {
 
   if (e.request.mode === 'navigate') {
     e.respondWith(
-      fetch(e.request)
+      fetch(e.request, { cache: 'no-store' })
         .then((r) => {
           const c = r.clone();
-          caches.open(CACHE).then((ca) => ca.put(e.request, c));
+          caches.open(CACHE).then((ca) => ca.put(FALLBACK_INDEX, c));
           return r;
         })
         .catch(() => caches.match(FALLBACK_INDEX))
