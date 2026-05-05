@@ -95,6 +95,9 @@ if (!script.includes('SOUNDPRINTS')) failures.push('Soundprint data missing');
 if (!script.includes('echovault_echoes_v2')) failures.push('localStorage echo key missing');
 
 
+// Phase 4 — Emotional museum checks
+['RelicEngine','WeatherMap','ArtifactArchive','CinematicCardRenderer','CoordinateEngine','Emotional Museum','Void Lantern','Storm Jar','Soundprint Wall','Archetype Hall','echovault_artifacts_v1'].forEach((marker)=>{ if(!script.includes(marker) && !index.includes(marker)) failures.push(`Missing Phase 4 marker: ${marker}`);});
+if (script.toLowerCase().includes('chatbot') || script.toLowerCase().includes('chat ai')) failures.push('Chatbot module detected but forbidden in phase 4');
 
 // Phase 3B — runtime wiring hotfix checks
 if (!script.includes('const MigrationFlow = (() => {')) failures.push('script.js missing MigrationFlow module');
