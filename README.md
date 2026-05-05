@@ -1,6 +1,6 @@
 # EchoVault
 
-EchoVault is a cinematic emotional journaling web app with a local-first vault and optional Supabase authentication/profile sync.
+EchoVault is a cinematic emotional journaling web app with a local-first vault and optional Supabase authentication/profile sync
 
 ## Live app
 - GitHub Pages: https://nmethylpyrrolinium.github.io/echovault.com/
