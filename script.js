@@ -2761,16 +2761,27 @@ const MigrationFlow = (() => {
   }
 
   function init() {
-    document.getElementById('migration-sync-btn')?.addEventListener('click', () => {
+    document.getElementById('migration-sync-btn')?.addEventListener('click', async () => {
       VaultPulse.set('syncing', 'Syncing Echoes…');
       VaultPulse.toastPulse();
 
-      if (window.EchoSync?.syncLocalToCloud) {
-        window.EchoSync.syncLocalToCloud()
-          .then(() => VaultPulse.set('synced', 'Vault Synced'))
-          .catch(() => VaultPulse.set('failed', 'Sync Failed — Still Safe'));
-      } else {
-        setTimeout(() => VaultPulse.set('synced', 'Vault Synced'), 1100);
+      try {
+        if (window.EchoSync?.syncLocalToCloud) {
+          const result = await window.EchoSync.syncLocalToCloud();
+          if (result?.ok) {
+            VaultPulse.set('synced', 'Vault Synced');
+          } else if (result?.reason === 'not_authenticated') {
+            VaultPulse.set('local', 'Local Vault');
+            Toast.show('Sign in to sync. Your local vault is still safe.');
+          } else {
+            VaultPulse.set('local', 'Local Vault');
+          }
+        } else {
+          VaultPulse.set('local', 'Local Vault');
+          Toast.show('Sign in to sync. Your local vault is still safe.');
+        }
+      } catch {
+        VaultPulse.set('failed', 'Sync Failed — Still Safe');
       }
 
       close();
