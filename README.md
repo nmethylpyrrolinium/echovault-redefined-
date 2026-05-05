@@ -46,7 +46,7 @@ Use this recommended template:
 ```
 
 Notes:
-- `{{ .Token }}` is the 6-digit OTP code.
+- `{{ .Token }}` is the 6/8-digit OTP code.
 - `{{ .ConfirmationURL }}` is the Magic Link.
 - OTP/magic-link requests are rate-limited; wait about 60 seconds before requesting another email.
 - Check spam/promotions if the email does not appear.
