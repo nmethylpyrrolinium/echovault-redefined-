@@ -32,6 +32,23 @@ if (!readme.includes('60 seconds')) failures.push('README missing 60 seconds rat
 if (!script.includes('signInWithOtp')) failures.push('script.js missing signInWithOtp');
 if (!script.includes('verifyOtp')) failures.push('script.js missing verifyOtp');
 if (!script.includes('emailRedirectTo')) failures.push('script.js missing emailRedirectTo');
+if (!script.includes('PatternEngine')) failures.push('script.js missing PatternEngine');
+if (!script.includes('ArchetypeEngine')) failures.push('script.js missing ArchetypeEngine');
+if (!script.includes('ReceiptRenderer')) failures.push('script.js missing ReceiptRenderer');
+if (!script.includes('averageIntensity')) failures.push('PatternEngine missing averageIntensity');
+if (!script.includes('averageSilence')) failures.push('PatternEngine missing averageSilence');
+if (!script.includes('volatilityScore')) failures.push('PatternEngine missing volatilityScore');
+if (!script.includes('Wrapped') || !script.includes('PatternEngine.analyze')) failures.push('Wrapped missing PatternEngine usage');
+if (!script.includes('populateArchetype') || !script.includes('ArchetypeEngine.compute')) failures.push('settings/profile missing archetype pattern output');
+if (!script.includes('SOUNDPRINTS')) failures.push('Soundprint missing');
+if (!script.includes('echovault_echoes_v2')) failures.push('localStorage key echovault_echoes_v2 missing');
+if (!index.includes('beforeinstallprompt') && !script.includes('beforeinstallprompt')) failures.push('beforeinstallprompt marker missing');
+if (!index.includes('serviceWorker.register')) failures.push('serviceWorker.register marker missing');
+if (fs.existsSync('package.json')) {
+  const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
+  const deps = {...(pkg.dependencies||{}), ...(pkg.devDependencies||{})};
+  if (Object.keys(deps).some((d)=>['react','vue','angular','next'].includes(d))) failures.push('heavy new dependency added');
+}
 if (failures.length) {
   console.error('Smoke test failed:');
   failures.forEach((f)=>console.error('- '+f));

@@ -62,6 +62,80 @@ const SOUNDPRINTS = {
   ]
 };
 
+const PatternEngine = (() => {
+  const WEATHER_MAP = { calm:'slow blue weather', chaos:'electric pressure', reflective:'moonlit drift', anxious:'restless wind', joyful:'soft bloom', empty:'quiet fog' };
+  function analyze(echoes = []) {
+    const totalEchoes = echoes.length;
+    if (!totalEchoes) return { totalEchoes:0, oneLineInsight:'No echoes yet. The universe is quiet — not empty.' };
+    const moodCounts = {}; let intensitySum = 0; let silenceSum = 0; let voidCount = 0; let moodChanges = 0; let intDelta = 0;
+    echoes.forEach((e, i) => {
+      moodCounts[e.mood] = (moodCounts[e.mood] || 0) + 1;
+      intensitySum += Number(e.intensity || 0); silenceSum += Number(e.silence || 0); if (e.void) voidCount++;
+      if (i > 0) { if (echoes[i - 1].mood !== e.mood) moodChanges++; intDelta += Math.abs((echoes[i - 1].intensity || 0) - (e.intensity || 0)); }
+    });
+    const dominantMood = Object.entries(moodCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+    const moodPercentages = Object.fromEntries(Object.entries(moodCounts).map(([k,v]) => [k, Math.round((v / totalEchoes) * 100)]));
+    const averageIntensity = +(intensitySum / totalEchoes).toFixed(1);
+    const averageSilence = +(silenceSum / totalEchoes).toFixed(1);
+    const voidPercentage = Math.round((voidCount / totalEchoes) * 100);
+    const mostRecentMood = echoes[0]?.mood || null;
+    const previousMood = echoes[1]?.mood || null;
+    const recentShift = previousMood && mostRecentMood !== previousMood ? `${previousMood} → ${mostRecentMood}` : 'steady';
+    const volatilityScore = Math.round(Math.min(100, ((moodChanges / Math.max(1, totalEchoes - 1)) * 60 + (intDelta / Math.max(1, totalEchoes - 1)) * 4)));
+    const trend = (field) => {
+      if (totalEchoes < 6) return 'steady';
+      const latest = echoes.slice(0,5).reduce((a,e)=>a + (e[field] || 0),0) / Math.min(5,totalEchoes);
+      const prev = echoes.slice(5,10).reduce((a,e)=>a + (e[field] || 0),0) / Math.max(1, Math.min(5, totalEchoes - 5));
+      if (latest > prev + 0.5) return 'rising'; if (latest < prev - 0.5) return 'falling'; return 'steady';
+    };
+    const intensityTrend = trend('intensity');
+    const silenceTrend = trend('silence');
+    let currentStreakMood = mostRecentMood; let currentStreakCount = 0;
+    for (const e of echoes) { if (e.mood === currentStreakMood) currentStreakCount++; else break; }
+    const emotionalWeather = Object.keys(moodCounts).length >= 4 ? 'shifting sky' : (WEATHER_MAP[dominantMood] || 'shifting sky');
+    let oneLineInsight = 'You kept returning. That counts.';
+    if (silenceTrend === 'rising' && intensityTrend !== 'rising') oneLineInsight = 'Your echoes are getting quieter, but not weaker.';
+    else if (volatilityScore > 65) oneLineInsight = 'You are not chaotic all the time. You spike, then disappear.';
+    else if (averageSilence >= 7) oneLineInsight = 'You have been carrying more than you are saying.';
+    else if (dominantMood === 'calm' && averageSilence >= 5) oneLineInsight = 'Your calm is returning, but your silence is still high.';
+    return { totalEchoes, dominantMood, moodCounts, moodPercentages, averageIntensity, averageSilence, voidCount, voidPercentage, mostRecentMood, previousMood, recentShift, volatilityScore, intensityTrend, silenceTrend, currentStreakMood, currentStreakCount, emotionalWeather, oneLineInsight };
+  }
+  return { analyze };
+})();
+
+const ArchetypeEngine = (() => {
+  function compute(patterns) {
+    if (!patterns?.totalEchoes) return { archetypeKey:'unknown', archetypeName:'The Unknown', archetypeDescription:'Create echoes to discover your archetype.', archetypeAura:'dim', archetypeQuote:'Begin anywhere.', dominantFactors:[] };
+    const p = patterns; let key = p.dominantMood || 'balanced';
+    if (Object.keys(p.moodCounts || {}).length >= 4) key = 'shiftingSky';
+    if (p.dominantMood === 'calm' && p.volatilityScore < 30) key = 'stillLake';
+    if (p.dominantMood === 'chaos' && p.averageIntensity >= 7) key = 'electricStorm';
+    if (p.dominantMood === 'reflective' && p.averageSilence >= 6) key = 'nightArchivist';
+    if (p.dominantMood === 'anxious' && p.volatilityScore > 55) key = 'tremblingCompass';
+    if (p.dominantMood === 'joyful' && p.currentStreakCount >= 2) key = 'bloomingField';
+    if (p.dominantMood === 'empty' && p.averageSilence >= 7 && p.voidPercentage >= 35) key = 'quietAbyss';
+    if (p.averageSilence >= 7 && p.intensityTrend === 'rising') key = 'signalFire';
+    if (p.averageIntensity >= 8 && p.volatilityScore >= 65) key = 'glassComet';
+    if (p.averageIntensity <= 4 && p.averageSilence >= 6) key = 'softWitness';
+    const defs = {
+      stillLake:['The Still Lake','Quiet force, low turbulence, steady depth.','silver blue','Still water remembers every star.'],
+      electricStorm:['The Electric Storm','High voltage feeling moving through fast skies.','violet gold','You spark, then re-form.'],
+      nightArchivist:['The Night Archivist','You keep meaning in the dark and file it carefully.','moon ink','Your silence has memory.'],
+      tremblingCompass:['The Trembling Compass','Sensitive to every shift, always searching true north.','amber static','Even shaking, you still point forward.'],
+      bloomingField:['The Blooming Field','Joy returns with consistency, even after rough weather.','rose dawn','Light is becoming your habit.'],
+      quietAbyss:['The Quiet Abyss','Low signal, deep quiet, vast interior gravity.','charcoal indigo','Even quiet can be a language.'],
+      shiftingSky:['The Shifting Sky','Your emotional world moves wide and alive across moods.','prism dusk','You were not inconsistent. You were weather.'],
+      signalFire:['The Signal Fire','You are speaking again from a quiet season.','ember night','Still here is still a signal.'],
+      glassComet:['The Glass Comet','Intense arcs and sudden turns — luminous and fragile.','crystal flame','You burn bright, then breathe.'],
+      softWitness:['The Soft Witness','Gentle intensity, deep noticing, patient reflection.','mist gold','You do not force meaning. You witness it.']
+    };
+    const legacyName = ARCHETYPE_NAMES[p.dominantMood] || 'The Shifting Sky';
+    const [archetypeName, archetypeDescription, archetypeAura, archetypeQuote] = defs[key] || [legacyName, ARCHETYPE_DESCS[p.dominantMood] || 'Still becoming.', 'muted dusk', 'Keep listening.'];
+    return { archetypeKey:key, archetypeName, archetypeDescription, archetypeAura, archetypeQuote, dominantFactors:[p.dominantMood, `intensity ${p.averageIntensity}`, `silence ${p.averageSilence}`, `volatility ${p.volatilityScore}`].filter(Boolean) };
+  }
+  return { compute };
+})();
+
 /* ── STATE ── */
 let state = {
   echoes: [],
@@ -249,25 +323,26 @@ const Settings = (() => {
   }
   function populateStats() {
     const grid = document.getElementById('settings-stats'); if (!grid) return;
-    const total = state.echoes.length;
-    const avgInt = total ? (state.echoes.reduce((a,e)=>a+e.intensity,0)/total).toFixed(1) : '—';
-    const voidCnt = state.echoes.filter(e=>e.void).length;
-    const mc = {}; state.echoes.forEach(e=>{ mc[e.mood]=(mc[e.mood]||0)+1; });
-    const dom = Object.entries(mc).sort((a,b)=>b[1]-a[1])[0]?.[0];
+    const p = PatternEngine.analyze(state.echoes);
+    const total = p.totalEchoes || 0;
+    const avgInt = total ? p.averageIntensity : '—';
+    const voidCnt = p.voidCount || 0;
+    const dom = p.dominantMood;
     const daysSince = total ? Math.floor((Date.now()-new Date(state.echoes[state.echoes.length-1].date))/86400000) : 0;
     grid.innerHTML = [
       {val:total,label:'echoes'},{val:avgInt,label:'avg intensity'},{val:voidCnt,label:'void entries'},
-      {val:dom||'—',label:'dominant mood',color:MOOD_COLORS[dom]},{val:daysSince,label:'days journaling'},{val: total ? Object.keys(mc).length : '—', label:'moods explored'}
+      {val:dom||'—',label:'dominant mood',color:MOOD_COLORS[dom]},{val:daysSince,label:'days journaling'},{val: total ? (p.averageSilence || '—') : '—', label:'avg silence'}
     ].map(s=>`<div class="settings-stat"><div class="settings-stat-val" ${s.color?`style="color:${s.color}"`:''}>${s.val}</div><div class="settings-stat-label">${s.label}</div></div>`).join('');
   }
   function populateArchetype() {
-    const mc = {}; state.echoes.slice(0,30).forEach(e=>{ mc[e.mood]=(mc[e.mood]||0)+1; });
-    const dom = Object.entries(mc).sort((a,b)=>b[1]-a[1])[0]?.[0];
+    const p = PatternEngine.analyze(state.echoes.slice(0,30));
+    const arch = ArchetypeEngine.compute(p);
+    const dom = p.dominantMood;
     const nameEl = document.getElementById('archetype-name-display');
     const descEl = document.getElementById('archetype-desc-display');
     const orbEl  = document.getElementById('archetype-orb');
-    if (nameEl) nameEl.textContent = dom ? ARCHETYPE_NAMES[dom] : 'The Unknown';
-    if (descEl) descEl.textContent = dom ? ARCHETYPE_DESCS[dom] : 'Create echoes to discover your archetype.';
+    if (nameEl) nameEl.textContent = arch.archetypeName;
+    if (descEl) descEl.textContent = `${arch.archetypeDescription} · ${p.emotionalWeather || 'shifting sky'}`;
     if (orbEl && dom) orbEl.style.background = `radial-gradient(circle at 38% 35%,${MOOD_COLORS[dom]},${MOOD_COLORS[dom]}44)`;
   }
   async function init() {
@@ -1543,14 +1618,12 @@ const Wrapped = (() => {
       emptyEl.style.display='block'; contentEl.style.display='none'; return;
     }
     emptyEl.style.display='none'; contentEl.style.display='block';
-    const moodCounts = {};
-    let totalInt = 0;
-    filtered.forEach(e => { moodCounts[e.mood]=(moodCounts[e.mood]||0)+1; totalInt+=e.intensity; });
-    const sorted   = Object.entries(moodCounts).sort((a,b)=>b[1]-a[1]);
-    const dominant = sorted[0];
-    const avgInt   = (totalInt/filtered.length).toFixed(1);
-    const chaos    = Math.round(((moodCounts.chaos||0)+(moodCounts.anxious||0))/filtered.length*100);
-    const voidCnt  = filtered.filter(e=>e.void).length;
+    const patterns = PatternEngine.analyze(filtered);
+    const archetype = ArchetypeEngine.compute(patterns);
+    const moodCounts = patterns.moodCounts || {};
+    const sorted = Object.entries(moodCounts).sort((a,b)=>b[1]-a[1]);
+    const dominant = patterns.dominantMood || sorted[0]?.[0] || 'reflective';
+    const chaos = Math.round(((moodCounts.chaos||0)+(moodCounts.anxious||0))/Math.max(1,filtered.length)*100);
 
     contentEl.innerHTML = `
       <div class="wrapped-card">
@@ -1568,9 +1641,10 @@ const Wrapped = (() => {
         <div class="wrapped-card-title">By The Numbers</div>
         <div class="stat-row">
           <div class="stat-item"><div class="stat-value">${filtered.length}</div><div class="stat-label">Echoes</div></div>
-          <div class="stat-item"><div class="stat-value">${avgInt}</div><div class="stat-label">Avg Intensity</div></div>
-          <div class="stat-item"><div class="stat-value">${voidCnt}</div><div class="stat-label">Void Entries</div></div>
-          <div class="stat-item"><div class="stat-value" style="color:${MOOD_COLORS[dominant[0]]};font-size:20px">${dominant[0]}</div><div class="stat-label">Dominant</div></div>
+          <div class="stat-item"><div class="stat-value">${patterns.averageIntensity}</div><div class="stat-label">Avg Intensity</div></div>
+          <div class="stat-item"><div class="stat-value">${patterns.averageSilence}</div><div class="stat-label">Avg Silence</div></div>
+          <div class="stat-item"><div class="stat-value" style="color:${MOOD_COLORS[dominant]};font-size:20px">${dominant}</div><div class="stat-label">Dominant</div></div>
+          <div class="stat-item"><div class="stat-value">${patterns.voidCount}</div><div class="stat-label">Void Entries</div></div>
         </div>
       </div>
       <div class="wrapped-card">
@@ -1585,7 +1659,7 @@ const Wrapped = (() => {
         </p>
       </div>
       <div class="wrapped-card">
-        <div class="wrapped-card-title">Recurring Patterns</div>
+        <div class="wrapped-card-title">Recurring Patterns · ${patterns.emotionalWeather}</div>
         <ul class="pattern-list">
           ${sorted.slice(0,5).map(([mood,count])=>`
             <li class="pattern-item">
@@ -1598,7 +1672,9 @@ const Wrapped = (() => {
       <div class="wrapped-card" style="text-align:center">
         <div class="wrapped-card-title">Identity Snapshot</div>
         <div style="font-family:var(--font-editorial);font-size:28px;color:var(--gold);margin-bottom:8px">${getArchetype(moodCounts)}</div>
-        <p style="font-size:15px;font-style:italic;color:var(--muted);line-height:1.7">${getArchetypeDesc(moodCounts)}</p>
+        <p style="font-size:15px;font-style:italic;color:var(--muted);line-height:1.7">${archetype.archetypeDescription}</p>
+        <p style="font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">streak: ${patterns.currentStreakMood || '—'} × ${patterns.currentStreakCount || 0} · volatility ${patterns.volatilityScore}</p>
+        <p style="font-size:14px;color:var(--text);margin-top:8px">${patterns.oneLineInsight || 'You kept returning. That counts.'}</p>
       </div>`;
   }
 
@@ -1918,6 +1994,32 @@ const ShatterSoftly = (() => {
   return { init };
 })();
 
+const ReceiptRenderer = (() => {
+  function makeBarcode(seed='') {
+    return seed.split('').map((c,i)=>(c.charCodeAt(0)+i)%2?'|':'¦').join('').padEnd(26,'|').slice(0,26);
+  }
+  function getData(mode='latest') {
+    const p = PatternEngine.analyze(state.echoes);
+    const a = ArchetypeEngine.compute(p);
+    const latest = state.echoes[0] || {};
+    return {
+      mode,
+      timestamp: new Date().toLocaleString(),
+      mood: mode === 'weekly' ? (p.dominantMood || '—') : (latest.mood || p.dominantMood || '—'),
+      intensity: mode === 'weekly' ? p.averageIntensity : (latest.intensity || 0),
+      silence: mode === 'weekly' ? p.averageSilence : (latest.silence || 0),
+      weather: p.emotionalWeather || 'shifting sky',
+      archetype: a.archetypeName,
+      voidStatus: mode === 'weekly' ? `${p.voidCount} void` : (latest.void ? 'void entry' : 'spoken entry'),
+      insight: p.oneLineInsight,
+      receiptNumber: `EV-${Date.now().toString().slice(-6)}`,
+      syncLabel: Auth.user ? 'synced' : 'local-only',
+      barcode: makeBarcode(`${p.dominantMood || 'x'}${p.totalEchoes}${mode}`)
+    };
+  }
+  return { getData, openLatest:()=>getData('latest'), openWeekly:()=>getData('weekly') };
+})();
+
 /* ── FUN RITUALS ── */
 const Rituals = (() => {
   const modal   = document.getElementById('fun-modal');
@@ -2008,6 +2110,7 @@ const Rituals = (() => {
       content.appendChild(replayBtn);
       document.querySelectorAll('.theme-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+          if (btn.dataset.mode) return;
           receiptTheme = btn.dataset.theme;
           document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
@@ -2016,8 +2119,17 @@ const Rituals = (() => {
         });
       });
       document.querySelector(`.theme-btn[data-theme="${receiptTheme}"]`)?.classList.add('active');
+      document.querySelectorAll('.receipt-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.receipt-mode-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const mainArea = document.querySelector('.receipt-main-area');
+          if (mainArea) mainArea.innerHTML = buildReceiptCore(btn.dataset.mode || 'latest');
+        });
+      });
       document.getElementById('receipt-download-btn')?.addEventListener('click', downloadReceipt);
-      document.getElementById('receipt-share-btn')?.addEventListener('click', shareReceipt);
+      document.getElementById('receipt-copy-btn')?.addEventListener('click', copyReceiptSummary);
+      document.getElementById('receipt-close-btn')?.addEventListener('click', close);
     }
     // Add replay button to all rituals
     if (['dna','crash','sound','shatter','vsvs'].includes(type)) {
@@ -2077,13 +2189,8 @@ const Rituals = (() => {
     }).join('');
   }
 
-  function buildReceiptCore() {
-    const total    = state.echoes.length;
-    const avgInt   = total ? (state.echoes.reduce((a,e)=>a+e.intensity,0)/total).toFixed(1) : '0.0';
-    const voidCnt  = state.echoes.filter(e=>e.void).length;
-    const mc = {}; state.echoes.forEach(e=>{ mc[e.mood]=(mc[e.mood]||0)+1; });
-    const dominant = Object.entries(mc).sort((a,b)=>b[1]-a[1])[0];
-    const now = new Date();
+  function buildReceiptCore(mode='latest') {
+    const data = mode === 'weekly' ? ReceiptRenderer.openWeekly() : ReceiptRenderer.openLatest();
     const charImgs = pickCharImgs();
     const charImgHTML = buildCharImgHTML(charImgs);
 
@@ -2094,16 +2201,19 @@ const Rituals = (() => {
           <div class="receipt-tagline">Emotional Surplus Store · Est. Today</div>
         </div>
         <hr class="receipt-divider">
-        <div class="receipt-line"><span>Total echoes</span><span>${total}</span></div>
-        <div class="receipt-line"><span>Avg intensity</span><span>${avgInt}/10</span></div>
-        <div class="receipt-line"><span>Void entries</span><span>${voidCnt}</span></div>
-        ${dominant?`<div class="receipt-line"><span>Dominant emotion</span><span>${dominant[0].toUpperCase()}</span></div>`:''}
-        <div class="receipt-line"><span>Feelings unexpressed</span><span>∞</span></div>
-        <div class="receipt-line"><span>Times you almost said it</span><span>several</span></div>
+        <div class="receipt-line"><span>Receipt type</span><span>${mode === 'weekly' ? 'Weekly Summary' : 'Latest Echo'}</span></div>
+        <div class="receipt-line"><span>Mood</span><span>${String(data.mood).toUpperCase()}</span></div>
+        <div class="receipt-line"><span>Intensity</span><span>${data.intensity}/10</span></div>
+        <div class="receipt-line"><span>Silence</span><span>${data.silence}/10</span></div>
+        <div class="receipt-line"><span>Weather</span><span>${data.weather}</span></div>
+        <div class="receipt-line"><span>Archetype</span><span>${data.archetype}</span></div>
+        <div class="receipt-line"><span>Entry</span><span>${data.voidStatus}</span></div>
+        <div class="receipt-line"><span>State</span><span>${data.syncLabel}</span></div>
         <hr class="receipt-divider">
-        <div class="receipt-line bold"><span>TOTAL DUE TO SELF</span><span>everything</span></div>
-        <div class="receipt-barcode">|||||||||||||||||||||||||||</div>
-        <div class="receipt-footer">Thank you for feeling.<br>${now.toLocaleDateString()} · ${now.toLocaleTimeString()}<br><br>Returns not accepted. Growth is final.</div>
+        <div class="receipt-line bold"><span>INSIGHT</span><span>#${data.receiptNumber}</span></div>
+        <div style="font-size:10px;opacity:.8">${data.insight}</div>
+        <div class="receipt-barcode">${data.barcode}</div>
+        <div class="receipt-footer">EchoVault · ${data.timestamp}<br>${data.receiptNumber}</div>
       </div>
       ${charImgHTML}
     </div>`;
@@ -2119,11 +2229,12 @@ const Rituals = (() => {
     const themeBar = `<div class="receipt-themes">
       ${themes.map(t=>`<button class="theme-btn ${t.id===receiptTheme?'active':''}" data-theme="${t.id}">${t.label}</button>`).join('')}
     </div>`;
-    return `${themeBar}
-    <div class="receipt-main-area">${buildReceiptCore()}</div>
+    return `${themeBar}<div style="display:flex;gap:8px;margin-bottom:10px"><button class="theme-btn receipt-mode-btn active" data-mode="latest">Latest Echo</button><button class="theme-btn receipt-mode-btn" data-mode="weekly">Weekly Summary</button></div>
+    <div class="receipt-main-area">${buildReceiptCore('latest')}</div>
     <div class="receipt-actions">
       <button class="receipt-action-btn" id="receipt-download-btn">⬇ Save Image</button>
-      <button class="receipt-action-btn" id="receipt-share-btn">↗ Share</button>
+      <button class="receipt-action-btn" id="receipt-copy-btn">⧉ Copy Summary</button>
+      <button class="receipt-action-btn" id="receipt-close-btn">Close</button>
     </div>`;
   }
 
@@ -2168,26 +2279,11 @@ const Rituals = (() => {
     }
   }
 
-  async function shareReceipt() {
-    try {
-      Toast.show('Preparing image…');
-      const canvas = await captureReceiptImage();
-      canvas.toBlob(async (blob) => {
-        if (!blob) { Toast.show('Could not create image'); return; }
-        const file = new File([blob], 'mood-receipt.png', {type:'image/png'});
-        if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
-          try {
-            await navigator.share({title:'My EchoVault Mood Receipt', files:[file]});
-          } catch(e) {
-            if (e.name !== 'AbortError') fallbackDownload(canvas);
-          }
-        } else {
-          fallbackDownload(canvas);
-        }
-      }, 'image/png');
-    } catch(e) {
-      Toast.show('Share failed — saving instead');
-    }
+  async function copyReceiptSummary() {
+    const mode = document.querySelector('.receipt-mode-btn.active')?.dataset.mode || 'latest';
+    const d = mode === 'weekly' ? ReceiptRenderer.openWeekly() : ReceiptRenderer.openLatest();
+    const txt = `EchoVault ${mode} receipt\nMood: ${d.mood}\nIntensity: ${d.intensity}/10\nSilence: ${d.silence}/10\nWeather: ${d.weather}\nArchetype: ${d.archetype}\nInsight: ${d.insight}`;
+    try { await navigator.clipboard.writeText(txt); Toast.show('Summary copied ✓'); } catch { Toast.show('Copy failed.'); }
   }
 
   function fallbackDownload(canvas) {
