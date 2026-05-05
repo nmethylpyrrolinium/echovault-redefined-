@@ -405,7 +405,8 @@ window.ECHOVAULT_CONFIG = {
           <div class="avatar-info-name" id="avatar-info-name">your face in the cosmos</div>
           <div class="avatar-info-hint">tap to upload · jpg, png, webp · max 2mb</div>
         </div>
-        <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" aria-label="Choose profile picture">
+        <input type="file" id="avatar-file-input" accept="image/*" aria-label="Choose profile picture">
+        <div class="avatar-fallback-btn" aria-hidden="true">Choose Photo</div>
       </div>
       <div class="avatar-upload-progress" id="avatar-progress" style="display:none">
         <div class="avatar-progress-bar" id="avatar-progress-bar"></div>
