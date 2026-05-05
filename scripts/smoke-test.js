@@ -76,7 +76,7 @@ if (!readme.includes('60 seconds')) failures.push('README missing 60 seconds rat
 // PWA checks
 if (!script.includes('beforeinstallprompt')) failures.push('script.js missing beforeinstallprompt handling');
 if (!script.includes('pwa-dismiss-btn')) failures.push('script.js missing dismiss button wiring');
-if (!script.includes('serviceWorker.register')) failures.push('script.js or index missing service worker registration');
+if (!(script.includes('serviceWorker.register') || index.includes('serviceWorker.register'))) failures.push('script.js or index missing service worker registration');
 
 // Phase 2 — Emotional intelligence checks
 if (!script.includes('PatternEngine')) failures.push('script.js missing PatternEngine');
@@ -93,6 +93,34 @@ if (!script.includes('populateArchetype') || !script.includes('ArchetypeEngine')
 }
 if (!script.includes('SOUNDPRINTS')) failures.push('Soundprint data missing');
 if (!script.includes('echovault_echoes_v2')) failures.push('localStorage echo key missing');
+
+
+
+// Phase 3B — runtime wiring hotfix checks
+if (!script.includes('const MigrationFlow = (() => {')) failures.push('script.js missing MigrationFlow module');
+if (!script.includes('return { init, close };')) failures.push('MigrationFlow missing init/close exports');
+if (!script.includes('MigrationFlow.init();')) failures.push('script.js missing MigrationFlow.init startup call');
+
+const iifeCloseIndex = script.lastIndexOf('})();');
+['migration-sync-btn','migration-keep-btn','migration-export-btn'].forEach((id) => {
+  const idx = script.indexOf(id);
+  if (idx === -1) failures.push(`script.js missing ${id}`);
+  if (idx > iifeCloseIndex) failures.push(`${id} handler appears after final IIFE closure`);
+});
+
+if (!script.includes('function refreshEchoDependentUI() {')) failures.push('script.js missing refreshEchoDependentUI helper');
+if (!script.includes('refreshEchoDependentUI();')) failures.push('script.js missing refreshEchoDependentUI usage');
+if (!script.includes("document.getElementById('import-merge-btn')") || !script.includes('refreshEchoDependentUI();')) {
+  failures.push('ImportFlow does not appear to refresh dependent UI');
+}
+if (!script.includes('const VaultPulse = (() => {')) failures.push('script.js missing VaultPulse module');
+if (!(script.includes('const EchoSync = (() => {') || script.includes('syncLocalToCloud()'))) {
+  failures.push('script.js missing EchoSync/syncLocalToCloud placeholder');
+}
+if (!script.includes('auth-local-btn')) failures.push('script.js missing auth-local-btn');
+if (!script.includes('signInWithOtp')) failures.push('script.js missing signInWithOtp');
+if (!script.includes('beforeinstallprompt')) failures.push('script.js missing beforeinstallprompt');
+if (!script.includes('echovault_echoes_v2')) failures.push('script.js missing echovault_echoes_v2 key');
 
 // Keep dependency footprint small
 const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
