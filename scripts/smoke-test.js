@@ -120,6 +120,14 @@ if (!script.includes('const VaultPulse = (() => {')) failures.push('script.js mi
 if (!(script.includes('const EchoSync = (() => {') || script.includes('syncLocalToCloud()'))) {
   failures.push('script.js missing EchoSync/syncLocalToCloud placeholder');
 }
+
+if (!script.includes('result?.ok')) failures.push('migration sync flow missing ok-check before marking synced');
+if (!script.includes('Sign in to sync. Your local vault is still safe.')) {
+  failures.push('migration sync flow missing local safety sign-in toast');
+}
+if (script.includes(".then(() => VaultPulse.set('synced', 'Vault Synced'))")) {
+  failures.push('migration sync flow still unconditionally marks synced in promise chain');
+}
 if (!script.includes('auth-local-btn')) failures.push('script.js missing auth-local-btn');
 if (!script.includes('signInWithOtp')) failures.push('script.js missing signInWithOtp');
 if (!script.includes('beforeinstallprompt')) failures.push('script.js missing beforeinstallprompt');
