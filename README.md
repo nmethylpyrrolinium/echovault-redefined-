@@ -12,6 +12,12 @@ EchoVault is a cinematic emotional journaling web app with a local-first vault a
 - Existing tables:
   - `profiles`
   - `echoes`
+- Auth URL configuration:
+  - Site URL: `https://nmethylpyrrolinium.github.io/echovault.com/`
+  - Additional redirect URLs:
+    - `https://nmethylpyrrolinium.github.io/echovault.com/`
+    - `http://localhost:3000/`
+    - `http://localhost:5173/`
 
 ## Auth behavior
 - App uses Supabase email/password auth (`signUp`, `signInWithPassword`) when config is present.
