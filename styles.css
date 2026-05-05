@@ -1262,3 +1262,22 @@ body{overscroll-behavior:none;-webkit-overflow-scrolling:touch}
 
 .auth-note{font-family:var(--font-mono);font-size:9px;letter-spacing:.08em;color:var(--muted);padding:2px 2px 0;}
 #view-home{padding-top:120px;}
+
+.chip-sync-label{font-family:var(--font-mono);font-size:8px;letter-spacing:.09em;color:rgba(255,255,255,.58);text-transform:uppercase}
+#user-chip.syncing .chip-sync-dot{background:var(--gold);box-shadow:0 0 14px var(--gold);animation:vaultPulse 1s ease-in-out infinite}
+#user-chip.synced .chip-sync-dot{background:var(--joyful);box-shadow:0 0 10px var(--joyful)}
+#user-chip.failed .chip-sync-dot{background:#d17a5a;box-shadow:0 0 10px #d17a5a}
+#user-chip.local .chip-sync-dot{background:#7a7a86;box-shadow:0 0 8px #7a7a86}
+@keyframes vaultPulse{0%,100%{transform:scale(1);opacity:.65}50%{transform:scale(1.6);opacity:1}}
+.cinematic-modal{position:fixed;inset:0;z-index:750;background:rgba(4,4,8,.72);backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;padding:max(20px,env(safe-area-inset-top)) 16px max(20px,env(safe-area-inset-bottom));}
+.cinematic-modal.open{display:flex;animation:fadeUp .3s var(--ease)}
+.cinematic-card{width:min(520px,100%);background:linear-gradient(140deg,rgba(22,22,34,.92),rgba(10,10,18,.9));border:1px solid rgba(201,168,76,.24);border-radius:16px;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.55);}
+.cinematic-card h3{font-family:var(--font-display);font-size:30px;color:var(--gold);margin-bottom:10px}
+.cinematic-card p{color:var(--muted);font-size:18px;font-style:italic;margin-bottom:16px}
+.cinematic-actions{display:grid;grid-template-columns:1fr;gap:10px}
+.privacy-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.privacy-card{background:rgba(255,255,255,.03);border:1px solid var(--border);padding:12px;border-radius:10px;display:flex;flex-direction:column;gap:4px}
+.privacy-card strong{font-family:var(--font-mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--gold)}
+.privacy-card span{font-size:13px;color:var(--muted)}
+#import-preview-content{display:grid;gap:8px;margin-bottom:14px;color:var(--muted);font-family:var(--font-mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase}
+@media(max-width:768px){#user-chip{top:calc(62px + env(safe-area-inset-top));right:12px}.privacy-grid{grid-template-columns:1fr}}

@@ -46,7 +46,8 @@ window.ECHOVAULT_CONFIG = {
 <div id="user-chip" role="button" tabindex="0" aria-label="Account">
   <div class="chip-avatar" id="chip-avatar">—</div>
   <span class="chip-name" id="chip-name">you</span>
-  <div class="chip-sync-dot"></div>
+  <div class="chip-sync-dot" id="chip-sync-dot"></div>
+  <span class="chip-sync-label" id="chip-sync-label">Local Vault</span>
   <div class="chip-menu">
     <div class="chip-menu-header">
       <div id="chip-display-name">—</div>
@@ -363,6 +364,31 @@ window.ECHOVAULT_CONFIG = {
   <div class="fun-modal-card" id="fun-modal-inner">
     <button class="modal-close-btn" id="fun-modal-close" aria-label="Close modal">×</button>
     <div id="fun-modal-content"></div>
+  </div>
+</div>
+
+
+<div class="cinematic-modal" id="migration-modal" role="dialog" aria-modal="true" aria-label="Local vault migration">
+  <div class="cinematic-card">
+    <h3>Your echoes are still here.</h3>
+    <p id="migration-copy">You have 0 echoes saved on this device. Sync them to your account so your universe can follow you?</p>
+    <div class="cinematic-actions">
+      <button class="btn-primary" id="migration-sync-btn">Sync My Vault</button>
+      <button class="btn-ghost" id="migration-keep-btn">Keep Local</button>
+      <button class="btn-ghost" id="migration-export-btn">Export Backup</button>
+    </div>
+  </div>
+</div>
+
+<div class="cinematic-modal" id="import-preview-modal" role="dialog" aria-modal="true" aria-label="Import preview">
+  <div class="cinematic-card">
+    <h3>Preview Incoming Vault</h3>
+    <div id="import-preview-content"></div>
+    <div class="cinematic-actions">
+      <button class="btn-primary" id="import-merge-btn">Merge With Vault</button>
+      <button class="btn-ghost" id="import-replace-btn">Replace Local Vault</button>
+      <button class="btn-ghost" id="import-cancel-btn">Cancel</button>
+    </div>
   </div>
 </div>
 

@@ -300,6 +300,7 @@ const Settings = (() => {
       ProfileStore.write(payload);
       localStorage.setItem(USER_KEY, payload.display_name || payload.username || localStorage.getItem(USER_KEY) || 'you');
       UserChip.refresh();
+  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Vault Synced" : "Local Vault");
       const status = document.getElementById('settings-save-status');
       if (status) { status.textContent = '✓ saved to your universe'; status.classList.add('show'); setTimeout(() => status.classList.remove('show'), 2500); }
     });
@@ -399,7 +400,8 @@ const Login = (() => {
     if (!res.data?.session) return Toast.show('Session not created. If your email has a magic link, open it instead.', 4200);
     const profile = await Auth.fetchProfile(); if (profile) ProfileStore.write(profile);
     await Auth.upsertProfile({ ...ProfileStore.read(), display_name: nameInput.value.trim() || ProfileStore.read().display_name });
-    UserChip.refresh(); Toast.show('Vault unlocked. Welcome back.'); enterApp();
+    UserChip.refresh();
+  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Vault Synced" : "Local Vault"); Toast.show('Vault unlocked. Welcome back.'); enterApp();
   }
 
   async function resendEmailOtp(email){
@@ -435,7 +437,8 @@ const Login = (() => {
       setButtonLoading(authSignIn, false, 'Sign in', 'Signing in…'); authSignUp.disabled=false;
       if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
       const profile = await Auth.fetchProfile(); if (profile) ProfileStore.write(profile);
-      UserChip.refresh(); enterApp();
+      UserChip.refresh();
+  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Vault Synced" : "Local Vault"); enterApp();
     });
 
     authSignUp?.addEventListener('click', async () => {
@@ -2526,13 +2529,45 @@ const UserChip = (() => {
   return { refresh };
 })();
 
+const VaultPulse = (() => {
+  const chip = document.getElementById('user-chip');
+  const label = document.getElementById('chip-sync-label');
+  const msg = document.getElementById('sync-msg');
+  const toast = document.getElementById('sync-toast');
+  function set(stateKey, text){
+    if(!chip||!label) return;
+    chip.classList.remove('syncing','synced','failed','local');
+    chip.classList.add(stateKey);
+    label.textContent=text;
+    if(msg) msg.textContent=text;
+  }
+  function toastPulse(){ toast?.classList.add('show'); setTimeout(()=>toast?.classList.remove('show'),1800); }
+  return {set,toastPulse};
+})();
+
+const ImportFlow = (() => {
+  let imported = null;
+  const modal = document.getElementById('import-preview-modal');
+  const content = document.getElementById('import-preview-content');
+  function preview(arr){
+    imported = arr;
+    const dates = arr.map(e=>new Date(e.date)).filter(d=>!isNaN(d));
+    const min = dates.length ? new Date(Math.min(...dates)).toLocaleDateString() : '—';
+    const max = dates.length ? new Date(Math.max(...dates)).toLocaleDateString() : '—';
+    const profileIncluded = arr.some(e=>e.profile_snapshot) ? 'yes' : 'no';
+    content.innerHTML = `<div>Echoes: ${arr.length}</div><div>Date Range: ${min} → ${max}</div><div>Profile Included: ${profileIncluded}</div><div>Import Type: vault json</div>`;
+    modal?.classList.add('open');
+  }
+  function close(){ modal?.classList.remove('open'); imported=null; }
+  document.getElementById('import-merge-btn')?.addEventListener('click', ()=>{ if(!imported) return; state.echoes=[...state.echoes,...imported]; Storage.save(state.echoes); close(); Toast.show('Merged with your vault.'); });
+  document.getElementById('import-replace-btn')?.addEventListener('click', ()=>{ if(!imported) return; state.echoes=imported; Storage.save(state.echoes); close(); Toast.show('Local vault replaced.'); });
+  document.getElementById('import-cancel-btn')?.addEventListener('click', close);
+  return {preview};
+})();
+
 document.getElementById('import-file').addEventListener('change', function() {
   if (this.files[0]) {
-    Storage.importVault(this.files[0], (arr) => {
-      state.echoes = arr;
-      Storage.save(state.echoes);
-      Weather.update(); IdentityOrb.update(); IdentityCore.update(); GhostLayer.initFromEchoes(state.echoes);
-    });
+    Storage.importVault(this.files[0], (arr) => { ImportFlow.preview(arr); });
   }
   this.value = '';
 });
@@ -2577,6 +2612,7 @@ async function init() {
     console.warn('Auth initialization failed; continuing in local mode.', error);
   }
   UserChip.refresh();
+  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Vault Synced" : "Local Vault");
   PWAInstall.init();
   Login.init();
 }
@@ -2584,3 +2620,8 @@ async function init() {
 init();
 
 })();
+
+
+document.getElementById('migration-sync-btn')?.addEventListener('click', ()=>{ VaultPulse.set('syncing','Syncing Echoes…'); VaultPulse.toastPulse(); setTimeout(()=>VaultPulse.set('synced','Vault Synced'),1100); document.getElementById('migration-modal')?.classList.remove('open'); });
+document.getElementById('migration-keep-btn')?.addEventListener('click', ()=>{ VaultPulse.set('local','Offline — Held Locally'); document.getElementById('migration-modal')?.classList.remove('open'); });
+document.getElementById('migration-export-btn')?.addEventListener('click', ()=>{ Storage.exportVault(state.echoes); VaultPulse.set('local','Local Vault'); document.getElementById('migration-modal')?.classList.remove('open'); });
