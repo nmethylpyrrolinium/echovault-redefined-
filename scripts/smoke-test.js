@@ -176,6 +176,7 @@ if (!(script.includes('todayKey') && script.includes('completionKey') && script.
 if (!(script.includes('completed_at') || script.includes('todayKey'))) failures.push('GentleQuests missing completed_at/todayKey completion marker');
 if (!(script.includes('Vault Holder') || script.includes('Cardholder'))) failures.push('Mood Receipt missing Vault Holder/Cardholder identity field');
 if (!(script.includes('receiptClass') && script.includes('RECEIPT_CLASSES'))) failures.push('ReceiptRenderer missing receipt class generation');
+if (script.includes('Auth.hasSupabase?.()')) failures.push('ReceiptRenderer syncState calls boolean Auth.hasSupabase as a function');
 if (!(style.includes('.museum-shell') && style.includes('overflow-y:auto') && style.includes('max-height:calc(100dvh'))) failures.push('museum layout missing max-height/overflow-y');
 if (!(style.includes('.museum-tabs') && (style.includes('overflow-x:auto') || style.includes('grid-template-columns')))) failures.push('museum tabs missing overflow-x/responsive layout');
 if (!(style.includes('.relic-grid') && style.includes('auto-fit'))) failures.push('relic grid missing responsive auto-fit');
