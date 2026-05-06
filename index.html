@@ -28,7 +28,8 @@
 window.ECHOVAULT_CONFIG = {
   SUPABASE_URL: "https://phfwaxuyauuyskzruqbk.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_L1KAnz1Y3hM0inwbCjv-8g_uDYg7eAv",
-  SUPABASE_AVATAR_BUCKET: "avatars"
+  SUPABASE_AVATAR_BUCKET: "avatars",
+  ALAM_AI_ENDPOINT: ""
 };
 </script>
 <link rel="stylesheet" href="styles.css">
@@ -502,11 +503,21 @@ window.ECHOVAULT_CONFIG = {
       <div class="society-settings-box">
         <p id="society-consent-status">Society consent status: local only</p>
         <div class="settings-actions">
-          <button class="settings-secondary-btn" id="society-revoke-consent-btn">Revoke Society Consent</button>
+          <button class="settings-secondary-btn" id="society-join-btn">Join EchoSociety</button>
+          <button class="settings-secondary-btn" id="society-revoke-consent-btn">Revoke Consent</button>
+          <button class="settings-secondary-btn" id="society-sync-signals-btn">Sync Local Signals</button>
           <button class="settings-secondary-btn" id="society-clear-signals-btn">Clear Local Society Signals</button>
           <button class="settings-secondary-btn" id="society-export-signals-btn">Export Society Signals</button>
         </div>
         <small>These controls never delete echoes.</small>
+      </div>
+      <div class="society-settings-box alam-settings-box">
+        <p>alam.chat mode: Local only / Remote endpoint if configured. No frontend API keys are used.</p>
+        <label class="alam-toggle"><input type="checkbox" id="alam-include-latest-setting"> Include latest echo summary (default OFF)</label>
+        <label class="alam-toggle disabled"><input type="checkbox" disabled> Include raw echoes — not available</label>
+        <div class="settings-actions">
+          <button class="settings-secondary-btn" id="alam-clear-chat-btn">Clear alam.chat history</button>
+        </div>
       </div>
     </div>
 
