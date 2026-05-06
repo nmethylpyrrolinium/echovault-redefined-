@@ -25,6 +25,13 @@ const STORAGE_KEY  = 'echovault_echoes_v2';
 const USER_KEY     = 'echoUser';
 const OB_KEY       = 'echoOnboarded';
 
+
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, (char) => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;'
+  }[char]));
+}
+
 const MOOD_COLORS = {
   calm:'#5b8fa8', chaos:'#c44b4b', reflective:'#7c6fa0',
   anxious:'#c47a3a', joyful:'#7aab6e', empty:'#4a4a5a'
@@ -2052,29 +2059,57 @@ const ShatterSoftly = (() => {
 })();
 
 const ReceiptRenderer = (() => {
+  const RECEIPT_CLASSES = {
+    calm:'Stillwater Class', chaos:'Storm Class', reflective:'Moon Archive Class',
+    anxious:'Compass Class', joyful:'Bloom Class', empty:'Void Class'
+  };
   function makeBarcode(seed='') {
     return seed.split('').map((c,i)=>(c.charCodeAt(0)+i)%2?'|':'¦').join('').padEnd(26,'|').slice(0,26);
+  }
+  function vaultHolderName() {
+    const profileName = ProfileStore.read()?.display_name;
+    const emailPrefix = Auth.user?.email ? Auth.user.email.split('@')[0] : '';
+    const localName = localStorage.getItem(USER_KEY);
+    return [profileName, emailPrefix, localName].map(v => String(v || '').trim()).find(Boolean) || 'Local Voyager';
+  }
+  function syncState() {
+    if (Auth.user) return 'Profile Synced';
+    return Auth.hasSupabase?.() ? 'Cloud Ready' : 'Local Vault';
   }
   function getData(mode='latest') {
     const p = PatternEngine.analyze(state.echoes);
     const a = ArchetypeEngine.compute(p);
     const latest = state.echoes[0] || {};
+    const mood = mode === 'weekly' ? (p.dominantMood || 'reflective') : (latest.mood || p.dominantMood || 'reflective');
+    const intensity = mode === 'weekly' ? p.averageIntensity : (latest.intensity || 0);
+    const silence = mode === 'weekly' ? p.averageSilence : (latest.silence || 0);
+    const date = new Date();
+    const receiptId = `EV-${Date.now().toString().slice(-6)}`;
+    const echoId = latest.id || `${mode}-${p.totalEchoes || 0}`;
+    const coordinates = `EV-${String(mood).toUpperCase()}-I${String(Math.round(intensity || 0)).padStart(2,'0')}-S${String(Math.round(silence || 0)).padStart(2,'0')}`;
+    const receiptClass = RECEIPT_CLASSES[mood] || 'Moon Archive Class';
     return {
       mode,
-      timestamp: new Date().toLocaleString(),
-      mood: mode === 'weekly' ? (p.dominantMood || '—') : (latest.mood || p.dominantMood || '—'),
-      intensity: mode === 'weekly' ? p.averageIntensity : (latest.intensity || 0),
-      silence: mode === 'weekly' ? p.averageSilence : (latest.silence || 0),
+      timestamp: date.toLocaleString(),
+      date: date.toLocaleDateString(),
+      vaultHolder: vaultHolderName(),
+      echoId,
+      receiptId,
+      receiptNumber: receiptId,
+      receiptClass,
+      coordinates,
+      mood,
+      intensity,
+      silence,
       weather: p.emotionalWeather || 'shifting sky',
       archetype: a.archetypeName,
-      voidStatus: mode === 'weekly' ? `${p.voidCount} void` : (latest.void ? 'void entry' : 'spoken entry'),
+      voidStatus: mode === 'weekly' ? `${p.voidCount} void entries` : (latest.void ? 'Void Signal' : 'Spoken Signal'),
       insight: p.oneLineInsight,
-      receiptNumber: `EV-${Date.now().toString().slice(-6)}`,
-      syncLabel: Auth.user ? 'synced' : 'local-only',
-      barcode: makeBarcode(`${p.dominantMood || 'x'}${p.totalEchoes}${mode}`)
+      syncLabel: syncState(),
+      barcode: makeBarcode(`${mood}${p.totalEchoes}${mode}${receiptId}`)
     };
   }
-  return { getData, openLatest:()=>getData('latest'), openWeekly:()=>getData('weekly') };
+  return { RECEIPT_CLASSES, getData, openLatest:()=>getData('latest'), openWeekly:()=>getData('weekly') };
 })();
 
 /* ── FUN RITUALS ── */
@@ -2161,21 +2196,41 @@ const GentleQuests = (() => {
     { id:'low_intensity', text:'Create one low-intensity echo.', reward:{ name:'Silence Glass', qty:1 }, test:(event, data)=>event==='echo_created' && (data?.intensity || 0) <= 3 },
     { id:'export_receipt', text:'Export a receipt.', reward:{ name:'Bloom Seed', qty:1 }, test:(event)=>event==='receipt_exported' }
   ];
-  function load(){ try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } }
+  function todayKey(date = new Date()) {
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+  function completionKey(id, dateKey = todayKey()) { return `${id}:${dateKey}`; }
+  function load(){
+    let data;
+    try { data = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { data = {}; }
+    let migrated = false;
+    Object.entries(data || {}).forEach(([key, value]) => {
+      if (!key.includes(':') && value?.completed) {
+        const dateKey = value.completed_at ? todayKey(new Date(value.completed_at)) : todayKey();
+        const dailyKey = completionKey(key, dateKey);
+        if (!data[dailyKey]) data[dailyKey] = { ...value, completed:true, completed_at:value.completed_at || new Date().toISOString(), migrated_from:key };
+        delete data[key];
+        migrated = true;
+      }
+    });
+    if (migrated) save(data);
+    return data || {};
+  }
   function save(data){ localStorage.setItem(KEY, JSON.stringify(data || {})); return data || {}; }
   function todayId(){ return catalog[new Date().getDate() % catalog.length].id; }
-  function current(){ const q = catalog.find(x => x.id === todayId()) || catalog[0]; const data = load(); return { ...q, completed: Boolean(data[q.id]?.completed) }; }
+  function current(){ const q = catalog.find(x => x.id === todayId()) || catalog[0]; const data = load(); const key = completionKey(q.id); return { ...q, todayKey:todayKey(), completionKey:key, completed: Boolean(data[key]?.completed) }; }
   function evaluate(event, data) {
     const q = current();
     if (q.completed || !q.test(event, data)) return false;
     const saved = load();
-    saved[q.id] = { completed:true, completed_at:new Date().toISOString() };
+    saved[q.completionKey] = { completed:true, completed_at:new Date().toISOString(), todayKey:q.todayKey };
     save(saved);
     VaultInventory.addMaterials([q.reward]);
     Toast.show(`Gentle Quest complete · +${q.reward.qty} ${q.reward.name}`, 3200);
     return true;
   }
-  return { KEY, current, evaluate, load, save };
+  return { KEY, todayKey, completionKey, current, evaluate, load, save };
 })();
 
 const EchoAvatar = (() => {
@@ -2202,7 +2257,19 @@ const EchoAvatar = (() => {
     return save({ avatar_name: profile.display_name || previous.avatar_name || 'Echo Voyager', archetype_key:key, role, aura, outfit_hint, companion_symbol, created_at:previous.created_at || new Date().toISOString(), updated_at:new Date().toISOString() });
   }
   function regenerateRole(){ return build(); }
-  function render(){ const avatar = Object.keys(load()).length ? load() : build(); const arch = ArchetypeEngine.compute(PatternEngine.analyze(state.echoes)); return `<div class="echo-avatar-card"><div class="echo-avatar-orb"><span>${avatar.companion_symbol}</span></div><div class="echo-avatar-kicker">Echo Avatar</div><h4>${avatar.avatar_name}</h4><div class="echo-avatar-role">${avatar.role}</div><p>Aura: ${avatar.aura}</p><p>Archetype: ${arch.archetypeName}</p><p class="echo-avatar-outfit">${avatar.outfit_hint}</p><div class="echo-avatar-actions"><button class="receipt-action-btn" id="avatar-generate-btn">Generate from my profile</button><button class="receipt-action-btn" id="avatar-regenerate-btn">Regenerate role</button><button class="receipt-action-btn" disabled>Use as Society Character · coming soon</button></div></div>`; }
+  function render(){
+    const avatar = Object.keys(load()).length ? load() : build();
+    const arch = ArchetypeEngine.compute(PatternEngine.analyze(state.echoes));
+    const safe = {
+      symbol: escapeHTML(avatar.companion_symbol),
+      name: escapeHTML(avatar.avatar_name),
+      role: escapeHTML(avatar.role),
+      aura: escapeHTML(avatar.aura),
+      outfit: escapeHTML(avatar.outfit_hint),
+      archetype: escapeHTML(arch.archetypeName)
+    };
+    return `<div class="echo-avatar-card"><div class="echo-avatar-orb"><span>${safe.symbol}</span></div><div class="echo-avatar-kicker">Echo Avatar</div><h4>${safe.name}</h4><div class="echo-avatar-role" data-society-role="${safe.role}">${safe.role}</div><p>Aura: ${safe.aura}</p><p>Archetype: ${safe.archetype}</p><p class="echo-avatar-outfit">${safe.outfit}</p><div class="phase-two-note">Role can later map into EchoSociety; for now it stays local to this vault.</div><div class="echo-avatar-actions"><button class="receipt-action-btn" id="avatar-generate-btn">Generate from my profile</button><button class="receipt-action-btn" id="avatar-regenerate-btn">Regenerate role</button><button class="receipt-action-btn" disabled>Use as Society Character · coming soon</button></div></div>`;
+  }
   function bind(){ document.getElementById('avatar-generate-btn')?.addEventListener('click',()=>{build(); refreshEchoDependentUI(); Toast.show('Echo Avatar refreshed.');}); document.getElementById('avatar-regenerate-btn')?.addEventListener('click',()=>{regenerateRole(); refreshEchoDependentUI(); Toast.show('Role regenerated locally.');}); }
   return { KEY, load, save, build, regenerateRole, render, bind };
 })();
@@ -2465,18 +2532,24 @@ const Rituals = (() => {
         </div>
         <hr class="receipt-divider">
         <div class="receipt-line"><span>Receipt type</span><span>${mode === 'weekly' ? 'Weekly Summary' : 'Latest Echo'}</span></div>
-        <div class="receipt-line"><span>Mood</span><span>${String(data.mood).toUpperCase()}</span></div>
-        <div class="receipt-line"><span>Intensity</span><span>${data.intensity}/10</span></div>
-        <div class="receipt-line"><span>Silence</span><span>${data.silence}/10</span></div>
-        <div class="receipt-line"><span>Weather</span><span>${data.weather}</span></div>
-        <div class="receipt-line"><span>Archetype</span><span>${data.archetype}</span></div>
-        <div class="receipt-line"><span>Entry</span><span>${data.voidStatus}</span></div>
-        <div class="receipt-line"><span>State</span><span>${data.syncLabel}</span></div>
+        <div class="receipt-line"><span>Vault Holder</span><span>${escapeHTML(data.vaultHolder)}</span></div>
+        <div class="receipt-line"><span>Echo ID</span><span>${escapeHTML(data.echoId)}</span></div>
+        <div class="receipt-line"><span>Receipt Class</span><span>${escapeHTML(data.receiptClass)}</span></div>
+        <div class="receipt-line"><span>Coordinates</span><span>${escapeHTML(data.coordinates)}</span></div>
+        <div class="receipt-line"><span>Mood</span><span>${escapeHTML(String(data.mood).toUpperCase())}</span></div>
+        <div class="receipt-line"><span>Intensity</span><span>${escapeHTML(data.intensity)}/10</span></div>
+        <div class="receipt-line"><span>Silence</span><span>${escapeHTML(data.silence)}/10</span></div>
+        <div class="receipt-line"><span>Emotional Weather</span><span>${escapeHTML(data.weather)}</span></div>
+        <div class="receipt-line"><span>Archetype</span><span>${escapeHTML(data.archetype)}</span></div>
+        <div class="receipt-line"><span>Void status</span><span>${escapeHTML(data.voidStatus)}</span></div>
+        <div class="receipt-line"><span>Sync state</span><span>${escapeHTML(data.syncLabel)}</span></div>
+        <div class="receipt-line"><span>Date</span><span>${escapeHTML(data.date)}</span></div>
         <hr class="receipt-divider">
-        <div class="receipt-line bold"><span>INSIGHT</span><span>#${data.receiptNumber}</span></div>
-        <div style="font-size:10px;opacity:.8">${data.insight}</div>
-        <div class="receipt-barcode">${data.barcode}</div>
-        <div class="receipt-footer">EchoVault · ${data.timestamp}<br>${data.receiptNumber}</div>
+        <div class="receipt-line bold"><span>INSIGHT</span><span>#${escapeHTML(data.receiptNumber)}</span></div>
+        <div style="font-size:10px;opacity:.8">${escapeHTML(data.insight)}</div>
+        <div class="receipt-phase-note">Receipt Class can later become a collectible frame style.</div>
+        <div class="receipt-barcode">${escapeHTML(data.barcode)}</div>
+        <div class="receipt-footer">EchoVault · ${escapeHTML(data.timestamp)}<br>${escapeHTML(data.receiptNumber)}</div>
       </div>
       ${charImgHTML}
     </div>`;
@@ -2545,7 +2618,7 @@ const Rituals = (() => {
   async function copyReceiptSummary() {
     const mode = document.querySelector('.receipt-mode-btn.active')?.dataset.mode || 'latest';
     const d = mode === 'weekly' ? ReceiptRenderer.openWeekly() : ReceiptRenderer.openLatest();
-    const txt = `EchoVault ${mode} receipt\nMood: ${d.mood}\nIntensity: ${d.intensity}/10\nSilence: ${d.silence}/10\nWeather: ${d.weather}\nArchetype: ${d.archetype}\nInsight: ${d.insight}`;
+    const txt = `EchoVault ${mode} receipt\nVault Holder: ${d.vaultHolder}\nReceipt ID: ${d.receiptId}\nEcho ID: ${d.echoId}\nReceipt Class: ${d.receiptClass}\nCoordinates: ${d.coordinates}\nMood: ${d.mood}\nIntensity: ${d.intensity}/10\nSilence: ${d.silence}/10\nEmotional Weather: ${d.weather}\nArchetype: ${d.archetype}\nVoid status: ${d.voidStatus}\nDate: ${d.date}\nSync state: ${d.syncLabel}\nInsight: ${d.insight}`;
     try { await navigator.clipboard.writeText(txt); Toast.show('Summary copied ✓'); } catch { Toast.show('Copy failed.'); }
   }
 
@@ -2696,11 +2769,13 @@ const Rituals = (() => {
     const echoes = state.echoes || [];
     const saved=ArtifactArchive.listArtifacts();
     const materials = VaultInventory.getTotals();
-    const materialRows = Object.entries(materials).map(([name,count])=>`<div class="material-pill"><span>${name}</span><b>${count}</b></div>`).join('') || '<div class="museum-empty">No materials discovered yet. Create an echo to uncover the first fragment.</div>';
+    const materialRows = Object.entries(materials).map(([name,count])=>`<div class="material-pill"><span>${escapeHTML(name)}</span><b>${escapeHTML(count)}</b></div>`).join('') || '<div class="museum-empty">No materials discovered yet. Create an echo to uncover the first fragment.</div>';
+    const materialsPrep = '<div class="phase-two-note">Materials can later be used for crafting; today they stay local-first inventory fragments.</div>';
+    const questPrep = '<div class="phase-two-note">Quests can later unlock rooms without adding public feeds or profiles.</div>';
     const quest = GentleQuests.current();
     const avatarHtml = EchoAvatar.render();
     const societyTeaser = `<div class="echo-society-teaser"><div class="echo-avatar-kicker">EchoSociety — coming later</div><p>Your avatar will one day carry signals through shared districts. For now, your society begins inside your vault.</p></div>`;
-    if(!echoes.length) return `<div class="museum-shell"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}`}</small></div>${avatarHtml}<section class="vault-materials"><h4>Vault Materials</h4>${materialRows}</section>${societyTeaser}<div class="museum-empty">The museum is quiet. Create echoes to awaken its rooms.</div></div>`;
+    if(!echoes.length) return `<div class="museum-shell"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}`}</small></div>${avatarHtml}<section class="vault-materials"><h4>Vault Materials</h4>${materialRows}</section>${materialsPrep}${societyTeaser}<div class="museum-empty">The museum is quiet. Create echoes to awaken its rooms.</div></div>`;
     const relics=RelicEngine.fromEchoes(echoes);
     const weather=WeatherMap.compute(echoes);
     const arch=ArchetypeEngine.compute(PatternEngine.analyze(echoes));
@@ -2714,7 +2789,7 @@ const Rituals = (() => {
       return 'relic-token';
     };
     const tabs = ['weather','avatar','materials','archetype','soundprint','relics','receipts','archive','lanterns'];
-    return `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-meta"><span>${echoes.length} echoes</span><span>${saved.length} artifacts</span><span>${weather.name}</span><span>${arch.archetypeName}</span></div></header><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}`}</small></div><nav class="museum-tabs">${tabs.map(r=>`<button class="museum-tab ${r==='weather'?'active':''}" data-room="${r}">${r}</button>`).join('')}</nav><div class="museum-room active" data-room-panel="weather"><h4>Weather Room</h4><p>${weather.summary}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div></div><div class="museum-room" data-room-panel="avatar"><h4>Echo Avatar</h4>${avatarHtml}${societyTeaser}</div><div class="museum-room" data-room-panel="materials"><h4>Vault Materials</h4><section class="vault-materials">${materialRows}</section></div><div class="museum-room" data-room-panel="archetype"><h4>Archetype Hall</h4><p>${arch.archetypeName} · ${arch.archetypeDescription}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></div><div class="museum-room" data-room-panel="soundprint"><h4>Soundprint Wall</h4>${tracks.slice(0,3).map(t=>`<div class='track-item'><div><b>${t.song}</b><small>${t.artist}</small></div><a class='track-link spotify' href='${t.spotify}' target='_blank' rel='noopener noreferrer'>Spotify</a><a class='track-link youtube' href='${t.youtube}' target='_blank' rel='noopener noreferrer'>YouTube</a></div>`).join('')}<button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button></div><div class="museum-room" data-room-panel="relics"><h4>Memory Relics</h4>${relics.map((r,i)=>`<article class='relic-item mood-${r.mood}' style='--delay:${i * 120}ms'><div class='relic-visual ${relicVisual(r.title)}'></div><b>${r.title}</b><span class='rarity'>${r.rarity}</span><small>${r.coordinates}</small><p>${r.description}</p><button class='receipt-action-btn relic-dl' data-id='${r.id}'>Download Card</button><button class='receipt-action-btn relic-save' data-id='${r.id}'>Save Artifact</button></article>`).join('')}</div><div class="museum-room" data-room-panel="receipts"><h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button></div><div class="museum-room" data-room-panel="archive"><h4>Artifact Archive</h4><div class="artifact-shelf" id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${a.title}</b><small>${a.type}</small><button class='receipt-action-btn art-fav' data-id='${a.id}'>☆</button><button class='receipt-action-btn art-del' data-id='${a.id}'>Delete</button></div>`).join('') || 'No artifacts saved yet. Create one from a ritual.'}</div></div><div class="museum-room" data-room-panel="lanterns"><h4>Void Lanterns</h4><p>Still here is still a signal.</p></div></div>`;
+    return `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-meta"><span>${echoes.length} echoes</span><span>${saved.length} artifacts</span><span>${weather.name}</span><span>${arch.archetypeName}</span></div></header><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}`}</small></div>${questPrep}<nav class="museum-tabs" aria-label="Museum rooms">${tabs.map(r=>`<button class="museum-tab ${r==='weather'?'active':''}" data-room="${r}">${r}</button>`).join('')}</nav><div class="museum-room active" data-room-panel="weather"><h4>Weather Room</h4><p>${weather.summary}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div></div><div class="museum-room" data-room-panel="avatar"><h4>Echo Avatar</h4>${avatarHtml}${societyTeaser}</div><div class="museum-room" data-room-panel="materials"><h4>Vault Materials</h4><section class="vault-materials">${materialRows}</section>${materialsPrep}</div><div class="museum-room" data-room-panel="archetype"><h4>Archetype Hall</h4><p>${arch.archetypeName} · ${arch.archetypeDescription}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></div><div class="museum-room" data-room-panel="soundprint"><h4>Soundprint Wall</h4>${tracks.slice(0,3).map(t=>`<div class='track-item'><div><b>${t.song}</b><small>${t.artist}</small></div><a class='track-link spotify' href='${t.spotify}' target='_blank' rel='noopener noreferrer'>Spotify</a><a class='track-link youtube' href='${t.youtube}' target='_blank' rel='noopener noreferrer'>YouTube</a></div>`).join('')}<button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button></div><div class="museum-room" data-room-panel="relics"><h4>Memory Relics</h4><div class="relic-grid">${relics.map((r,i)=>`<article class='relic-item mood-${escapeHTML(r.mood)}' style='--delay:${i * 120}ms'><div class='relic-visual ${relicVisual(r.title)}'></div><b>${escapeHTML(r.title)}</b><span class='rarity'>${escapeHTML(r.rarity)}</span><small>${escapeHTML(r.coordinates)}</small><p>${escapeHTML(r.description)}</p><button class='receipt-action-btn relic-dl' data-id='${escapeHTML(r.id)}'>Download Card</button><button class='receipt-action-btn relic-save' data-id='${escapeHTML(r.id)}'>Save Artifact</button></article>`).join('')}</div></div><div class="museum-room" data-room-panel="receipts"><h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button></div><div class="museum-room" data-room-panel="archive"><h4>Artifact Archive</h4><div class="artifact-shelf" id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${escapeHTML(a.title)}</b><small>${escapeHTML(a.type)}</small><button class='receipt-action-btn art-fav' data-id='${escapeHTML(a.id)}'>☆</button><button class='receipt-action-btn art-del' data-id='${escapeHTML(a.id)}'>Delete</button></div>`).join('') || 'No artifacts saved yet. Create one from a ritual.'}</div></div><div class="museum-room" data-room-panel="lanterns"><h4>Void Lanterns</h4><p>Still here is still a signal.</p></div></div>`;
   }
   function startConflictAnimation() {
     const canvas = document.getElementById('conflict-canvas');
@@ -2878,7 +2953,16 @@ const UserChip = (() => {
     document.getElementById('chip-email').textContent = email;
     const avatarEl = document.getElementById('chip-avatar');
     const avatarUrl = profile.avatar_url || profile.avatar_data_url;
-    if (avatarUrl) { avatarEl.innerHTML = `<img src="${avatarUrl}" alt="">`; } else { const initials = name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase(); avatarEl.textContent = initials || 'EV'; }
+    if (avatarUrl && avatarEl) {
+      avatarEl.textContent = '';
+      const img = document.createElement('img');
+      img.src = avatarUrl;
+      img.alt = '';
+      avatarEl.appendChild(img);
+    } else if (avatarEl) {
+      const initials = name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase();
+      avatarEl.textContent = initials || 'EV';
+    }
   }
 
   function toggleMenu(forceOpen) {
@@ -3125,7 +3209,7 @@ const DebugPanel = (() => {
       document.body.appendChild(panel);
     }
     const profile = ProfileStore.read();
-    panel.innerHTML = `APP_VERSION:${APP_VERSION}<br>SW cache:${SW_CACHE_VERSION}<br>mode:${Auth.isLocalMode() ? 'local' : 'supabase'}<br>display:${AppEnvironment.isStandalone() ? 'standalone':'browser'}<br>echoes:${state.echoes.length}<br>artifacts:${ArtifactArchive.listArtifacts().length}<br>profile:${profile.display_name || 'anon'}<br>sw:${navigator.serviceWorker?.controller ? 'active' : 'none'}`;
+    panel.innerHTML = `APP_VERSION:${APP_VERSION}<br>SW cache:${SW_CACHE_VERSION}<br>mode:${Auth.isLocalMode() ? 'local' : 'supabase'}<br>display:${AppEnvironment.isStandalone() ? 'standalone':'browser'}<br>echoes:${state.echoes.length}<br>artifacts:${ArtifactArchive.listArtifacts().length}<br>profile:${escapeHTML(profile.display_name || 'anon')}<br>sw:${navigator.serviceWorker?.controller ? 'active' : 'none'}`;
     console.info('[EchoVault Debug]', { appVersion: APP_VERSION, swCacheVersion: SW_CACHE_VERSION, storageMode: Auth.isLocalMode() ? 'local' : 'supabase', standalone: AppEnvironment.isStandalone(), echoCount: state.echoes.length, artifactCount: ArtifactArchive.listArtifacts().length });
   }
   return { ensure };
