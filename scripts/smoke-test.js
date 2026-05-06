@@ -366,6 +366,23 @@ if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].incl
   failures.push('Heavy framework dependency added unexpectedly');
 }
 
+// Premium Access checks
+[
+  ['UserAccess module exists', 'const UserAccess = (() => {'],
+  ['access storage key exists', 'echovault_access_v1'],
+  ['premium tiers include founder', 'founder'],
+  ['premium tiers include alpha', 'alpha'],
+  ['free export not gated', 'export_vault'],
+  ['free import not gated', 'import_vault'],
+  ['free local mode not gated', 'local_mode'],
+  ['premium alam_chat feature exists', 'alam_chat'],
+  ['premium society gate feature exists', 'society_gate'],
+  ['premium code redemption exists', 'redeemAccessCode'],
+  ['premium settings section exists', 'Premium Access'],
+  ['no payment copy exists', 'no checkout, subscriptions, or payment flow']
+].forEach(([label, marker]) => { if (!script.includes(marker) && !index.includes(marker) && !readme.includes(marker)) failures.push(`Premium Access check failed: ${label}`); });
+if (/stripe|razorpay|paypal|checkout/i.test(script.replace(/no checkout/gi, ''))) failures.push('Forbidden payment implementation detected in script');
+
 if (failures.length) {
   console.error('Smoke test failed:');
   failures.forEach((f) => console.error('- ' + f));

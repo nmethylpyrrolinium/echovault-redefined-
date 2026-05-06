@@ -51,3 +51,9 @@ Notes:
 - OTP/magic-link requests are rate-limited; wait about 60 seconds before requesting another email.
 - Check spam/promotions if the email does not appear.
 - Hosted Supabase email templates must be edited in the Supabase Dashboard.
+
+## Premium access codes (classification only)
+
+EchoVault includes a local-first Premium Access classification system. It does **not** add Stripe, checkout, subscriptions, pricing pages, or any public payment flow. Core vault ownership stays free: existing echoes, echo creation, local mode, auth, export, import, basic profile, timeline/universe, and basic receipts are never gated.
+
+Access state is stored under `echovault_access_v1` and can be unlocked with manually granted Premium, Founder, or Alpha codes. For production, prefer hashed codes in `window.ECHOVAULT_CONFIG.ACCESS_CODE_HASHES` where each key is the SHA-256 hash of the uppercased code and each value is either a tier string (`"premium"`, `"founder"`, `"alpha"`) or an object such as `{ "tier": "founder", "label": "Founder invite" }`. Plain `ACCESS_CODES` arrays are supported for local testing only because frontend config is visible to users.
