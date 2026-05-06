@@ -34,8 +34,8 @@ if (!script.includes('getAuthRedirectUrl')) failures.push('script.js missing get
 if (!script.includes('https://nmethylpyrrolinium.github.io/echovault.com/')) {
   failures.push('script.js missing production auth redirect URL');
 }
-if (!script.toLowerCase().includes('code or magic link')) {
-  failures.push('script.js missing code-or-magic-link guidance text');
+if (!script.includes('Email sent — use the code if shown, or open the magic link.')) {
+  failures.push('script.js missing exact code/magic-link sent guidance text');
 }
 if (script.includes('profile.display_name = legacy;') && script.includes('write(profile);')) {
   failures.push('ProfileStore.read() still calls write(profile) during legacy migration');
@@ -143,6 +143,23 @@ if (!style.includes('#user-chip .chip-sync-label{display:none')) failures.push('
 if (!(style.includes('auto-fit') && style.includes('min(260px'))) failures.push('fun-grid responsive auto-fit missing');
 if (!(style.includes('.cinematic-modal') && style.includes('max-height') && style.includes('overflow-y:auto'))) failures.push('cinematic/fun modal max-height overflow missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache control missing');
+
+
+// Phase 1 game/community foundation checks
+const sw = fs.readFileSync('sw.js','utf8');
+if (!script.includes("phase-1-game-rituals-stability")) failures.push('APP_VERSION not updated to phase-1-game-rituals-stability');
+if (!sw.includes('echovault-v5-game-rituals-stability')) failures.push('sw.js cache not updated to echovault-v5-game-rituals-stability');
+if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');
+['EchoAvatar','echovault_avatar_v1','MaterialEngine','VaultInventory','echovault_inventory_v1','GentleQuests','echovault_quests_v1','EchoSociety — coming later'].forEach((marker) => {
+  if (!script.includes(marker) && !index.includes(marker)) failures.push(`Missing Phase 1 marker: ${marker}`);
+});
+['Void Lantern','Storm Jar','Emotional Museum','ArtifactArchive','signInWithOtp','auth-local-btn','beforeinstallprompt','echovault_echoes_v2','echovault_artifacts_v1'].forEach((marker) => {
+  if (!script.includes(marker) && !index.includes(marker)) failures.push(`Required existing marker missing: ${marker}`);
+});
+if (/\b(chat|comments|followers|leaderboard|likes)\b/i.test(script.replace(/EchoSociety — coming later/g,''))) failures.push('Forbidden social/community implementation wording detected');
+if (script.toLowerCase().includes('chatbot')) failures.push('Chatbot added unexpectedly');
+if (!script.includes('Profile Synced')) failures.push('Vault sync wording does not use Profile Synced');
+if (script.includes('Vault Synced')) failures.push('Vault Synced wording still present despite placeholder echo sync');
 
 // Keep dependency footprint small
 const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };

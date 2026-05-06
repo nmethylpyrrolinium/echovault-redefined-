@@ -112,11 +112,11 @@ window.ECHOVAULT_CONFIG = {
       <input class="name-input" id="auth-otp" type="text" placeholder="6-digit vault code" inputmode="numeric" pattern="[0-9]*" maxlength="6" style="display:none">
       <input class="name-input" id="auth-password" type="password" placeholder="password" autocomplete="current-password" style="display:none">
       <input class="name-input" id="name-input" type="text" placeholder="display name…" maxlength="32" autocomplete="name" style="display:none">
-      <div class="auth-note" id="auth-mode-note" aria-live="polite"></div>
+      <div class="auth-note" id="auth-mode-note" aria-live="polite">Code shown? Enter it below. Link shown? Open it to unlock your vault.<br><small>To receive a visible 6-digit code, the Supabase Magic Link template must include {{ .Token }}.</small></div>
       <div class="auth-actions">
         <button class="name-enter-btn visible" id="auth-send-code-btn">Send Vault Code</button>
         <button class="name-enter-btn" id="auth-verify-code-btn" style="display:none">Verify Code</button>
-        <button class="name-enter-btn" id="auth-resend-code-btn" style="display:none">Resend code</button>
+        <button class="name-enter-btn" id="auth-resend-code-btn" style="display:none">Resend email</button>
         <button class="name-enter-btn" id="auth-toggle-password-btn">Use password instead</button>
         <button class="name-enter-btn" id="auth-signin-btn" style="display:none">Sign in</button>
         <button class="name-enter-btn" id="auth-signup-btn" style="display:none">Create account</button>
@@ -484,6 +484,12 @@ window.ECHOVAULT_CONFIG = {
           <div class="archetype-desc" id="archetype-desc-display">Create echoes to discover your archetype.</div>
         </div>
       </div>
+    </div>
+
+
+    <div class="settings-section">
+      <div class="settings-section-label">Echo Avatar</div>
+      <div id="settings-echo-avatar" class="settings-echo-avatar-mount"></div>
     </div>
 
     <div class="settings-section">

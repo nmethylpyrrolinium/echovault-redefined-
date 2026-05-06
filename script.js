@@ -1,8 +1,9 @@
 (function EchoVault() {
 'use strict';
 
-const APP_VERSION = 'phase-4-5-ui-stability';
-const SW_CACHE_VERSION = 'echovault-v4-ui-stability';
+const APP_VERSION = 'phase-1-game-rituals-stability';
+const SW_CACHE_VERSION = 'echovault-v5-game-rituals-stability';
+console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
   function isStandalone() {
@@ -275,7 +276,8 @@ const Auth = (() => {
     if(error){Toast.show('Profile sync failed; kept local copy.'); return {ok:false,error:error.message};}
     return {ok:true};
   }
-  return { init, signIn, signUp, sendEmailOtp, verifyEmailOtp, signOut, hasSupabase, fetchProfile, upsertProfile, client, SUPABASE_AVATAR_BUCKET, getAuthRedirectUrl, get user(){return user;}, get mode(){return mode;} };
+  function isLocalMode(){ return !client || !user; }
+  return { init, signIn, signUp, sendEmailOtp, verifyEmailOtp, signOut, hasSupabase, fetchProfile, upsertProfile, client, SUPABASE_AVATAR_BUCKET, getAuthRedirectUrl, isLocalMode, get user(){return user;}, get mode(){return mode;} };
 })();
 
 /* ── NAVIGATION ── */
@@ -333,6 +335,7 @@ const Settings = (() => {
     document.body.style.overflow = 'hidden';
     populateStats();
     populateArchetype();
+    populateEchoAvatar();
   }
   function close() {
     overlay?.classList.remove('open');
@@ -362,6 +365,12 @@ const Settings = (() => {
     if (nameEl) nameEl.textContent = arch.archetypeName;
     if (descEl) descEl.textContent = `${arch.archetypeDescription} · ${p.emotionalWeather || 'shifting sky'}`;
     if (orbEl && dom) orbEl.style.background = `radial-gradient(circle at 38% 35%,${MOOD_COLORS[dom]},${MOOD_COLORS[dom]}44)`;
+  }
+  function populateEchoAvatar() {
+    const mount = document.getElementById('settings-echo-avatar');
+    if (!mount) return;
+    mount.innerHTML = EchoAvatar.render();
+    EchoAvatar.bind();
   }
   async function init() {
     const profile = ProfileStore.read();
@@ -393,7 +402,7 @@ const Settings = (() => {
       ProfileStore.write(payload);
       localStorage.setItem(USER_KEY, payload.display_name || payload.username || localStorage.getItem(USER_KEY) || 'you');
       UserChip.refresh();
-  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Vault Synced" : "Local Vault");
+  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Profile Synced" : "Local Vault");
       const status = document.getElementById('settings-save-status');
       if (status) { status.textContent = '✓ saved to your universe'; status.classList.add('show'); setTimeout(() => status.classList.remove('show'), 2500); }
     });
@@ -483,7 +492,7 @@ const Login = (() => {
     if (!authResendCode || authResendCode.style.display === 'none') return;
     const remaining = Math.max(0, Math.ceil((otpCooldownUntil - Date.now())/1000));
     authResendCode.disabled = remaining > 0;
-    authResendCode.textContent = remaining > 0 ? `Resend code (${remaining}s)` : 'Resend code';
+    authResendCode.textContent = remaining > 0 ? `Resend email (${remaining}s)` : 'Resend email';
     if (remaining > 0) setTimeout(tickCooldown, 250);
   }
 
@@ -494,7 +503,8 @@ const Login = (() => {
     setButtonLoading(authSendCode, false, 'Send Vault Code', 'Sending…');
     if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
     setOtpUiStep(true);
-    Toast.show('Email sent. Use the code if shown, or open the magic link (code or magic link both work).');
+    Toast.show('Email sent — use the code if shown, or open the magic link.', 4600);
+    if (authModeNote) authModeNote.innerHTML = 'Code shown? Enter it below. Link shown? Open it to unlock your vault.<br><small>To receive a visible 6-digit code, the Supabase Magic Link template must include {{ .Token }}.</small>';
     startOtpCooldown(60);
   }
 
@@ -509,7 +519,7 @@ const Login = (() => {
     const profile = await Auth.fetchProfile(); if (profile) ProfileStore.write(profile);
     await Auth.upsertProfile({ ...ProfileStore.read(), display_name: nameInput.value.trim() || ProfileStore.read().display_name });
     UserChip.refresh();
-  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Vault Synced" : "Local Vault"); Toast.show('Vault unlocked. Welcome back.'); enterApp();
+  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Profile Synced" : "Local Vault"); Toast.show('Vault unlocked. Welcome back.'); enterApp();
   }
 
   async function resendEmailOtp(email){
@@ -546,7 +556,7 @@ const Login = (() => {
       if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
       const profile = await Auth.fetchProfile(); if (profile) ProfileStore.write(profile);
       UserChip.refresh();
-  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Vault Synced" : "Local Vault"); enterApp();
+  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Profile Synced" : "Local Vault"); enterApp();
     });
 
     authSignUp?.addEventListener('click', async () => {
@@ -1451,6 +1461,10 @@ const EntryForm = (() => {
     };
     state.echoes.unshift(echo);
     Storage.save(state.echoes);
+    const discoveredMaterials = MaterialEngine.generateForEcho(echo);
+    VaultInventory.addMaterials(discoveredMaterials);
+    MaterialEngine.toast(discoveredMaterials);
+    GentleQuests.evaluate('echo_created', echo);
 
     const cx = window.innerWidth/2, cy = window.innerHeight/2;
     Ripple.spawn(cx, cy, MOOD_COLORS[echo.mood], echo.void, echo.intensity);
@@ -2095,10 +2109,102 @@ const ArtifactArchive = (() => {
   const KEY='echovault_artifacts_v1';
   const listArtifacts=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch{return[]}};
   const save=(arr)=>localStorage.setItem(KEY,JSON.stringify(arr));
-  const saveArtifact=(artifact)=>{const arr=listArtifacts();arr.unshift({...artifact,id:artifact.id||`art_${Date.now()}`,created_at:new Date().toISOString()});save(arr);return arr[0];};
+  const saveArtifact=(artifact)=>{const arr=listArtifacts();arr.unshift({...artifact,id:artifact.id||`art_${Date.now()}`,created_at:new Date().toISOString()});save(arr);GentleQuests?.evaluate?.('artifact_saved', artifact);return arr[0];};
   const deleteArtifact=(id)=>save(listArtifacts().filter(a=>a.id!==id));
   const toggleFavorite=(id)=>save(listArtifacts().map(a=>a.id===id?{...a,favorite:!a.favorite}:a));
   return {KEY,saveArtifact,listArtifacts,deleteArtifact,toggleFavorite};
+})();
+
+
+const MaterialEngine = (() => {
+  const moodMaterials = {
+    calm:'Calm Shard', chaos:'Storm Spark', reflective:'Moon Thread', anxious:'Compass Dust', joyful:'Bloom Seed', empty:'Void Stone'
+  };
+  function generateForEcho(echo={}) {
+    const out = [];
+    const add = (name, qty=1) => out.push({ name, qty });
+    add(moodMaterials[echo.mood] || 'Moon Thread', echo.intensity >= 7 ? 2 : 1);
+    if ((echo.silence || 0) >= 7) add('Silence Glass', 1);
+    if ((echo.intensity || 0) >= 8) add('Pressure Ember', 1);
+    if (echo.void) add('Void Core', 1);
+    return out;
+  }
+  function toast(materials=[]) {
+    if (!materials.length) return;
+    Toast.show(materials.map(m => `+${m.qty} ${m.name}${m.qty > 1 ? 's' : ''}`).join(' · '), 2800);
+  }
+  return { generateForEcho, toast };
+})();
+
+const VaultInventory = (() => {
+  const KEY = 'echovault_inventory_v1';
+  function load(){ try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } }
+  function save(inv){ localStorage.setItem(KEY, JSON.stringify(inv || {})); return inv || {}; }
+  function addMaterials(materials=[]) {
+    const inv = load();
+    materials.forEach(({name, qty=1}) => { inv[name] = (inv[name] || 0) + qty; });
+    save(inv);
+    return inv;
+  }
+  function getTotals(){ return load(); }
+  function clearInventoryForTestingOnly(){ localStorage.removeItem(KEY); }
+  return { KEY, load, save, addMaterials, getTotals, clearInventoryForTestingOnly };
+})();
+
+const GentleQuests = (() => {
+  const KEY = 'echovault_quests_v1';
+  const catalog = [
+    { id:'void_echo', text:'Create one echo without words.', reward:{ name:'Void Stone', qty:1 }, test:(event, data)=>event==='echo_created' && data?.void },
+    { id:'save_artifact', text:'Save one artifact.', reward:{ name:'Moon Thread', qty:1 }, test:(event)=>event==='artifact_saved' },
+    { id:'light_lantern', text:'Light the Void Lantern once.', reward:{ name:'Moon Thread', qty:1 }, test:(event)=>event==='lantern_lit' },
+    { id:'visit_weather', text:'Visit the Weather Room.', reward:{ name:'Calm Shard', qty:1 }, test:(event)=>event==='weather_room_visited' },
+    { id:'low_intensity', text:'Create one low-intensity echo.', reward:{ name:'Silence Glass', qty:1 }, test:(event, data)=>event==='echo_created' && (data?.intensity || 0) <= 3 },
+    { id:'export_receipt', text:'Export a receipt.', reward:{ name:'Bloom Seed', qty:1 }, test:(event)=>event==='receipt_exported' }
+  ];
+  function load(){ try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } }
+  function save(data){ localStorage.setItem(KEY, JSON.stringify(data || {})); return data || {}; }
+  function todayId(){ return catalog[new Date().getDate() % catalog.length].id; }
+  function current(){ const q = catalog.find(x => x.id === todayId()) || catalog[0]; const data = load(); return { ...q, completed: Boolean(data[q.id]?.completed) }; }
+  function evaluate(event, data) {
+    const q = current();
+    if (q.completed || !q.test(event, data)) return false;
+    const saved = load();
+    saved[q.id] = { completed:true, completed_at:new Date().toISOString() };
+    save(saved);
+    VaultInventory.addMaterials([q.reward]);
+    Toast.show(`Gentle Quest complete · +${q.reward.qty} ${q.reward.name}`, 3200);
+    return true;
+  }
+  return { KEY, current, evaluate, load, save };
+})();
+
+const EchoAvatar = (() => {
+  const KEY = 'echovault_avatar_v1';
+  const roleMap = {
+    stillLake:['Lantern Keeper','blue-gold stillwater','hooded coat with lantern seams','🏮'],
+    electricStorm:['Stormwright','rose lightning','glasswork jacket with copper lines','⚡'],
+    nightArchivist:['Moon Archivist','violet moon haze','ink cloak with silver pockets','🌙'],
+    tremblingCompass:['Weather Cartographer','amber wind-ring','soft field coat with compass thread','🧭'],
+    bloomingField:['Bloom Tender','green dawn bloom','garden wrap with seed charms','🌸'],
+    quietAbyss:['Void Keeper','indigo eclipse','dark mantle with quiet stars','🌑'],
+    shiftingSky:['Signal Courier','prism skyglow','runner scarf with signal beads','✦'],
+    glassComet:['Relic Runner','crystal ember trail','comet boots and relic satchel','☄️'],
+    softWitness:['Archive Witness','mist gold aura','warm shawl with archive pins','👁️']
+  };
+  function load(){ try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } }
+  function save(avatar){ localStorage.setItem(KEY, JSON.stringify(avatar)); return avatar; }
+  function build() {
+    const arch = ArchetypeEngine.compute(PatternEngine.analyze(state.echoes));
+    const profile = ProfileStore.read();
+    const key = arch.archetypeKey || 'shiftingSky';
+    const [role, aura, outfit_hint, companion_symbol] = roleMap[key] || roleMap.shiftingSky;
+    const previous = load();
+    return save({ avatar_name: profile.display_name || previous.avatar_name || 'Echo Voyager', archetype_key:key, role, aura, outfit_hint, companion_symbol, created_at:previous.created_at || new Date().toISOString(), updated_at:new Date().toISOString() });
+  }
+  function regenerateRole(){ return build(); }
+  function render(){ const avatar = Object.keys(load()).length ? load() : build(); const arch = ArchetypeEngine.compute(PatternEngine.analyze(state.echoes)); return `<div class="echo-avatar-card"><div class="echo-avatar-orb"><span>${avatar.companion_symbol}</span></div><div class="echo-avatar-kicker">Echo Avatar</div><h4>${avatar.avatar_name}</h4><div class="echo-avatar-role">${avatar.role}</div><p>Aura: ${avatar.aura}</p><p>Archetype: ${arch.archetypeName}</p><p class="echo-avatar-outfit">${avatar.outfit_hint}</p><div class="echo-avatar-actions"><button class="receipt-action-btn" id="avatar-generate-btn">Generate from my profile</button><button class="receipt-action-btn" id="avatar-regenerate-btn">Regenerate role</button><button class="receipt-action-btn" disabled>Use as Society Character · coming soon</button></div></div>`; }
+  function bind(){ document.getElementById('avatar-generate-btn')?.addEventListener('click',()=>{build(); refreshEchoDependentUI(); Toast.show('Echo Avatar refreshed.');}); document.getElementById('avatar-regenerate-btn')?.addEventListener('click',()=>{regenerateRole(); refreshEchoDependentUI(); Toast.show('Role regenerated locally.');}); }
+  return { KEY, load, save, build, regenerateRole, render, bind };
 })();
 
 const CinematicCardRenderer = (() => {
@@ -2215,6 +2321,8 @@ const Rituals = (() => {
     if (type === 'museum') {
       const w = WeatherMap.compute(state.echoes);
       WeatherMap.render(document.getElementById('weather-map-canvas'), w);
+      GentleQuests.evaluate('weather_room_visited', w);
+      EchoAvatar.bind();
       document.querySelectorAll('.museum-tab').forEach(btn=>btn.addEventListener('click',()=>{
         const room = btn.dataset.room;
         document.querySelectorAll('.museum-tab,.museum-room').forEach(el=>el.classList.remove('active'));
@@ -2234,7 +2342,8 @@ const Rituals = (() => {
       document.getElementById('save-receipt-latest')?.addEventListener('click',()=>{
         const data = ReceiptRenderer.openLatest();
         ArtifactArchive.saveArtifact({ type:'receipt', title:'Mood Receipt', subtitle:data.insight, data });
-        Toast.show('Receipt saved ✓');
+        GentleQuests.evaluate('receipt_exported');
+      Toast.show('Receipt saved ✓');
       });
     }
     if (type === 'lantern') initLanternInteraction();
@@ -2294,8 +2403,8 @@ const Rituals = (() => {
   }
 
 
-  function initLanternInteraction(){const canvas=document.getElementById('lantern-canvas');if(!canvas)return;const ctx=canvas.getContext('2d');let glow=.4,taps=0,time=0;const mood=PatternEngine.analyze(state.echoes).dominantMood||'reflective';const particles=[];const msg=document.getElementById('lantern-msg');const scene=document.querySelector('.lantern-scene');const frame=()=>{const w=canvas.width,h=canvas.height;time+=.012;ctx.clearRect(0,0,w,h);ctx.fillStyle='#07090f';ctx.fillRect(0,0,w,h);ctx.fillStyle='rgba(80,90,110,.12)';ctx.fillRect(0,h*.7,w,h*.3);const r=28+glow*8+Math.sin(time)*2;const g=ctx.createRadialGradient(w/2,h*.56,0,w/2,h*.56,r*2.2);g.addColorStop(0,`rgba(240,198,115,${.2+glow*.1})`);g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.beginPath();ctx.arc(w/2,h*.56,r*2.2,0,6.28);ctx.fill();ctx.fillStyle=`rgba(243,201,126,${.5+glow*.06})`;ctx.beginPath();ctx.arc(w/2,h*.58,r,0,6.28);ctx.fill();for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.y-=p.vy;p.x+=p.vx;p.life-=.02;ctx.fillStyle=`rgba(248,214,155,${Math.max(0,p.life)})`;ctx.fillRect(p.x,p.y,2,2);if(p.life<=0)particles.splice(i,1);}requestAnimationFrame(frame)};frame();canvas.addEventListener('click',()=>{taps++;glow=Math.min(8,glow+1);scene?.setAttribute('data-state',taps>=4?'alive':(taps>=2?'faint':'unlit'));for(let i=0;i<6+taps;i++)particles.push({x:canvas.width/2+(Math.random()*36-18),y:canvas.height*.55,vx:Math.random()*.8-.4,vy:1+Math.random()*1.4,life:.8});if(taps===1)msg.textContent='The lantern wakes.';if(taps===2)msg.textContent='A faint warmth answers.';if(taps>=4){msg.textContent='Still here is still a signal.';document.getElementById('lantern-actions').hidden=false;scene?.classList.add('ritual-complete');}});document.getElementById('save-lantern')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'lantern',title:'Void Lantern',subtitle:'Still here is still a signal.',data:{glowLevel:glow,mood,created_at:new Date().toISOString()}});Toast.show('Lantern saved to museum ✓');});document.getElementById('dl-lantern')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderRelicCard({title:'Void Lantern',rarity:'luminous',coordinates:'EV-LIGHT',mood}),'void-lantern-card.png'));}
-  function initStormJarInteraction(){const canvas=document.getElementById('storm-canvas');if(!canvas)return;const ctx=canvas.getContext('2d');const p=PatternEngine.analyze(state.echoes);let sparks=Math.max(10,Math.round((p.averageIntensity||4)*2));let taps=0,shake=0,flash=0;const msg=document.getElementById('storm-msg');const scene=document.querySelector('.storm-scene');const draw=()=>{const w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#080a12';ctx.fillRect(0,0,w,h);const ox=(Math.random()-.5)*shake;ctx.save();ctx.translate(ox,0);ctx.strokeStyle='rgba(180,200,255,.65)';ctx.lineWidth=2;ctx.strokeRect(w/2-70,h/2-90,140,180);ctx.restore();for(let i=0;i<sparks;i++){ctx.strokeStyle='rgba(222,82,120,.6)';ctx.beginPath();const x=w/2-50+Math.random()*100,y=h/2-70+Math.random()*140;ctx.moveTo(x,y);ctx.lineTo(x+Math.random()*22-11,y+Math.random()*22-11);ctx.stroke();}if(flash>0){ctx.strokeStyle=`rgba(255,230,180,${flash})`;ctx.beginPath();ctx.moveTo(w/2-20,h/2-70);ctx.lineTo(w/2+16,h/2-30);ctx.lineTo(w/2-8,h/2+20);ctx.stroke();flash=Math.max(0,flash-.06);}shake*=.88;requestAnimationFrame(draw)};draw();canvas.addEventListener('click',()=>{taps++;sparks=Math.min(52,sparks+4);shake=Math.min(14,shake+4);scene?.setAttribute('data-state',taps>=3?'contained':(taps>=2?'awake':'still'));if(taps===1)msg.textContent='Sparks begin to gather.';if(taps===2){msg.textContent='The jar trembles.';flash=.9;}if(taps>=3){msg.textContent='The storm has shape now.';document.getElementById('storm-actions').hidden=false;scene?.classList.add('ritual-complete');}});document.getElementById('save-storm')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'stormjar',title:'Storm Jar',subtitle:'The storm has shape now.',data:{sparkCount:sparks,mood:'chaos',created_at:new Date().toISOString()}});Toast.show('Storm saved to museum ✓');});document.getElementById('dl-storm')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderWeatherCard({name:'Storm Jar',summary:'The storm has shape now.',mood:'chaos'}),'storm-jar-card.png'));}
+  function initLanternInteraction(){const canvas=document.getElementById('lantern-canvas');if(!canvas)return;const ctx=canvas.getContext('2d');let glow=.4,taps=0,time=0,completed=false;const mood=PatternEngine.analyze(state.echoes).dominantMood||'reflective';const particles=[];const msg=document.getElementById('lantern-msg');const scene=document.querySelector('.lantern-scene');const frame=()=>{const w=canvas.width,h=canvas.height;time+=.012;ctx.clearRect(0,0,w,h);ctx.fillStyle='#07090f';ctx.fillRect(0,0,w,h);ctx.fillStyle='rgba(80,90,110,.12)';ctx.fillRect(0,h*.7,w,h*.3);const r=28+glow*8+Math.sin(time)*2;const g=ctx.createRadialGradient(w/2,h*.56,0,w/2,h*.56,r*2.2);g.addColorStop(0,`rgba(240,198,115,${.2+glow*.1})`);g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.beginPath();ctx.arc(w/2,h*.56,r*2.2,0,6.28);ctx.fill();ctx.fillStyle=`rgba(243,201,126,${.5+glow*.06})`;ctx.beginPath();ctx.arc(w/2,h*.58,r,0,6.28);ctx.fill();for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.y-=p.vy;p.x+=p.vx;p.life-=.02;ctx.fillStyle=`rgba(248,214,155,${Math.max(0,p.life)})`;ctx.fillRect(p.x,p.y,2,2);if(p.life<=0)particles.splice(i,1);}if(document.getElementById('lantern-canvas') && document.getElementById('fun-modal')?.classList.contains('open')) requestAnimationFrame(frame)};frame();canvas.addEventListener('click',()=>{taps++;glow=Math.min(8,glow+1);scene?.setAttribute('data-state',taps>=4?'alive':(taps>=2?'faint':'unlit'));for(let i=0;i<6+taps;i++)particles.push({x:canvas.width/2+(Math.random()*36-18),y:canvas.height*.55,vx:Math.random()*.8-.4,vy:1+Math.random()*1.4,life:.8});if(taps===1)msg.textContent='The lantern wakes.';if(taps===2)msg.textContent='A faint warmth answers.';if(taps>=4){msg.textContent='Still here is still a signal.';document.getElementById('lantern-actions').hidden=false;scene?.classList.add('ritual-complete');if(!completed){completed=true;GentleQuests.evaluate('lantern_lit');VaultInventory.addMaterials([{name:'Moon Thread',qty:1}]);Toast.show('+1 Moon Thread');}}});document.getElementById('save-lantern')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'lantern',title:'Void Lantern',subtitle:'Still here is still a signal.',data:{glowLevel:glow,mood,created_at:new Date().toISOString()}});Toast.show('Lantern saved to museum ✓');});document.getElementById('dl-lantern')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderRelicCard({title:'Void Lantern',rarity:'luminous',coordinates:'EV-LIGHT',mood}),'void-lantern-card.png'));}
+  function initStormJarInteraction(){const canvas=document.getElementById('storm-canvas');if(!canvas)return;const ctx=canvas.getContext('2d');const p=PatternEngine.analyze(state.echoes);let sparks=Math.max(10,Math.round((p.averageIntensity||4)*2));let taps=0,shake=0,flash=0;const msg=document.getElementById('storm-msg');const scene=document.querySelector('.storm-scene');const draw=()=>{const w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#080a12';ctx.fillRect(0,0,w,h);const ox=(Math.random()-.5)*shake;ctx.save();ctx.translate(ox,0);ctx.strokeStyle='rgba(180,200,255,.65)';ctx.lineWidth=2;ctx.strokeRect(w/2-70,h/2-90,140,180);ctx.restore();for(let i=0;i<sparks;i++){ctx.strokeStyle='rgba(222,82,120,.6)';ctx.beginPath();const x=w/2-50+Math.random()*100,y=h/2-70+Math.random()*140;ctx.moveTo(x,y);ctx.lineTo(x+Math.random()*22-11,y+Math.random()*22-11);ctx.stroke();}if(flash>0){ctx.strokeStyle=`rgba(255,230,180,${flash})`;ctx.beginPath();ctx.moveTo(w/2-20,h/2-70);ctx.lineTo(w/2+16,h/2-30);ctx.lineTo(w/2-8,h/2+20);ctx.stroke();flash=Math.max(0,flash-.06);}shake*=.88;if(document.getElementById('storm-canvas') && document.getElementById('fun-modal')?.classList.contains('open')) requestAnimationFrame(draw)};draw();canvas.addEventListener('click',()=>{taps++;sparks=Math.min(52,sparks+4);shake=Math.min(14,shake+4);scene?.setAttribute('data-state',taps>=3?'contained':(taps>=2?'awake':'still'));if(taps===1)msg.textContent='Sparks begin to gather.';if(taps===2){msg.textContent='The jar trembles.';flash=.9;}if(taps>=3){msg.textContent='The storm has shape now.';document.getElementById('storm-actions').hidden=false;scene?.classList.add('ritual-complete');}});document.getElementById('save-storm')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'stormjar',title:'Storm Jar',subtitle:'The storm has shape now.',data:{sparkCount:sparks,mood:'chaos',created_at:new Date().toISOString()}});Toast.show('Storm saved to museum ✓');});document.getElementById('dl-storm')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderWeatherCard({name:'Storm Jar',summary:'The storm has shape now.',mood:'chaos'}),'storm-jar-card.png'));}
   function close() { modal.classList.remove('open'); }
 
   /* Character image pool */
@@ -2585,12 +2694,17 @@ const Rituals = (() => {
   }
   function buildMuseum(){
     const echoes = state.echoes || [];
-    if(!echoes.length) return `<div class="museum-shell"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-empty">The museum is quiet. Create echoes to awaken its rooms.</div></div>`;
+    const saved=ArtifactArchive.listArtifacts();
+    const materials = VaultInventory.getTotals();
+    const materialRows = Object.entries(materials).map(([name,count])=>`<div class="material-pill"><span>${name}</span><b>${count}</b></div>`).join('') || '<div class="museum-empty">No materials discovered yet. Create an echo to uncover the first fragment.</div>';
+    const quest = GentleQuests.current();
+    const avatarHtml = EchoAvatar.render();
+    const societyTeaser = `<div class="echo-society-teaser"><div class="echo-avatar-kicker">EchoSociety — coming later</div><p>Your avatar will one day carry signals through shared districts. For now, your society begins inside your vault.</p></div>`;
+    if(!echoes.length) return `<div class="museum-shell"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}`}</small></div>${avatarHtml}<section class="vault-materials"><h4>Vault Materials</h4>${materialRows}</section>${societyTeaser}<div class="museum-empty">The museum is quiet. Create echoes to awaken its rooms.</div></div>`;
     const relics=RelicEngine.fromEchoes(echoes);
     const weather=WeatherMap.compute(echoes);
     const arch=ArchetypeEngine.compute(PatternEngine.analyze(echoes));
     const tracks=SOUNDPRINTS[weather.mood]||SOUNDPRINTS.reflective;
-    const saved=ArtifactArchive.listArtifacts();
     const relicVisual = (name) => {
       const key = name.toLowerCase();
       if (key.includes('signal')) return 'relic-star';
@@ -2599,7 +2713,8 @@ const Rituals = (() => {
       if (key.includes('comet')) return 'relic-comet';
       return 'relic-token';
     };
-    return `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-meta"><span>${echoes.length} echoes</span><span>${saved.length} artifacts</span><span>${weather.name}</span><span>${arch.archetypeName}</span></div></header><nav class="museum-tabs">${['weather','archetype','soundprint','relics','receipts','archive','lanterns'].map(r=>`<button class="museum-tab ${r==='weather'?'active':''}" data-room="${r}">${r}</button>`).join('')}</nav><div class="museum-room active" data-room-panel="weather"><h4>Weather Room</h4><p>${weather.summary}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div></div><div class="museum-room" data-room-panel="archetype"><h4>Archetype Hall</h4><p>${arch.archetypeName} · ${arch.archetypeDescription}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></div><div class="museum-room" data-room-panel="soundprint"><h4>Soundprint Wall</h4>${tracks.slice(0,3).map(t=>`<div class='track-item'><div><b>${t.song}</b><small>${t.artist}</small></div><a class='track-link spotify' href='${t.spotify}' target='_blank' rel='noopener noreferrer'>Spotify</a><a class='track-link youtube' href='${t.youtube}' target='_blank' rel='noopener noreferrer'>YouTube</a></div>`).join('')}<button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button></div><div class="museum-room" data-room-panel="relics"><h4>Memory Relics</h4>${relics.map((r,i)=>`<article class='relic-item' style='--delay:${i * 120}ms'><div class='relic-visual ${relicVisual(r.title)}'></div><b>${r.title}</b><span class='rarity'>${r.rarity}</span><small>${r.coordinates}</small><p>${r.description}</p><button class='receipt-action-btn relic-dl' data-id='${r.id}'>Download Card</button><button class='receipt-action-btn relic-save' data-id='${r.id}'>Save Artifact</button></article>`).join('')}</div><div class="museum-room" data-room-panel="receipts"><h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button></div><div class="museum-room" data-room-panel="archive"><h4>Artifact Archive</h4><div id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${a.title}</b><small>${a.type}</small><button class='receipt-action-btn art-fav' data-id='${a.id}'>☆</button><button class='receipt-action-btn art-del' data-id='${a.id}'>Delete</button></div>`).join('') || 'No artifacts saved yet. Create one from a ritual.'}</div></div><div class="museum-room" data-room-panel="lanterns"><h4>Void Lanterns</h4><p>Still here is still a signal.</p></div></div>`;
+    const tabs = ['weather','avatar','materials','archetype','soundprint','relics','receipts','archive','lanterns'];
+    return `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-meta"><span>${echoes.length} echoes</span><span>${saved.length} artifacts</span><span>${weather.name}</span><span>${arch.archetypeName}</span></div></header><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}`}</small></div><nav class="museum-tabs">${tabs.map(r=>`<button class="museum-tab ${r==='weather'?'active':''}" data-room="${r}">${r}</button>`).join('')}</nav><div class="museum-room active" data-room-panel="weather"><h4>Weather Room</h4><p>${weather.summary}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div></div><div class="museum-room" data-room-panel="avatar"><h4>Echo Avatar</h4>${avatarHtml}${societyTeaser}</div><div class="museum-room" data-room-panel="materials"><h4>Vault Materials</h4><section class="vault-materials">${materialRows}</section></div><div class="museum-room" data-room-panel="archetype"><h4>Archetype Hall</h4><p>${arch.archetypeName} · ${arch.archetypeDescription}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></div><div class="museum-room" data-room-panel="soundprint"><h4>Soundprint Wall</h4>${tracks.slice(0,3).map(t=>`<div class='track-item'><div><b>${t.song}</b><small>${t.artist}</small></div><a class='track-link spotify' href='${t.spotify}' target='_blank' rel='noopener noreferrer'>Spotify</a><a class='track-link youtube' href='${t.youtube}' target='_blank' rel='noopener noreferrer'>YouTube</a></div>`).join('')}<button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button></div><div class="museum-room" data-room-panel="relics"><h4>Memory Relics</h4>${relics.map((r,i)=>`<article class='relic-item mood-${r.mood}' style='--delay:${i * 120}ms'><div class='relic-visual ${relicVisual(r.title)}'></div><b>${r.title}</b><span class='rarity'>${r.rarity}</span><small>${r.coordinates}</small><p>${r.description}</p><button class='receipt-action-btn relic-dl' data-id='${r.id}'>Download Card</button><button class='receipt-action-btn relic-save' data-id='${r.id}'>Save Artifact</button></article>`).join('')}</div><div class="museum-room" data-room-panel="receipts"><h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button></div><div class="museum-room" data-room-panel="archive"><h4>Artifact Archive</h4><div class="artifact-shelf" id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${a.title}</b><small>${a.type}</small><button class='receipt-action-btn art-fav' data-id='${a.id}'>☆</button><button class='receipt-action-btn art-del' data-id='${a.id}'>Delete</button></div>`).join('') || 'No artifacts saved yet. Create one from a ritual.'}</div></div><div class="museum-room" data-room-panel="lanterns"><h4>Void Lanterns</h4><p>Still here is still a signal.</p></div></div>`;
   }
   function startConflictAnimation() {
     const canvas = document.getElementById('conflict-canvas');
@@ -2849,7 +2964,7 @@ const EchoSync = (() => {
       return { ok: false, reason: 'not_authenticated' };
     }
 
-    VaultPulse.set('synced', 'Vault Synced');
+    VaultPulse.set('synced', 'Profile Synced');
     return { ok: true };
   }
 
@@ -2872,7 +2987,7 @@ const MigrationFlow = (() => {
         if (window.EchoSync?.syncLocalToCloud) {
           const result = await window.EchoSync.syncLocalToCloud();
           if (result?.ok) {
-            VaultPulse.set('synced', 'Vault Synced');
+            VaultPulse.set('synced', 'Profile Synced');
           } else if (result?.reason === 'not_authenticated') {
             VaultPulse.set('local', 'Local Vault');
             Toast.show('Sign in to sync. Your local vault is still safe.');
@@ -2989,7 +3104,7 @@ async function init() {
     console.warn('Auth initialization failed; continuing in local mode.', error);
   }
   UserChip.refresh();
-  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Vault Synced" : "Local Vault");
+  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Profile Synced" : "Local Vault");
   MigrationFlow.init();
   PWAInstall.init();
   Login.init();
@@ -3010,35 +3125,42 @@ const DebugPanel = (() => {
       document.body.appendChild(panel);
     }
     const profile = ProfileStore.read();
-    panel.innerHTML = `v${APP_VERSION}<br>mode:${Auth.isLocalMode() ? 'local' : 'supabase'}<br>standalone:${AppEnvironment.isStandalone() ? 'yes':'no'}<br>echoes:${state.echoes.length}<br>profile:${profile.display_name || 'anon'}<br>sw:${navigator.serviceWorker?.controller ? 'active' : 'none'}`;
-    console.info('[EchoVault Debug]', { appVersion: APP_VERSION, storageMode: Auth.isLocalMode() ? 'local' : 'supabase', standalone: AppEnvironment.isStandalone(), echoCount: state.echoes.length, cacheVersion: SW_CACHE_VERSION });
+    panel.innerHTML = `APP_VERSION:${APP_VERSION}<br>SW cache:${SW_CACHE_VERSION}<br>mode:${Auth.isLocalMode() ? 'local' : 'supabase'}<br>display:${AppEnvironment.isStandalone() ? 'standalone':'browser'}<br>echoes:${state.echoes.length}<br>artifacts:${ArtifactArchive.listArtifacts().length}<br>profile:${profile.display_name || 'anon'}<br>sw:${navigator.serviceWorker?.controller ? 'active' : 'none'}`;
+    console.info('[EchoVault Debug]', { appVersion: APP_VERSION, swCacheVersion: SW_CACHE_VERSION, storageMode: Auth.isLocalMode() ? 'local' : 'supabase', standalone: AppEnvironment.isStandalone(), echoCount: state.echoes.length, artifactCount: ArtifactArchive.listArtifacts().length });
   }
   return { ensure };
 })();
 
 const ServiceWorkerManager = (() => {
-  let reloaded = false;
+  const UPDATE_GUARD_KEY = 'ev_sw_update_reload_guard';
+  const LAST_VERSION_KEY = 'ev_sw_last_version';
   async function register() {
     if (!('serviceWorker' in navigator)) return;
+    if (sessionStorage.getItem(LAST_VERSION_KEY) === APP_VERSION) sessionStorage.removeItem(UPDATE_GUARD_KEY);
+    sessionStorage.setItem(LAST_VERSION_KEY, APP_VERSION);
     const reg = await navigator.serviceWorker.register('sw.js');
+    const refreshOnce = () => {
+      if (sessionStorage.getItem(UPDATE_GUARD_KEY) === APP_VERSION) return;
+      sessionStorage.setItem(UPDATE_GUARD_KEY, APP_VERSION);
+      Toast.show('New EchoVault version ready — refreshing…', 3200);
+      setTimeout(() => location.reload(), 850);
+    };
     const onNewWorker = (worker) => {
       if (!worker) return;
       worker.addEventListener('statechange', () => {
-        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-          Toast.show('EchoVault updated — reload to refresh', 3500);
-          if (!reloaded && !sessionStorage.getItem('ev_sw_reloaded')) {
-            reloaded = true;
-            sessionStorage.setItem('ev_sw_reloaded', '1');
-            setTimeout(() => location.reload(), 900);
-          }
-        }
+        if ((worker.state === 'installed' || worker.state === 'activated') && navigator.serviceWorker.controller) refreshOnce();
       });
     };
-    onNewWorker(reg.installing);
+    onNewWorker(reg.installing || reg.waiting);
     reg.addEventListener('updatefound', () => onNewWorker(reg.installing));
+    navigator.serviceWorker.addEventListener('controllerchange', refreshOnce);
     navigator.serviceWorker.addEventListener('message', (event) => {
-      if (event.data?.type === 'SW_ACTIVATED') DebugPanel.ensure();
+      if (event.data?.type === 'SW_ACTIVATED') {
+        if (event.data?.appVersion === APP_VERSION) sessionStorage.removeItem(UPDATE_GUARD_KEY);
+        DebugPanel.ensure();
+      }
     });
+    reg.update?.();
   }
   return { register };
 })();
