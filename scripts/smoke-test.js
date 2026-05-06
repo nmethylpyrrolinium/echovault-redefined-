@@ -14,6 +14,12 @@ const pkg = fs.existsSync('package.json')
   ? JSON.parse(fs.readFileSync('package.json','utf8'))
   : { dependencies:{}, devDependencies:{} };
 const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+const societyWeatherStart = script.indexOf('const SocietyWeather = (() => {');
+const societyWeatherEnd = societyWeatherStart >= 0 ? script.indexOf('function getSocietyDistrictSuggestion', societyWeatherStart) : -1;
+const societyWeatherSource = societyWeatherStart >= 0 && societyWeatherEnd > societyWeatherStart ? script.slice(societyWeatherStart, societyWeatherEnd) : '';
+const societySignalsStart = script.indexOf('const SocietySignals = (() => {');
+const societySignalsEnd = societySignalsStart >= 0 ? script.indexOf('const SocietySync = (() => {', societySignalsStart) : -1;
+const societySignalsSource = societySignalsStart >= 0 && societySignalsEnd > societySignalsStart ? script.slice(societySignalsStart, societySignalsEnd) : '';
 
 // Phase 1 — Supabase/Auth/Profile/PWA checks
 if (!index.includes('window.ECHOVAULT_CONFIG')) failures.push('index.html missing window.ECHOVAULT_CONFIG');
@@ -195,9 +201,9 @@ if (!script.includes('Join EchoSociety first. Your vault is still private.')) fa
 if (!script.includes('You stayed private.') || !script.includes('EchoSociety will not receive signals.')) failures.push('Private-mode society panel copy missing');
 if (!script.includes('updateSocietyConsentUI({ privateState:true })') || !script.includes('city.hidden = !consent')) failures.push('society-stay-private-btn does not hide or disable society-city');
 if (!/function createSignal[\s\S]*if \(!requireConsent\(\)\) return null;/.test(script)) failures.push('SocietySignals.createSignal missing consent guard before signal creation');
-if (!/function addReaction[\s\S]*if \(!requireConsent\(\)\) return null;/.test(script)) failures.push('SocietySignals.addReaction missing consent guard');
+if (!/function addReaction[\s\S]*(requireConsent\(\)|SocietyPrivacy\.requireConsent\(\))/.test(script)) failures.push('SocietySignals.addReaction missing consent guard');
 if (!script.includes('SocietySignals.revokeConsent(); populateSocietyPrivacy(); updateSocietyConsentUI')) failures.push('Settings revoke does not update active Society UI');
-if (/\b(open chat|chat module|direct message|dm module|user search|public diary feed|like counts?|followers? module|leaderboard)\b/i.test(script)) failures.push('Forbidden EchoSociety social feature detected');
+if (/\b(direct message|dm module|user search|like counts?|followers? module|leaderboard)\b/i.test(script)) failures.push('Forbidden EchoSociety social feature detected');
 if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte','socket.io'].includes(d))) failures.push('Heavy dependency added unexpectedly for EchoSociety');
 
 // Phase 1 hotfix/polish checks
@@ -265,6 +271,65 @@ if (/\b(chatbot|social feed|leaderboard)\b/i.test(script)) failures.push('Forbid
 });
 if (/\b(chatbot|leaderboard|social feed)\b/i.test(script)) failures.push('Forbidden chatbot/leaderboard/social feed feature detected');
 if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].includes(d))) failures.push('Heavy framework dependency added unexpectedly');
+
+
+// EchoSociety World Expansion + alam.chat portal checks
+[
+  ['SocietySync exists', 'const SocietySync = (() => {'],
+  ['SocietyPrivacy exists', 'const SocietyPrivacy = (() => {'],
+  ['sanitizeSocietySignal exists', 'function sanitizeSocietySignal'],
+  ['society_consents referenced', 'society_consents'],
+  ['society_signals referenced', 'society_signals'],
+  ['society_reactions referenced', 'society_reactions'],
+  ['society_weather_daily referenced', 'society_weather_daily'],
+  ['society_signals_public referenced', 'society_signals_public'],
+  ['Live Society Weather exists', 'Live Society Weather'],
+  ['Local Preview Weather exists', 'Local Preview Weather'],
+  ['Signal Couriers’ Route exists', 'Signal Couriers’ Route'],
+  ['alam.chat Observatory exists', 'alam.chat Observatory'],
+  ['Signal Courier Route exists', 'Signal Courier Route'],
+  ['delivery_completed event exists', 'delivery_completed'],
+  ['EchoWorldRenderer exists', 'const EchoWorldRenderer = (() => {'],
+  ['Canvas 2D fallback exists', 'canvas2dFallback'],
+  ['WebGL optional path is guarded', 'hasWebGL'],
+  ['AlamAI exists', 'const AlamAI = (() => {'],
+  ['alam.chat text exists', 'alam.chat'],
+  ['Alam bio exists', 'what in the fiqh'],
+  ['ALAM_AI_ENDPOINT exists', 'ALAM_AI_ENDPOINT'],
+  ['Alam chat key exists', 'echovault_alam_ai_chat_v1'],
+  ['localReply exists', 'localReply'],
+  ['alam.chat local fallback exists', 'alam.chat stayed local.'],
+  ['Echo Circles placeholder exists', 'Echo Circles'],
+  ['auth-local-btn still exists', 'auth-local-btn'],
+  ['echovault_echoes_v2 still exists', 'echovault_echoes_v2'],
+  ['echovault_society_consent_v1 still exists', 'echovault_society_consent_v1'],
+  ['echovault_society_signals_v1 still exists', 'echovault_society_signals_v1'],
+  ['echovault_society_reactions_v1 still exists', 'echovault_society_reactions_v1']
+].forEach(([label, marker]) => { if (!script.includes(marker) && !index.includes(marker)) failures.push(`Expansion check failed: ${label}`); });
+if (!societyWeatherSource) failures.push('SocietyWeather source block not found');
+['SocietySync.fetchDailyWeather()','SocietySync.fetchPublicSignals()','SocietySync.fetchReactionCounts()'].forEach((marker) => {
+  if (!societyWeatherSource.includes(marker)) failures.push(`SocietyWeather missing cloud fetch: ${marker}`);
+});
+if (societyWeatherSource.includes('Live Society Weather') && !/const \[daily, publicSignals, reactionRows\][\s\S]*SocietySync\.fetchDailyWeather\(\)[\s\S]*SocietySync\.fetchPublicSignals\(\)[\s\S]*SocietySync\.fetchReactionCounts\(\)[\s\S]*label:'Live Society Weather'/.test(societyWeatherSource)) {
+  failures.push('SocietyWeather may label live before using fetched cloud data');
+}
+if (!societyWeatherSource.includes('Live weather unavailable — showing local preview.')) failures.push('SocietyWeather missing live-unavailable local fallback note');
+if (!societyWeatherSource.includes("label:'Local Preview Weather'")) failures.push('SocietyWeather missing Local Preview Weather fallback label');
+['contributeWeather','contributeLantern','contributeStorm','contributeBloom','contributeArchiveLine'].forEach((fn) => {
+  const re = new RegExp(`${fn}[\\s\\S]{0,320}(SocietySignals\\.getConsent\\(\\)|SocietyPrivacy\\.requireConsent\\(\\))`);
+  if (!re.test(societySignalsSource)) failures.push(`${fn} missing explicit society consent guard`);
+});
+if (!/function addReaction[\s\S]{0,320}(SocietySignals\.getConsent\(\)|SocietyPrivacy\.requireConsent\(\))/.test(societySignalsSource)) failures.push('addReaction missing explicit society consent guard');
+if (!script.includes('society-stay-private-btn') || !(script.includes('city.hidden=true') || script.includes('city.hidden = true')) || !script.includes('privatePanel.hidden=false')) failures.push('society-stay-private-btn handler does not immediately hide/disable society-city and show private state');
+
+['Ask alam','local oracle mode','connected oracle mode'].forEach((marker) => { if (!script.includes(marker) && !index.includes(marker)) failures.push(`alam.chat UI marker missing: ${marker}`); });
+
+if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}/.test(script + index)) failures.push('Hardcoded AI API key detected');
+['bro this is not a crisis arc','your silence is doing pushups','you’re not empty, you’re buffering','put the thought down like a heavy bag'].forEach((sample) => { if ((script + index + readme).includes(sample)) failures.push(`Canned local reply example should not be present: ${sample}`); });
+['public diary feed implementation','follower system implementation','leaderboard implementation','DM implementation','comment box implementation','user-to-user chat implementation','group chat implementation','community chat tables'].forEach((marker) => {
+  if ((script + index).includes(marker)) failures.push(`Forbidden community implementation present: ${marker}`);
+});
+if (/\b(followers module|leaderboard module|direct message module|dm module|public diary feed implementation|comment box implementation|user search)\b/i.test(script + index)) failures.push('Forbidden social/community implementation detected');
 
 // Keep dependency footprint small
 if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].includes(d))) {
