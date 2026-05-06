@@ -161,6 +161,28 @@ if (script.toLowerCase().includes('chatbot')) failures.push('Chatbot added unexp
 if (!script.includes('Profile Synced')) failures.push('Vault sync wording does not use Profile Synced');
 if (script.includes('Vault Synced')) failures.push('Vault Synced wording still present despite placeholder echo sync');
 
+
+// Phase 1 hotfix/polish checks
+if (!script.includes('function escapeHTML(value)')) failures.push('escapeHTML helper missing');
+if (!(script.includes('escapeHTML(avatar.avatar_name)') && script.includes('escapeHTML(avatar.role)') && script.includes('escapeHTML(avatar.aura)') && script.includes('escapeHTML(avatar.outfit_hint)') && script.includes('escapeHTML(avatar.companion_symbol)'))) {
+  failures.push('EchoAvatar render does not escape all avatar/profile fields');
+}
+if (script.includes('<h4>${avatar.avatar_name}</h4>') || script.includes('${avatar.role}</div><p>Aura: ${avatar.aura}')) {
+  failures.push('EchoAvatar render still directly interpolates raw avatar fields');
+}
+if (!(script.includes('todayKey') && script.includes('completionKey') && script.includes('${id}:${dateKey}'))) {
+  failures.push('GentleQuests completion does not appear keyed per local date');
+}
+if (!(script.includes('completed_at') || script.includes('todayKey'))) failures.push('GentleQuests missing completed_at/todayKey completion marker');
+if (!(script.includes('Vault Holder') || script.includes('Cardholder'))) failures.push('Mood Receipt missing Vault Holder/Cardholder identity field');
+if (!(script.includes('receiptClass') && script.includes('RECEIPT_CLASSES'))) failures.push('ReceiptRenderer missing receipt class generation');
+if (!(style.includes('.museum-shell') && style.includes('overflow-y:auto') && style.includes('max-height:calc(100dvh'))) failures.push('museum layout missing max-height/overflow-y');
+if (!(style.includes('.museum-tabs') && (style.includes('overflow-x:auto') || style.includes('grid-template-columns')))) failures.push('museum tabs missing overflow-x/responsive layout');
+if (!(style.includes('.relic-grid') && style.includes('auto-fit'))) failures.push('relic grid missing responsive auto-fit');
+if (!script.includes('echovault_inventory_v1')) failures.push('script.js missing echovault_inventory_v1 key');
+if (!script.includes('echovault_quests_v1')) failures.push('script.js missing echovault_quests_v1 key');
+if (/\b(chatbot|social feed|leaderboard)\b/i.test(script)) failures.push('Forbidden chatbot/social feed/leaderboard feature detected');
+
 // Keep dependency footprint small
 const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].includes(d))) {
