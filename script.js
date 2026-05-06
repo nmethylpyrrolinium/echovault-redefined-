@@ -2648,6 +2648,7 @@ const SocietyWeather = (() => {
       const hasReactions = Array.isArray(reactionRows) && reactionRows.length > 0;
       const cloudDataFetched = hasDaily || hasCloudSignals || hasReactions;
       if(!cloudDataFetched) return computeLocal('Live weather unavailable — showing local preview.');
+      if(!hasDaily && !hasCloudSignals && !hasReactions) return computeLocal('Live weather unavailable — showing local preview.');
       return shapeWeather({label:'Live Society Weather', signals:hasCloudSignals ? publicSignals : [], daily, reactions:normalizeReactionTotals(reactionRows), live:true});
     } catch(err) {
       if(window.__ECHOVAULT_DEBUG__) console.warn('[EchoSociety] live weather failed', err);

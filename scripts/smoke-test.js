@@ -322,6 +322,12 @@ if (!societyWeatherSource.includes("label:'Local Preview Weather'")) failures.pu
 if (!/function addReaction[\s\S]{0,320}(SocietySignals\.getConsent\(\)|SocietyPrivacy\.requireConsent\(\))/.test(societySignalsSource)) failures.push('addReaction missing explicit society consent guard');
 if (!script.includes('society-stay-private-btn') || !(script.includes('city.hidden=true') || script.includes('city.hidden = true')) || !script.includes('privatePanel.hidden=false')) failures.push('society-stay-private-btn handler does not immediately hide/disable society-city and show private state');
 
+if (!(script.includes('SocietySync.fetchDailyWeather()') || script.includes('SocietySync.fetchPublicSignals()'))) failures.push('SocietyWeather does not fetch cloud data before live weather');
+['contributeWeather','contributeLantern','contributeStorm','contributeBloom','contributeArchiveLine'].forEach((fn) => {
+  const re = new RegExp(`${fn}[\\s\\S]{0,260}SocietySignals\\.getConsent\\(\\)`);
+  if (!re.test(script)) failures.push(`${fn} missing explicit SocietySignals.getConsent guard`);
+});
+if (!script.includes('society-stay-private-btn') || !(script.includes('city.hidden=true') || script.includes('updateSocietyConsentUI({ privateState:true })'))) failures.push('society-stay-private-btn handler does not immediately hide/disable society-city');
 ['Ask alam','local oracle mode','connected oracle mode'].forEach((marker) => { if (!script.includes(marker) && !index.includes(marker)) failures.push(`alam.chat UI marker missing: ${marker}`); });
 
 if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}/.test(script + index)) failures.push('Hardcoded AI API key detected');
@@ -330,6 +336,9 @@ if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}/.test(script
   if ((script + index).includes(marker)) failures.push(`Forbidden community implementation present: ${marker}`);
 });
 if (/\b(followers module|leaderboard module|direct message module|dm module|public diary feed implementation|comment box implementation|user search)\b/i.test(script + index)) failures.push('Forbidden social/community implementation detected');
+['public diary feed implementation','follower system implementation','leaderboard implementation','DM implementation','comment box implementation'].forEach((marker) => {
+  if ((script + index).includes(marker)) failures.push(`Forbidden community implementation present: ${marker}`);
+});
 
 // Keep dependency footprint small
 if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].includes(d))) {
