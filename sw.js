@@ -1,5 +1,5 @@
-const APP_VERSION = 'phase-4-5-ui-stability';
-const CACHE = 'echovault-v4-ui-stability';
+const APP_VERSION = 'phase-1-game-rituals-stability';
+const CACHE = 'echovault-v5-game-rituals-stability';
 
 const toScopeUrl = (path) => new URL(path, self.registration.scope).toString();
 const PRECACHE = ['./', 'index.html', 'styles.css', 'script.js', 'manifest.json', 'icons/icon.svg', 'wrapped-cinematic-module.js'];
