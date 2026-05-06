@@ -273,6 +273,27 @@ if (/\b(chatbot|leaderboard|social feed)\b/i.test(script)) failures.push('Forbid
 if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].includes(d))) failures.push('Heavy framework dependency added unexpectedly');
 
 
+
+// alam.chat standalone oracle checks
+if (!/data-fun="alam"/.test(index) || !index.includes('a strange little oracle terminal for your vault')) failures.push('alam.chat Rituals portal/card missing outside Emotional Museum');
+if (!index.includes('alam-floating-portal')) failures.push('alam.chat floating standalone portal missing');
+if (!script.includes('alam.chat Observatory')) failures.push('alam.chat Observatory shortcut missing from Society Gate');
+if (!script.includes('Ask alam something from your vault weather.')) failures.push('alam.chat empty state copy missing');
+if (!script.includes('alam.chat uses a pattern summary by default. Raw echoes stay private.')) failures.push('alam.chat exact privacy note missing');
+if (!script.includes('Ask alam')) failures.push('Ask alam button copy missing');
+if (!script.includes('Clear chat')) failures.push('Clear chat button copy missing');
+if (!script.includes('Keep it local')) failures.push('Keep it local button copy missing');
+if (!script.includes('connected oracle mode') || !script.includes('local oracle mode')) failures.push('alam.chat mode labels missing');
+if (!script.includes('asking for my iman')) failures.push('alam.chat full bio missing');
+if (!script.includes('const AlamPrivacy = (() => {')) failures.push('AlamPrivacy module missing');
+['buildSafeContext','shouldIncludeLatestEcho','stripSensitiveContext','canUseRemote'].forEach((fn) => { if (!script.includes(fn)) failures.push(`AlamPrivacy missing ${fn}`); });
+['isRemoteAvailable','sendMessage','localReply','openChat','closeChat','appendMessage','clearChat','loadMessages','saveMessages'].forEach((fn) => { if (!script.includes(fn)) failures.push(`AlamAI missing ${fn}`); });
+if ((index + readme).includes('Alam AI')) failures.push('User-facing Alam AI text should be alam.chat');
+if (script.includes('Include raw echoes') && !script.includes('Raw echoes — not available.')) failures.push('Raw echoes toggle is enabled or not disabled');
+if (!script.includes('includeLatestEcho:false')) failures.push('latest echo summary should default OFF');
+if (!script.includes('ALAM_AI_ENDPOINT')) failures.push('ALAM_AI_ENDPOINT config marker missing');
+if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|OPENROUTER_API_KEY|GEMINI_API_KEY|OPENAI_API_KEY|HUGGINGFACE_API_KEY/.test(script + index + readme)) failures.push('Hardcoded AI API key or secret marker detected');
+
 // EchoSociety World Expansion + alam.chat portal checks
 [
   ['SocietySync exists', 'const SocietySync = (() => {'],
@@ -331,7 +352,7 @@ if (!script.includes('society-stay-private-btn') || !(script.includes('city.hidd
 ['Ask alam','local oracle mode','connected oracle mode'].forEach((marker) => { if (!script.includes(marker) && !index.includes(marker)) failures.push(`alam.chat UI marker missing: ${marker}`); });
 
 if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}/.test(script + index)) failures.push('Hardcoded AI API key detected');
-['bro this is not a crisis arc','your silence is doing pushups','you’re not empty, you’re buffering','put the thought down like a heavy bag'].forEach((sample) => { if ((script + index + readme).includes(sample)) failures.push(`Canned local reply example should not be present: ${sample}`); });
+['bro this is not a crisis arc','your silence is doing pushups','you’re not empty, you’re buffering','put the thought down like a heavy bag'].forEach((sample) => { if ((index + readme).includes(sample)) failures.push(`Canned local reply example should not be present in README/index static text: ${sample}`); });
 ['public diary feed implementation','follower system implementation','leaderboard implementation','DM implementation','comment box implementation','user-to-user chat implementation','group chat implementation','community chat tables'].forEach((marker) => {
   if ((script + index).includes(marker)) failures.push(`Forbidden community implementation present: ${marker}`);
 });
