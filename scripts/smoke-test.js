@@ -191,6 +191,12 @@ if (script.includes('Vault Synced')) failures.push('Vault Synced wording still p
   ['EchoAvatar still exists', 'EchoAvatar'],
   ['VaultInventory still exists', 'VaultInventory']
 ].forEach(([label, marker]) => { if (!script.includes(marker) && !index.includes(marker)) failures.push(`Phase 3 check failed: ${label}`); });
+if (!script.includes('Join EchoSociety first. Your vault is still private.')) failures.push('Society contribution consent guard text missing');
+if (!script.includes('You stayed private.') || !script.includes('EchoSociety will not receive signals.')) failures.push('Private-mode society panel copy missing');
+if (!script.includes('updateSocietyConsentUI({ privateState:true })') || !script.includes('city.hidden = !consent')) failures.push('society-stay-private-btn does not hide or disable society-city');
+if (!/function createSignal[\s\S]*if \(!requireConsent\(\)\) return null;/.test(script)) failures.push('SocietySignals.createSignal missing consent guard before signal creation');
+if (!/function addReaction[\s\S]*if \(!requireConsent\(\)\) return null;/.test(script)) failures.push('SocietySignals.addReaction missing consent guard');
+if (!script.includes('SocietySignals.revokeConsent(); populateSocietyPrivacy(); updateSocietyConsentUI')) failures.push('Settings revoke does not update active Society UI');
 if (/\b(open chat|chat module|direct message|dm module|user search|public diary feed|like counts?|followers? module|leaderboard)\b/i.test(script)) failures.push('Forbidden EchoSociety social feature detected');
 if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte','socket.io'].includes(d))) failures.push('Heavy dependency added unexpectedly for EchoSociety');
 
