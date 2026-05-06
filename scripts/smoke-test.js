@@ -267,7 +267,7 @@ if (/\b(chatbot|leaderboard|social feed)\b/i.test(script)) failures.push('Forbid
 if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].includes(d))) failures.push('Heavy framework dependency added unexpectedly');
 
 
-// EchoSociety World Expansion + Alam AI portal checks
+// EchoSociety World Expansion + alam.chat portal checks
 [
   ['SocietySync exists', 'const SocietySync = (() => {'],
   ['SocietyPrivacy exists', 'const SocietyPrivacy = (() => {'],
@@ -280,19 +280,19 @@ if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].incl
   ['Live Society Weather exists', 'Live Society Weather'],
   ['Local Preview Weather exists', 'Local Preview Weather'],
   ['Signal Couriers’ Route exists', 'Signal Couriers’ Route'],
-  ['Alam AI Observatory exists', 'Alam AI Observatory'],
+  ['alam.chat Observatory exists', 'alam.chat Observatory'],
   ['Signal Courier Route exists', 'Signal Courier Route'],
   ['delivery_completed event exists', 'delivery_completed'],
   ['EchoWorldRenderer exists', 'const EchoWorldRenderer = (() => {'],
   ['Canvas 2D fallback exists', 'canvas2dFallback'],
   ['WebGL optional path is guarded', 'hasWebGL'],
   ['AlamAI exists', 'const AlamAI = (() => {'],
-  ['Alam AI text exists', 'Alam AI'],
+  ['alam.chat text exists', 'alam.chat'],
   ['Alam bio exists', 'what in the fiqh'],
   ['ALAM_AI_ENDPOINT exists', 'ALAM_AI_ENDPOINT'],
   ['Alam chat key exists', 'echovault_alam_ai_chat_v1'],
   ['localReply exists', 'localReply'],
-  ['Alam local fallback exists', 'Alam stayed local.'],
+  ['alam.chat local fallback exists', 'alam.chat stayed local.'],
   ['Echo Circles placeholder exists', 'Echo Circles'],
   ['auth-local-btn still exists', 'auth-local-btn'],
   ['echovault_echoes_v2 still exists', 'echovault_echoes_v2'],
@@ -300,7 +300,16 @@ if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].incl
   ['echovault_society_signals_v1 still exists', 'echovault_society_signals_v1'],
   ['echovault_society_reactions_v1 still exists', 'echovault_society_reactions_v1']
 ].forEach(([label, marker]) => { if (!script.includes(marker) && !index.includes(marker)) failures.push(`Expansion check failed: ${label}`); });
+if (!(script.includes('SocietySync.fetchDailyWeather()') || script.includes('SocietySync.fetchPublicSignals()'))) failures.push('SocietyWeather does not fetch cloud data before live weather');
+['contributeWeather','contributeLantern','contributeStorm','contributeBloom','contributeArchiveLine'].forEach((fn) => {
+  const re = new RegExp(`${fn}[\\s\\S]{0,260}SocietySignals\\.getConsent\\(\\)`);
+  if (!re.test(script)) failures.push(`${fn} missing explicit SocietySignals.getConsent guard`);
+});
+if (!script.includes('society-stay-private-btn') || !(script.includes('city.hidden=true') || script.includes('updateSocietyConsentUI({ privateState:true })'))) failures.push('society-stay-private-btn handler does not immediately hide/disable society-city');
+['Ask alam','local oracle mode','connected oracle mode'].forEach((marker) => { if (!script.includes(marker) && !index.includes(marker)) failures.push(`alam.chat UI marker missing: ${marker}`); });
+
 if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}/.test(script + index)) failures.push('Hardcoded AI API key detected');
+['bro this is not a crisis arc','your silence is doing pushups','you’re not empty, you’re buffering','put the thought down like a heavy bag'].forEach((sample) => { if ((script + index + readme).includes(sample)) failures.push(`Canned local reply example should not be present: ${sample}`); });
 ['public diary feed implementation','follower system implementation','leaderboard implementation','DM implementation','comment box implementation'].forEach((marker) => {
   if ((script + index).includes(marker)) failures.push(`Forbidden community implementation present: ${marker}`);
 });

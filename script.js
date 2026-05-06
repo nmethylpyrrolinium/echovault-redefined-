@@ -388,7 +388,7 @@ const Settings = (() => {
     const localReactionCount = Object.values(reactions).flat().length;
     const synced = signals.filter((signal) => signal.synced).length;
     const cloud = SocietySync.isAvailable() ? 'logged in · cloud consent sync available' : 'not logged in · local preview';
-    status.innerHTML = `Society consent local status: <b>${SocietySignals.getConsent() ? 'joined' : 'not joined'}</b><br>Cloud consent status: <b>${cloud}</b><br>Local signal count: <b>${signals.length}</b> · uploaded/synced signal count: <b>${synced}</b><br>Local reactions count: <b>${localReactionCount}</b><br>Current mode: <b>${SocietySync.isAvailable() ? 'Live Society' : 'Local Preview'}</b><br>Alam AI mode: <b>${AlamAI.isRemoteAvailable() ? 'Remote endpoint if configured' : 'Local only'}</b>`;
+    status.innerHTML = `Society consent local status: <b>${SocietySignals.getConsent() ? 'joined' : 'not joined'}</b><br>Cloud consent status: <b>${cloud}</b><br>Local signal count: <b>${signals.length}</b> · uploaded/synced signal count: <b>${synced}</b><br>Local reactions count: <b>${localReactionCount}</b><br>Current mode: <b>${SocietySync.isAvailable() ? 'Live Society' : 'Local Preview'}</b><br>alam.chat mode: <b>${AlamAI.isRemoteAvailable() ? 'Remote endpoint if configured' : 'Local only'}</b>`;
     const latest = document.getElementById('alam-include-latest-setting');
     if (latest) latest.checked = AlamPrivacy.shouldIncludeLatestEcho();
   }
@@ -446,7 +446,7 @@ const Settings = (() => {
     document.getElementById('society-clear-signals-btn')?.addEventListener('click', () => { if (!confirm('Clear local EchoSociety signals and reactions? Your echoes stay untouched.')) return; SocietySignals.clearLocalSignals(); populateSocietyPrivacy(); Toast.show('Local society signals cleared.'); });
     document.getElementById('society-export-signals-btn')?.addEventListener('click', () => SocietySignals.exportSignals());
     document.getElementById('alam-clear-chat-btn')?.addEventListener('click', () => { AlamAI.clearChat(); populateSocietyPrivacy(); });
-    document.getElementById('alam-include-latest-setting')?.addEventListener('change', (event) => { writeLocalJSON('echovault_alam_ai_settings_v1', { ...readLocalJSON('echovault_alam_ai_settings_v1', {}), includeLatestEcho:event.target.checked }); Toast.show(event.target.checked ? 'Alam can include latest echo summary when you ask.' : 'Alam latest echo sharing is off.'); });
+    document.getElementById('alam-include-latest-setting')?.addEventListener('change', (event) => { writeLocalJSON('echovault_alam_ai_settings_v1', { ...readLocalJSON('echovault_alam_ai_settings_v1', {}), includeLatestEcho:event.target.checked }); Toast.show(event.target.checked ? 'alam.chat can include latest echo summary when you ask.' : 'alam.chat latest echo sharing is off.'); });
 
 
   document.getElementById('settings-clear-btn')?.addEventListener('click', () => {
@@ -2543,7 +2543,7 @@ const SocietySignals = (() => {
   const SIGNALS_KEY = 'echovault_society_signals_v1';
   const REACTIONS_KEY = 'echovault_society_reactions_v1';
   const SIGNAL_TYPES = ['weather','lantern','storm','bloom','archive','delivery','alam'];
-  const DISTRICTS = { weather:'Weather Tower', lantern:'Lantern District', storm:'Storm Works', bloom:'Bloom Market', archive:'Moon Archive', delivery:'Signal Couriers’ Route', alam:'Alam AI Observatory' };
+  const DISTRICTS = { weather:'Weather Tower', lantern:'Lantern District', storm:'Storm Works', bloom:'Bloom Market', archive:'Moon Archive', delivery:'Signal Couriers’ Route', alam:'alam.chat Observatory' };
   const ANON_LABELS = ['Moon Signal','Lantern Wisp','Quiet Comet','Bloom Shade','Storm Mote','Archive Finch','Drift Spark','Soft Witness'];
   function ensureKeys(){ if (localStorage.getItem(CONSENT_KEY) === null) writeLocalJSON(CONSENT_KEY, { consent:false, updated_at:null, cloud_status:'unknown' }); if (localStorage.getItem(SIGNALS_KEY) === null) writeLocalJSON(SIGNALS_KEY, []); if (localStorage.getItem(REACTIONS_KEY) === null) writeLocalJSON(REACTIONS_KEY, {}); }
   function getConsent(){ ensureKeys(); return Boolean(readLocalJSON(CONSENT_KEY, {consent:false})?.consent); }
@@ -2586,14 +2586,15 @@ const SocietySignals = (() => {
   function clearLocalSignals(){ writeLocalJSON(SIGNALS_KEY, []); writeLocalJSON(REACTIONS_KEY, {}); }
   function exportSignals(){ ensureKeys(); const blob = new Blob([JSON.stringify({ version:2, privacy:SocietyPrivacy.explainPrivacy(), consent:readLocalJSON(CONSENT_KEY,{}), signals:listLocalSignals().map(sanitizeSocietySignal), reactions:listReactions() }, null, 2)], {type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='echovault-society-signals.json'; a.click(); URL.revokeObjectURL(url); }
   function listReactions(){ ensureKeys(); const obj = readLocalJSON(REACTIONS_KEY, {}); return obj && typeof obj === 'object' ? obj : {}; }
-  function addReaction(signalId, reactionType){ if (!SocietyPrivacy.requireConsent()) return null; if(!SOCIETY_REACTIONS[reactionType]) return null; const all=listReactions(); const key=String(signalId || 'local-preview'); const current=Array.isArray(all[key]) ? all[key] : []; if(!current.includes(reactionType)) current.push(reactionType); all[key]=current; writeLocalJSON(REACTIONS_KEY, all); SocietySync.addReaction(signalId, reactionType).catch(()=>{}); return current; }
-  const contributeWeather=()=>createSignal('weather');
-  const contributeLantern=()=>createSignal('lantern', { mood: latestEcho().mood || 'empty', silence: latestEcho().silence ?? 9 });
-  const contributeStorm=()=>createSignal('storm', { mood: latestEcho().mood || 'chaos', intensity: latestEcho().intensity ?? 9 });
-  const contributeBloom=()=>createSignal('bloom', { mood: latestEcho().mood || 'joyful', intensity: latestEcho().intensity ?? 4 });
-  const contributeArchiveLine=(optionalLine='')=>createSignal('archive', { metadata:{ archive_marker:Boolean(String(optionalLine).trim()) } });
-  const contributeDelivery=(mission)=>createSignal('delivery', { district:mission?.to || 'Signal Couriers’ Route', metadata:{ delivery_item:mission?.item || 'signal', mission_id:mission?.id || 'delivery' } });
-  const contributeAlam=()=>createSignal('alam', { metadata:{ portal:'observatory' } });
+  function addReaction(signalId, reactionType){ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } if (!SocietyPrivacy.requireConsent()) return null; if(!SOCIETY_REACTIONS[reactionType]) return null; const all=listReactions(); const key=String(signalId || 'local-preview'); const current=Array.isArray(all[key]) ? all[key] : []; if(!current.includes(reactionType)) current.push(reactionType); all[key]=current; writeLocalJSON(REACTIONS_KEY, all); SocietySync.addReaction(signalId, reactionType).catch(()=>{}); return current; }
+  function guardConsent(){ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return false; } return true; }
+  const contributeWeather=()=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('weather'); };
+  const contributeLantern=()=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('lantern', { mood: latestEcho().mood || 'empty', silence: latestEcho().silence ?? 9 }); };
+  const contributeStorm=()=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('storm', { mood: latestEcho().mood || 'chaos', intensity: latestEcho().intensity ?? 9 }); };
+  const contributeBloom=()=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('bloom', { mood: latestEcho().mood || 'joyful', intensity: latestEcho().intensity ?? 4 }); };
+  const contributeArchiveLine=(optionalLine='')=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('archive', { metadata:{ archive_marker:Boolean(String(optionalLine).trim()) } }); };
+  const contributeDelivery=(mission)=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('delivery', { district:mission?.to || 'Signal Couriers’ Route', metadata:{ delivery_item:mission?.item || 'signal', mission_id:mission?.id || 'delivery' } }); };
+  const contributeAlam=()=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('alam', { metadata:{ portal:'observatory' } }); };
   function isSupabaseSocietyAvailable(){ return SocietySync.isAvailable(); }
   function maybePrepareFutureSync(signal){ return { ok:isSupabaseSocietyAvailable(), signal:sanitizeSocietySignal(signal), raw_echo_shared:false }; }
   ensureKeys();
@@ -2607,10 +2608,10 @@ const SocietySync = (() => {
   async function revokeConsent(){ return setConsent(false); }
   async function uploadSignal(signal){ if(!isAvailable() || !SocietySignals.getConsent()) return {ok:false, mode:'local_preview'}; const payload=sanitizeSocietySignal(signal); if(!SocietyPrivacy.isSafeSignalPayload(payload)) return {ok:false, error:'unsafe_payload'}; try { const {error}=await Auth.client.from(SOCIETY_TABLES.signals).insert(payload); if(error) throw error; return {ok:true}; } catch(err){ if(window.__ECHOVAULT_DEBUG__) console.warn('[EchoSociety] signal upload failed', err); return {ok:false, error:err}; } }
   async function syncLocalSignals(){ if(!isAvailable() || !SocietySignals.getConsent()) { Toast.show('Sync Local Signals requires consent and login.'); return {ok:false}; } const pending=SocietySignals.listLocalSignals().filter((s)=>!s.synced); let count=0; for (const signal of pending) { const res=await uploadSignal(signal); if(res.ok){ SocietySignals.markSynced(signal.id); count++; } } Toast.show(`${count} symbolic signals synced.`); return {ok:true, count}; }
-  async function fetchPublicSignals(){ if(!isAvailable()) return SocietySignals.listLocalSignals(); try { const {data,error}=await Auth.client.from(SOCIETY_TABLES.publicSignals).select('*').order('created_at',{ascending:false}).limit(24); if(error) throw error; return data || []; } catch(err){ return SocietySignals.listLocalSignals(); } }
+  async function fetchPublicSignals(){ if(!isAvailable()) return null; try { const {data,error}=await Auth.client.from(SOCIETY_TABLES.publicSignals).select('*').order('created_at',{ascending:false}).limit(24); if(error) throw error; return data || []; } catch(err){ return null; } }
   async function fetchDailyWeather(){ if(!isAvailable()) return null; try { const {data,error}=await Auth.client.from(SOCIETY_TABLES.weatherDaily).select('*').eq('day',dayKey()).maybeSingle(); if(error) throw error; return data || null; } catch(err){ return null; } }
   async function addReaction(signalId, reactionType){ if(!isAvailable() || !SocietySignals.getConsent()) return {ok:false, mode:'local'}; if(!SOCIETY_REACTIONS[reactionType]) return {ok:false}; try { const {error}=await Auth.client.from(SOCIETY_TABLES.reactions).insert({ signal_id:signalId, reaction_type:reactionType, day:dayKey() }); if(error) throw error; return {ok:true}; } catch(err){ return {ok:false, error:err}; } }
-  async function fetchReactionCounts(){ if(!isAvailable()) return {}; try { const {data,error}=await Auth.client.from(SOCIETY_TABLES.reactionCounts).select('*').limit(100); if(error) throw error; return data || []; } catch(err){ return {}; } }
+  async function fetchReactionCounts(){ if(!isAvailable()) return null; try { const {data,error}=await Auth.client.from(SOCIETY_TABLES.reactionCounts).select('*').limit(100); if(error) throw error; return data || []; } catch(err){ return null; } }
   return { isAvailable, getConsent, setConsent, revokeConsent, uploadSignal, syncLocalSignals, fetchPublicSignals, fetchDailyWeather, addReaction, fetchReactionCounts };
 })();
 
@@ -2618,20 +2619,44 @@ const SocietyWeather = (() => {
   const phrases = { calm:'Blue weather over the Lantern District', chaos:'Electric pressure in the Storm Works', reflective:'Moonlit drift through the Archive', anxious:'Restless wind around the Weather Tower', joyful:'Soft bloom across the market', empty:'Quiet fog around the Society Gate', mixed:'Shifting sky over EchoSociety' };
   function countBy(signals, field){ return signals.reduce((acc, s)=>{ const k=s[field] || 'unknown'; acc[k]=(acc[k]||0)+1; return acc; }, {}); }
   function top(counts, fallback='empty'){ const entries=Object.entries(counts).sort((a,b)=>b[1]-a[1]); if(entries.length>1 && entries[0][1]===entries[1][1]) return 'mixed'; return entries[0]?.[0] || fallback; }
-  function reactionTotals(){ const local=SocietySignals.listReactions(); return Object.values(local).flat().reduce((acc,r)=>{ acc[r]=(acc[r]||0)+1; return acc; }, {}); }
-  function compute(){
-    const signals=SocietySignals.listLocalSignals().filter((s)=>s.day===dayKey() || String(s.created_at||'').startsWith(dayKey()));
-    const patterns=PatternEngine.analyze(state.echoes);
-    const moodCounts=countBy(signals,'mood');
-    if(patterns.dominantMood && !signals.length) moodCounts[patterns.dominantMood]=1;
-    const dominant=top(moodCounts, signals.length ? 'mixed' : 'empty');
-    const types=countBy(signals,'signal_type');
-    const reactions=reactionTotals();
-    const live=SocietySync.isAvailable();
-    return { label:live?'Live Society Weather':'Local Preview Weather', total:signals.length, dominant_mood:dominant, lanterns_lit:types.lantern||0, storms_contained:types.storm||0, blooms_planted:types.bloom||0, archive_signals:types.archive||0, reaction_totals:reactions, phrase:phrases[dominant]||phrases.mixed, connected:live };
+  function normalizeReactionTotals(rows){ if(arguments.length) { if(Array.isArray(rows)) return rows.reduce((acc,row)=>{ const key=row.reaction_type || row.reaction || row.type; if(key) acc[key]=(acc[key]||0)+Number(row.count || row.total || 1); return acc; }, {}); return {}; } const local=SocietySignals.listReactions(); return Object.values(local).flat().reduce((acc,r)=>{ acc[r]=(acc[r]||0)+1; return acc; }, {}); }
+  function shapeWeather({label,signals=[],daily=null,reactions={},note='',live=false}){
+    const todaySignals = signals.filter((s)=>!s.day || s.day===dayKey() || String(s.created_at||'').startsWith(dayKey()));
+    const moodCounts=countBy(todaySignals,'mood');
+    const dominant=daily?.dominant_mood || daily?.mood || top(moodCounts, todaySignals.length ? 'mixed' : 'empty');
+    const types=countBy(todaySignals,'signal_type');
+    return { label, total:Number(daily?.total_signals ?? daily?.total ?? todaySignals.length), dominant_mood:dominant, lanterns_lit:Number(daily?.lanterns_lit ?? types.lantern ?? 0), storms_contained:Number(daily?.storms_contained ?? types.storm ?? 0), blooms_planted:Number(daily?.blooms_planted ?? types.bloom ?? 0), archive_signals:Number(daily?.archive_signals ?? types.archive ?? 0), reaction_totals:reactions, phrase:daily?.weather_phrase || phrases[dominant] || phrases.mixed, connected:live, note };
   }
-  function render(){ const w=compute(); const reactionText=Object.entries(SOCIETY_REACTIONS).map(([key,label])=>`${label}: ${w.reaction_totals[key]||0}`).join(' · '); return `<section class="society-weather-card"><span>${escapeHTML(w.label)}</span><h4>${escapeHTML(w.phrase)}</h4><p>${escapeHTML(w.total)} anonymous signals today. ${w.connected ? 'Using Supabase when available.' : 'This is a local preview, not real global data.'}</p><div class="society-weather-grid"><b>${escapeHTML(w.dominant_mood)}</b><small>dominant mood</small><b>${w.lanterns_lit}</b><small>lanterns lit</small><b>${w.storms_contained}</b><small>storms contained</small><b>${w.blooms_planted}</b><small>blooms planted</small><b>${w.archive_signals}</b><small>archive signals</small><b>${Object.values(w.reaction_totals).reduce((a,b)=>a+b,0)}</b><small>reaction totals</small></div><small>${escapeHTML(reactionText)}</small></section>`; }
-  return { compute, render };
+  function computeLocal(note=''){
+    const signals=SocietySignals.listLocalSignals();
+    const patterns=PatternEngine.analyze(state.echoes);
+    const localSignals=signals.length ? signals : [];
+    const shaped=shapeWeather({label:'Local Preview Weather', signals:localSignals, reactions:normalizeReactionTotals(), note, live:false});
+    if(!signals.length && patterns.dominantMood) { shaped.dominant_mood=patterns.dominantMood; shaped.phrase=phrases[patterns.dominantMood] || phrases.empty; }
+    return shaped;
+  }
+  async function computeLive(){
+    if(!SocietySync.isAvailable()) return computeLocal();
+    try {
+      const [daily, publicSignals, reactionRows] = await Promise.all([
+        SocietySync.fetchDailyWeather(),
+        SocietySync.fetchPublicSignals(),
+        SocietySync.fetchReactionCounts()
+      ]);
+      const hasCloudSignals = Array.isArray(publicSignals) && publicSignals.length > 0;
+      const hasDaily = daily && Object.keys(daily).length > 0;
+      const hasReactions = Array.isArray(reactionRows) && reactionRows.length > 0;
+      if(!hasDaily && !hasCloudSignals && !hasReactions) return computeLocal('Live weather unavailable — showing local preview.');
+      return shapeWeather({label:'Live Society Weather', signals:hasCloudSignals ? publicSignals : [], daily, reactions:normalizeReactionTotals(reactionRows), live:true});
+    } catch(err) {
+      if(window.__ECHOVAULT_DEBUG__) console.warn('[EchoSociety] live weather failed', err);
+      return computeLocal('Live weather unavailable — showing local preview.');
+    }
+  }
+  function renderCard(w){ const reactionText=Object.entries(SOCIETY_REACTIONS).map(([key,label])=>`${label}: ${w.reaction_totals[key]||0}`).join(' · '); return `<span>${escapeHTML(w.label)}</span><h4>${escapeHTML(w.phrase)}</h4><p>${escapeHTML(w.total)} anonymous signals today. ${w.connected ? 'Fetched from public-safe EchoSociety data.' : 'This is a local preview, not real global data.'}</p>${w.note ? `<small>${escapeHTML(w.note)}</small>` : ''}<div class="society-weather-grid"><b>${escapeHTML(w.dominant_mood)}</b><small>dominant mood</small><b>${w.lanterns_lit}</b><small>lanterns lit</small><b>${w.storms_contained}</b><small>storms contained</small><b>${w.blooms_planted}</b><small>blooms planted</small><b>${w.archive_signals}</b><small>archive signals</small><b>${Object.values(w.reaction_totals).reduce((a,b)=>a+b,0)}</b><small>reaction totals</small></div><small>${escapeHTML(reactionText)}</small>`; }
+  function refreshLive(){ if(!SocietySync.isAvailable()) return; computeLive().then((w)=>{ const card=document.getElementById('society-weather-card'); if(card) card.innerHTML=renderCard(w); }).catch(()=>{}); }
+  function render(){ const w=computeLocal(SocietySync.isAvailable() ? 'Checking live weather…' : ''); setTimeout(refreshLive, 0); return `<section class="society-weather-card" id="society-weather-card">${renderCard(w)}</section>`; }
+  return { compute:computeLocal, computeLocal, computeLive, render };
 })();
 
 function getSocietyDistrictSuggestion(role='') {
@@ -2655,9 +2680,9 @@ const SignalCourierRoute = (() => {
     {id:'bring_bloom_seed', label:'Bring bloom seed to Bloom Market', item:'bloom seed', to:'Bloom Market', reward:{name:'Bloom Seed', qty:1}},
     {id:'take_moon_letter', label:'Take moon letter to Moon Archive', item:'moon letter', to:'Moon Archive', reward:{name:'Moon Thread', qty:1}},
     {id:'deliver_weather_report', label:'Deliver weather report to Weather Tower', item:'weather report', to:'Weather Tower', reward:{name:'Compass Dust', qty:1}},
-    {id:'carry_alam_note', label:'Carry “Alam’s weird note” to the Observatory', item:'alam note', to:'Alam AI Observatory', reward:{name:'Oracle Static', qty:1}}
+    {id:'carry_alam_note', label:"Carry “alam's weird note” to the Observatory", item:'alam note', to:'alam.chat Observatory', reward:{name:'Oracle Static', qty:1}}
   ];
-  const nodes = {'Society Gate':[.50,.82], 'Lantern District':[.18,.32], 'Storm Works':[.44,.20], 'Bloom Market':[.74,.31], 'Moon Archive':[.26,.62], 'Weather Tower':[.61,.58], 'Alam AI Observatory':[.82,.68]};
+  const nodes = {'Society Gate':[.50,.82], 'Lantern District':[.18,.32], 'Storm Works':[.44,.20], 'Bloom Market':[.74,.31], 'Moon Archive':[.26,.62], 'Weather Tower':[.61,.58], 'alam.chat Observatory':[.82,.68]};
   let open=false, raf=0, avatar={x:.50,y:.82,tx:.50,ty:.82}, active=null;
   function renderModal(){ return `<div class="courier-modal" id="courier-modal" role="dialog" aria-label="Signal Courier Route"><div class="courier-panel"><button class="courier-close" id="courier-close-btn">Close</button><h3>Signal Courier Route</h3><p>A tiny peaceful delivery prototype. No combat, no competitive scoring — just gold paths between districts.</p><div class="courier-layout"><canvas id="courier-canvas" width="680" height="420"></canvas><div class="courier-side"><h4>Delivery missions</h4>${missions.map(m=>`<button class="receipt-action-btn courier-mission" data-mission="${m.id}">${escapeHTML(m.label)}</button>`).join('')}<div class="courier-controls"><button data-move="up">↑</button><button data-move="left">←</button><button data-move="down">↓</button><button data-move="right">→</button></div><small>Tap a destination node or use the arrows.</small></div></div></div></div>`; }
   function openRoute(){ if(!document.getElementById('courier-modal')) document.body.insertAdjacentHTML('beforeend', renderModal()); open=true; document.body.style.overflow='hidden'; bind(); drawLoop(); }
@@ -2672,10 +2697,9 @@ const SignalCourierRoute = (() => {
 
 const AlamPrivacy = (() => {
   function shouldIncludeLatestEcho(){ return readLocalJSON('echovault_alam_ai_settings_v1', { includeLatestEcho:false }).includeLatestEcho === true; }
-  function stripSensitiveContext(context={}){ const copy={...context}; delete copy.thought; delete copy.raw_thought; delete copy.full_echo; delete copy.user_text; delete copy.email; delete copy.display_name; return copy; }
-  function buildSafeContext(options={}){ const patterns=PatternEngine.analyze(state.echoes); const arch=ArchetypeEngine.compute(patterns); const avatar=EchoAvatar.load?.() || {}; const context={ dominant_mood:patterns.dominantMood||'empty', emotional_weather:patterns.emotionalWeather||'quiet fog', archetype:arch.archetypeName, average_intensity:patterns.averageIntensity||0, average_silence:patterns.averageSilence||0, echo_count:patterns.totalEchoes||0, current_avatar_role:avatar.role||'Signal Courier', current_society_district:getSocietyDistrictSuggestion(avatar.role||'') };
-    if(options.includeSocietyWeather) context.society_weather=SocietyWeather.compute().phrase;
-    if(options.includeLatestEcho && shouldIncludeLatestEcho()) { const e=state.echoes?.[0]; context.latest_echo_summary=e?{ mood:e.mood, intensity:e.intensity, silence:e.silence }:null; }
+  function stripSensitiveContext(context={}){ const copy={...context}; ['thought','raw_thought','full_echo','user_text','email','display_name','name','profile','avatar_url','avatar_data_url'].forEach((field)=>delete copy[field]); return copy; }
+  function buildSafeContext(options={}){ const patterns=PatternEngine.analyze(state.echoes); const arch=ArchetypeEngine.compute(patterns); const avatar=EchoAvatar.load?.() || {}; const weather=SocietyWeather.computeLocal?.() || SocietyWeather.compute?.(); const context={ dominant_mood:patterns.dominantMood||'empty', emotional_weather:patterns.emotionalWeather||'quiet fog', archetype:arch.archetypeName, average_intensity:patterns.averageIntensity||0, average_silence:patterns.averageSilence||0, echo_count:patterns.totalEchoes||0, avatar_role:avatar.role||'Signal Courier', current_society_district:getSocietyDistrictSuggestion(avatar.role||''), society_weather_label:weather?.label || 'Local Preview Weather' };
+    if(options.includeLatestEcho && shouldIncludeLatestEcho()) { const echo=state.echoes?.[0]; context.latest_echo_summary=echo?{ mood:echo.mood, intensity:echo.intensity, silence:echo.silence }:null; }
     return stripSensitiveContext(context);
   }
   function canUseRemote(){ return Boolean(window.ECHOVAULT_CONFIG?.ALAM_AI_ENDPOINT); }
@@ -2685,27 +2709,28 @@ const AlamPrivacy = (() => {
 const AlamAI = (() => {
   const CHAT_KEY='echovault_alam_ai_chat_v1';
   const settingsKey='echovault_alam_ai_settings_v1';
-  const examples=[
-    'bro this is not a crisis arc, it’s weather with bad lighting. log one echo and don’t negotiate with the void.',
-    'what in the fiqh is this coping mechanism? still, the signal is there. your silence is doing pushups.',
-    'iman check: you’re not empty, you’re buffering. archive the feeling before it turns into mythology.',
-    'the vault says: less explaining, more witnessing. put the thought down like a heavy bag.'
-  ];
   function isRemoteAvailable(){ return Boolean(window.ECHOVAULT_CONFIG?.ALAM_AI_ENDPOINT); }
   function buildSafeContext(options={}){ return AlamPrivacy.buildSafeContext(options); }
-  function localReply(prompt=''){ const lower=prompt.toLowerCase(); if(/self[- ]?harm|suicide|kill myself|hurt myself|dangerous instructions/.test(lower)) return 'I can’t help with harm instructions. Stay with a person, contact local emergency help if danger is near, and put one tiny signal in front of you: breathe, call, wait.'; const ctx=buildSafeContext(); const i=Math.abs((prompt.length + (ctx.echo_count||0) + String(ctx.dominant_mood).length) % examples.length); return examples[i]; }
+  function localReply(prompt=''){
+    const lower=String(prompt).toLowerCase();
+    if(/self[- ]?harm|suicide|kill myself|hurt myself|dangerous instructions/.test(lower)) return 'I can’t help with harm instructions. If danger feels close, contact emergency support or someone nearby now. Stay with one safe breath and one safe person.';
+    const ctx=buildSafeContext();
+    const mood=ctx.dominant_mood || 'mixed';
+    const weather=ctx.emotional_weather || 'weather';
+    return `pattern read: ${mood} under ${weather}. keep it small, witness the signal, and do not hand the void a microphone.`;
+  }
   function loadChat(){ const arr=readLocalJSON(CHAT_KEY, []); return Array.isArray(arr)?arr.slice(-30):[]; }
   function saveChat(arr){ writeLocalJSON(CHAT_KEY, arr.slice(-30)); }
-  function appendMessage(role,text){ const arr=loadChat(); arr.push({role,text:String(text).slice(0,1200),timestamp:new Date().toISOString(),mode:isRemoteAvailable()?'connected mode':'local reflection mode'}); saveChat(arr); const list=document.getElementById('alam-message-list'); if(list) list.insertAdjacentHTML('beforeend', `<div class="alam-msg ${escapeHTML(role)}"><b>${escapeHTML(role)}</b><p>${escapeHTML(text)}</p></div>`); list?.scrollTo(0,list.scrollHeight); }
-  async function sendMessage(prompt, options={}){ const clean=String(prompt||'').trim(); if(!clean) return; appendMessage('you', clean); if(isRemoteAvailable()) { try { const body={ prompt:clean, context:buildSafeContext(options), options:{ includeLatestEcho:Boolean(options.includeLatestEcho), includeSocietyWeather:Boolean(options.includeSocietyWeather) } }; const res=await fetch(window.ECHOVAULT_CONFIG.ALAM_AI_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); if(!res.ok) throw new Error('remote failed'); const data=await res.json(); appendMessage('alam', data.reply || data.text || localReply(clean)); return; } catch(err){ Toast.show('Alam stayed local.'); } } appendMessage('alam', localReply(clean)); }
-  function clearChat(){ localStorage.removeItem(CHAT_KEY); renderMessages(); Toast.show('Alam chat cleared.'); }
-  function renderMessages(){ const list=document.getElementById('alam-message-list'); if(!list) return; const arr=loadChat(); list.innerHTML=arr.map(m=>`<div class="alam-msg ${escapeHTML(m.role)}"><b>${escapeHTML(m.role)}</b><p>${escapeHTML(m.text)}</p></div>`).join('') || '<p class="society-empty">Ask Alam when the coping mechanism starts asking for credentials.</p>'; }
-  function renderPortal(){ const status=isRemoteAvailable()?'connected mode':'local reflection mode'; return `<section class="alam-portal" id="alam-portal"><div class="alam-orb"><span>alam</span></div><div><div class="echo-avatar-kicker">Alam AI Observatory</div><h4>Alam AI</h4><pre>what in the fiqh
+  function appendMessage(role,text){ const arr=loadChat(); arr.push({role,text:String(text).slice(0,1200),timestamp:new Date().toISOString(),mode:isRemoteAvailable()?'connected oracle mode':'local oracle mode'}); saveChat(arr); const list=document.getElementById('alam-message-list'); if(list) list.insertAdjacentHTML('beforeend', `<div class="alam-msg ${escapeHTML(role)}"><b>${escapeHTML(role)}</b><p>${escapeHTML(text)}</p></div>`); list?.scrollTo(0,list.scrollHeight); }
+  async function sendMessage(prompt, options={}){ const clean=String(prompt||'').trim(); if(!clean) return; appendMessage('you', clean); if(isRemoteAvailable()) { try { const body={ prompt:clean, context:buildSafeContext(options), options:{ includeLatestEcho:Boolean(options.includeLatestEcho), includeSocietyWeather:Boolean(options.includeSocietyWeather) } }; const res=await fetch(window.ECHOVAULT_CONFIG.ALAM_AI_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); if(!res.ok) throw new Error('remote failed'); const data=await res.json(); appendMessage('alam', data.reply || data.text || localReply(clean)); return; } catch(err){ Toast.show('alam.chat stayed local.'); } } appendMessage('alam', localReply(clean)); }
+  function clearChat(){ localStorage.removeItem(CHAT_KEY); renderMessages(); Toast.show('alam.chat history cleared.'); }
+  function renderMessages(){ const list=document.getElementById('alam-message-list'); if(!list) return; const arr=loadChat(); list.innerHTML=arr.map(m=>`<div class="alam-msg ${escapeHTML(m.role)}"><b>${escapeHTML(m.role)}</b><p>${escapeHTML(m.text)}</p></div>`).join('') || '<p class="society-empty">Ask alam. Pattern summary only; raw echoes stay private.</p>'; }
+  function renderPortal(){ const status=isRemoteAvailable()?'connected oracle mode':'local oracle mode'; return `<section class="alam-portal" id="alam-portal"><div class="alam-orb"><span>alam</span></div><div><div class="echo-avatar-kicker">alam.chat Observatory</div><h4>alam.chat</h4><pre>what in the fiqh
 is this coping mechanism
-asking for my iman</pre><p class="alam-status">${status}</p><p class="alam-privacy-note">Alam AI uses a pattern summary by default. Raw echoes stay private unless you choose to include them.</p><button class="receipt-action-btn" id="alam-open-btn">Ask Alam</button></div></section>`; }
-  function openChat(){ if(!document.getElementById('alam-chat-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-chat-panel" id="alam-chat-panel" role="dialog" aria-label="Alam AI chat"><div class="alam-chat-card"><button class="courier-close" id="alam-close-btn">Close</button><h3>Alam AI</h3><pre>what in the fiqh
+asking for my iman</pre><p class="alam-status">${status}</p><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private unless you choose otherwise in a future version.</p><button class="receipt-action-btn" id="alam-open-btn">Ask alam</button></div></section>`; }
+  function openChat(){ if(!document.getElementById('alam-chat-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-chat-panel" id="alam-chat-panel" role="dialog" aria-label="alam.chat terminal"><div class="alam-chat-card"><button class="courier-close" id="alam-close-btn">Close</button><h3>alam.chat</h3><pre>what in the fiqh
 is this coping mechanism
-asking for my iman</pre><p class="alam-privacy-note">Pattern summary is ON. Include latest echo is optional and off by default.</p><div id="alam-message-list" class="alam-message-list"></div><label class="alam-toggle"><input type="checkbox" id="alam-include-latest"> include latest echo summary</label><label class="alam-toggle"><input type="checkbox" id="alam-include-weather" checked> include society weather</label><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask the weird little oracle…"><button class="receipt-action-btn" id="alam-send-btn">Send</button></div><button class="settings-secondary-btn" id="alam-clear-btn">Clear Alam chat</button></div></div>`); document.body.style.overflow='hidden'; const settings=readLocalJSON(settingsKey,{includeLatestEcho:false}); const latest=document.getElementById('alam-include-latest'); if(latest) latest.checked=Boolean(settings.includeLatestEcho); bindChat(); renderMessages(); }
+asking for my iman</pre><p class="alam-privacy-note">pattern summary only · raw echoes stay private</p><div id="alam-message-list" class="alam-message-list"></div><label class="alam-toggle"><input type="checkbox" id="alam-include-latest"> include latest echo summary</label><label class="alam-toggle"><input type="checkbox" id="alam-include-weather" checked> include society weather label</label><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask the weird little oracle…"><button class="receipt-action-btn" id="alam-send-btn">Send</button></div><button class="settings-secondary-btn" id="alam-clear-btn">Clear alam.chat history</button></div></div>`); document.body.style.overflow='hidden'; const settings=readLocalJSON(settingsKey,{includeLatestEcho:false}); const latest=document.getElementById('alam-include-latest'); if(latest) latest.checked=Boolean(settings.includeLatestEcho); bindChat(); renderMessages(); }
   function closeChat(){ document.getElementById('alam-chat-panel')?.remove(); document.body.style.overflow=''; }
   function bindChat(){ document.getElementById('alam-close-btn')?.addEventListener('click', closeChat); document.getElementById('alam-clear-btn')?.addEventListener('click', clearChat); document.getElementById('alam-include-latest')?.addEventListener('change',(e)=>{ writeLocalJSON(settingsKey,{...readLocalJSON(settingsKey,{}), includeLatestEcho:e.target.checked}); }); const send=()=>sendMessage(document.getElementById('alam-input')?.value,{includeLatestEcho:document.getElementById('alam-include-latest')?.checked,includeSocietyWeather:document.getElementById('alam-include-weather')?.checked}).then(()=>{ const input=document.getElementById('alam-input'); if(input) input.value=''; }); document.getElementById('alam-send-btn')?.addEventListener('click',send); document.getElementById('alam-input')?.addEventListener('keydown',(e)=>{ if(e.key==='Enter') send(); }); }
   return { CHAT_KEY, isRemoteAvailable, buildSafeContext, localReply, sendMessage, renderPortal, openChat, closeChat, appendMessage, clearChat };
@@ -2733,7 +2758,7 @@ function buildEchoSocietyGate() {
     {title:'Moon Archive', description:'A moonlit shelf for optional symbolic witness marks, not raw diary sharing.', roles:['Moon Archivist','Archive Witness'], action:'Leave Anonymous Line', id:'society-archive-btn', icon:'🌙'},
     {title:'Weather Tower', description:'A high glass compass that turns anonymous signals into shared weather.', roles:['Weather Cartographer'], action:'Contribute Weather', id:'society-weather-btn', icon:'🧭'},
     {title:'Signal Couriers’ Route', description:'Gold paths for peaceful artifact deliveries between districts.', roles:['Signal Courier','Relic Runner'], action:'Start Delivery', id:'society-delivery-btn', icon:'✦'},
-    {title:'Alam AI Observatory', description:'A glitchy cosmic terminal where Alam speaks in local reflection mode first.', roles:['Signal Courier','Moon Archivist'], action:'Open Alam AI', id:'society-alam-btn', icon:'🟣'}
+    {title:'alam.chat Observatory', description:'A glitchy cosmic terminal where Alam speaks in local oracle mode first.', roles:['Signal Courier','Moon Archivist'], action:'Open alam.chat', id:'society-alam-btn', icon:'🟣'}
   ].map(districtCard).join('');
   const archiveInput = `<div class="society-archive-note"><input class="society-archive-input" id="society-archive-line" maxlength="80" placeholder="optional line, local preview only…"><small>For now the line is not uploaded; only a symbolic archive marker is used.</small></div>`;
   const signals = SocietySignals.listLocalSignals().slice(0,8).map(signal => `<article class="society-signal" data-signal-id="${escapeHTML(signal.id)}"><span>${escapeHTML(signal.anonymous_label)}</span><b>${escapeHTML(signal.signal_type)} · ${escapeHTML(signal.mood)}</b><small>${escapeHTML(signal.district)} · ${escapeHTML(signal.intensity_band)} intensity · ${escapeHTML(signal.silence_band)} silence · ${escapeHTML(signal.archetype)}</small><div class="society-reactions">${Object.entries(SOCIETY_REACTIONS).map(([key,label])=>`<button data-reaction="${key}">${label}</button>`).join('')}</div></article>`).join('') || '<p class="society-empty">No local society signals yet. Contributions stay symbolic.</p>';
@@ -2753,7 +2778,7 @@ function updateSocietyConsentUI(options={}) {
 function rerenderSocietyGate() { const panel = document.querySelector('[data-room-panel="society"]'); if (!panel) return false; panel.innerHTML = buildEchoSocietyGate(); bindEchoSocietyGate(); return true; }
 function bindEchoSocietyGate() {
   const showPrivacy = () => { document.getElementById('society-privacy-panel')?.removeAttribute('hidden'); document.getElementById('society-private-state')?.setAttribute('hidden',''); updateSocietyConsentUI({ privateState:false }); };
-  const stayPrivate = () => { SocietySignals.revokeConsent(); updateSocietyConsentUI({ privateState:true }); Toast.show('EchoSociety will not receive signals.'); };
+  const stayPrivate = () => { SocietySignals.setConsent(false); const city=document.getElementById('society-city'); if(city){ city.hidden=true; city.querySelectorAll('button,input,textarea,select').forEach((el)=>{ el.disabled=true; }); } const privacyPanel=document.getElementById('society-privacy-panel'); if(privacyPanel) privacyPanel.hidden=true; const privatePanel=document.getElementById('society-private-state'); if(privatePanel) privatePanel.hidden=false; updateSocietyConsentUI({ privateState:true }); Toast.show('You stayed private. EchoSociety will not receive signals.'); };
   document.getElementById('society-privacy-btn')?.addEventListener('click', showPrivacy);
   document.getElementById('society-private-rules-btn')?.addEventListener('click', showPrivacy);
   document.getElementById('society-enter-btn')?.addEventListener('click', () => SocietySignals.getConsent() ? updateSocietyConsentUI({ privateState:false }) : showPrivacy());
