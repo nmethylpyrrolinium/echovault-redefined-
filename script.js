@@ -263,7 +263,7 @@ const Auth = (() => {
       const {data,error} = await client.auth.getSession();
       if (error) throw error;
       user = data?.session?.user || null;
-      client.auth.onAuthStateChange((_e, s)=>{ user = s?.user || null; UserChip.refresh(); });
+      client.auth.onAuthStateChange((_e, s)=>{ user = s?.user || null; UserAccess.refreshAccessState(); UserChip.refresh(); });
     } catch (error) {
       console.warn('Supabase auth unavailable; falling back to local mode behavior.', error);
       user = null;
@@ -285,6 +285,151 @@ const Auth = (() => {
   }
   function isLocalMode(){ return !client || !user; }
   return { init, signIn, signUp, sendEmailOtp, verifyEmailOtp, signOut, hasSupabase, fetchProfile, upsertProfile, client, SUPABASE_AVATAR_BUCKET, getAuthRedirectUrl, isLocalMode, get user(){return user;}, get mode(){return mode;} };
+
+})();
+
+const UserAccess = (() => {
+  const KEY = 'echovault_access_v1';
+  const TIERS = ['free', 'premium', 'founder', 'alpha'];
+  const PREMIUM_TIERS = ['premium', 'founder', 'alpha'];
+  const FREE_FEATURES = new Set([
+    'create_echo','timeline','universe','basic_profile','basic_receipt','export_vault','import_vault','basic_wrapped','local_mode','auth','basic_avatar','basic_materials','basic_rituals_preview'
+  ]);
+  const PREMIUM_FEATURES = new Set([
+    'emotional_museum_full','relic_crafting','crafting_table','vault_rooms','echo_avatar_progression','advanced_receipts','cinematic_export_cards','artifact_archive','echosociety','society_gate','society_districts','signal_courier','alam_chat','advanced_soundprint','premium_rituals','premium_weather_map','premium_artifact_frames','advanced_wrapped'
+  ]);
+  const FEATURE_ACCESS = [...FREE_FEATURES].reduce((map, key) => ({ ...map, [key]:'free' }), [...PREMIUM_FEATURES].reduce((map, key) => ({ ...map, [key]:'premium' }), {}));
+  let current = { tier:'free', source:'free', updated_at:new Date().toISOString() };
+
+  function normalizeTier(tier) { return TIERS.includes(String(tier || '').toLowerCase()) ? String(tier).toLowerCase() : 'free'; }
+  function normalizeSource(source) { return ['free','local_code','supabase_profile','debug_override'].includes(String(source || '').toLowerCase()) ? String(source).toLowerCase() : 'free'; }
+  function normalizeState(value = {}) {
+    const tier = normalizeTier(value.tier || value.access_tier || value.premium_tier);
+    return { ...value, tier, source:normalizeSource(value.source), updated_at:value.updated_at || new Date().toISOString() };
+  }
+  function load() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(KEY) || '{}');
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { tier:'free', source:'free' };
+      return normalizeState(parsed);
+    } catch (error) {
+      localStorage.removeItem(KEY);
+      return { tier:'free', source:'free' };
+    }
+  }
+  function save(accessState) {
+    const next = normalizeState(accessState);
+    try { localStorage.setItem(KEY, JSON.stringify(next)); } catch {}
+    current = next;
+    return next;
+  }
+  function profileAccess(profile = {}) {
+    const rawTier = profile.access_tier || profile.premium_tier || profile.tier || (profile.is_alpha ? 'alpha' : profile.is_founder ? 'founder' : profile.is_premium ? 'premium' : 'free');
+    const tier = normalizeTier(rawTier);
+    const until = profile.premium_until || profile.access_until || null;
+    if (until && Date.parse(until) && Date.parse(until) < Date.now()) return null;
+    return PREMIUM_TIERS.includes(tier) ? { tier, source:'supabase_profile', premium_until:until || null } : null;
+  }
+  function getLocalProfileAccess() {
+    const profile = ProfileStore.read();
+    const fromLocal = profileAccess(profile);
+    return fromLocal ? { ...fromLocal, source:profile.access_source || 'local_code' } : null;
+  }
+  function refreshAccessState() {
+    const debug = load().debug_override === true || sessionStorage.getItem('echovault_debug_premium') === '1';
+    if (debug) current = { tier:'alpha', source:'debug_override', debug_override:true, updated_at:new Date().toISOString() };
+    else {
+      const supabase = Auth.user ? profileAccess(ProfileStore.read()) : null;
+      if (supabase) current = { ...supabase, updated_at:new Date().toISOString() };
+      else {
+        const local = load();
+        const localIsPremium = PREMIUM_TIERS.includes(local.tier) && local.source === 'local_code';
+        if (localIsPremium) current = local;
+        else current = getLocalProfileAccess() || { tier:'free', source:'free', updated_at:new Date().toISOString() };
+      }
+    }
+    document.documentElement.dataset.accessTier = current.tier;
+    document.documentElement.classList.toggle('is-premium', isPremium());
+    updatePremiumUI();
+    return current;
+  }
+  function isPremium() { return PREMIUM_TIERS.includes(current.tier); }
+  function getTier() { refreshAccessState(); return current.tier; }
+  function getSource() { refreshAccessState(); return current.source; }
+  function canUse(featureKey) {
+    const required = FEATURE_ACCESS[featureKey] || 'premium';
+    if (required === 'free') return true;
+    refreshAccessState();
+    return isPremium();
+  }
+  function getLockedCopy(featureKey) {
+    const names = {
+      emotional_museum_full:'Emotional Museum Full', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'Vault Rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'Advanced Receipts', cinematic_export_cards:'Cinematic Export Cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.chat', advanced_soundprint:'Advanced Soundprint', premium_rituals:'Premium Rituals', premium_weather_map:'Premium Weather Map', premium_artifact_frames:'Premium Artifact Frames', advanced_wrapped:'Advanced Wrapped'
+    };
+    const title = names[featureKey] || 'Premium Feature';
+    return { title, eyebrow:'Premium Access', body:`${title} is a premium worldbuilding layer. Your echoes, export/import, local mode, and basic vault always stay free.`, cta:'Redeem access code' };
+  }
+  function requirePremium(featureKey, options = {}) {
+    if (canUse(featureKey)) return true;
+    const copy = getLockedCopy(featureKey);
+    if (options.toast !== false) Toast.show(`${copy.title} is Premium. Your vault data remains yours.`, 3600);
+    if (options.openSettings) Settings.open();
+    return false;
+  }
+  function setLocalPremiumOverride(enabled) {
+    const next = { ...load(), debug_override:Boolean(enabled), updated_at:new Date().toISOString() };
+    save(next);
+    if (enabled) sessionStorage.setItem('echovault_debug_premium','1');
+    else sessionStorage.removeItem('echovault_debug_premium');
+    return refreshAccessState();
+  }
+  function clearLocalPremiumOverride() {
+    const next = { ...load(), debug_override:false, updated_at:new Date().toISOString() };
+    save(next);
+    sessionStorage.removeItem('echovault_debug_premium');
+    return refreshAccessState();
+  }
+  function applyPremiumState(payload = {}) {
+    const next = save({ ...load(), ...payload, source:payload.source || 'local_code', updated_at:new Date().toISOString() });
+    ProfileStore.write({ access_tier:next.tier, access_source:next.source, premium_tier:next.tier, is_premium:PREMIUM_TIERS.includes(next.tier) });
+    refreshAccessState();
+    return next;
+  }
+  async function hashCode(code) {
+    const data = new TextEncoder().encode(String(code || '').trim().toUpperCase());
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+  async function redeemAccessCode(code) {
+    const clean = String(code || '').trim();
+    if (!clean) return { ok:false, error:'Enter an access code.' };
+    const config = window.ECHOVAULT_CONFIG || {};
+    const plainCodes = Array.isArray(config.ACCESS_CODES) ? config.ACCESS_CODES : [];
+    const direct = plainCodes.find((entry) => String(entry.code || '').trim().toUpperCase() === clean.toUpperCase());
+    let matched = direct;
+    if (!matched) {
+      const hashed = config.ACCESS_CODE_HASHES || {};
+      const hash = await hashCode(clean);
+      const value = hashed[hash];
+      if (value) matched = typeof value === 'string' ? { tier:value } : value;
+    }
+    if (!matched) return { ok:false, error:'Access code not recognized.' };
+    const tier = normalizeTier(matched.tier || 'premium');
+    if (!PREMIUM_TIERS.includes(tier)) return { ok:false, error:'This code is not a Premium tier.' };
+    const state = applyPremiumState({ tier, source:'local_code', code_label:matched.label || 'manual access code', redeemed_at:new Date().toISOString() });
+    return { ok:true, state };
+  }
+  function lockedHTML(featureKey) {
+    const copy = getLockedCopy(featureKey);
+    return `<section class="premium-lock-card" data-premium-feature="${escapeHTML(featureKey)}"><div class="premium-lock-badge">✦ ${escapeHTML(copy.eyebrow)}</div><h4>${escapeHTML(copy.title)}</h4><p>${escapeHTML(copy.body)}</p><button class="receipt-action-btn premium-settings-btn" type="button">${escapeHTML(copy.cta)}</button><small>No checkout or subscription exists yet — codes are granted manually.</small></section>`;
+  }
+  function updatePremiumUI() {
+    const status = document.getElementById('premium-access-status');
+    if (status) status.innerHTML = `Current tier: <b>${escapeHTML(current.tier)}</b><br>Source: <b>${escapeHTML(current.source)}</b>`;
+    const chip = document.getElementById('premium-chip');
+    if (chip) chip.textContent = isPremium() ? `${current.tier} access` : 'free access';
+  }
+  return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, redeemAccessCode, lockedHTML, FEATURE_ACCESS, KEY };
 })();
 
 /* ── NAVIGATION ── */
@@ -297,7 +442,7 @@ const Nav = (() => {
     if (navBtns[v]) {
       navBtns[v].addEventListener('click', () => {
         show(v);
-        if (v === 'wrapped' && typeof CinematicWrapped !== 'undefined' && CinematicWrapped?.open) {
+        if (v === 'wrapped' && typeof CinematicWrapped !== 'undefined' && CinematicWrapped?.open && UserAccess.canUse('advanced_wrapped')) {
           CinematicWrapped.open();
         }
       });
@@ -344,6 +489,7 @@ const Settings = (() => {
     populateArchetype();
     populateEchoAvatar();
     populateSocietyPrivacy();
+    populatePremiumAccess();
   }
   function close() {
     overlay?.classList.remove('open');
@@ -392,6 +538,13 @@ const Settings = (() => {
     const latest = document.getElementById('alam-include-latest-setting');
     if (latest) latest.checked = AlamPrivacy.shouldIncludeLatestEcho();
   }
+  function populatePremiumAccess() {
+    UserAccess.refreshAccessState();
+    const status = document.getElementById('premium-access-status');
+    if (status) status.innerHTML = `Current tier: <b>${escapeHTML(UserAccess.getTier())}</b><br>Source: <b>${escapeHTML(UserAccess.getSource())}</b>`;
+    const debug = document.getElementById('premium-debug-override');
+    if (debug) debug.checked = UserAccess.getSource() === 'debug_override';
+  }
   async function init() {
     const profile = ProfileStore.read();
     document.getElementById('settings-display-name').value = profile.display_name || localStorage.getItem(USER_KEY) || '';
@@ -412,7 +565,7 @@ const Settings = (() => {
       if (!['image/jpeg','image/png','image/webp','image/gif'].includes(f.type) || f.size > 2*1024*1024) { Toast.show('Avatar must be jpeg/png/webp/gif under 2MB'); return; }
       const r = new FileReader(); r.onload = async () => { const avatarImg=document.getElementById('avatar-img'); const initials=document.getElementById('avatar-initials'); avatarImg.src = r.result; avatarImg.style.display='block'; initials.style.display='none'; ProfileStore.write({avatar_data_url:r.result}); if (Auth.user && Auth.client) { try { const ext=(f.name.split('.').pop()||'png').toLowerCase(); const path=`${Auth.user.id}/avatar-${Date.now()}.${ext}`; const {error}=await Auth.client.storage.from(Auth.SUPABASE_AVATAR_BUCKET).upload(path,f,{upsert:true}); if (error) throw error; const {data} = Auth.client.storage.from(Auth.SUPABASE_AVATAR_BUCKET).getPublicUrl(path); const profile={...ProfileStore.read(), avatar_url:data.publicUrl}; ProfileStore.write(profile); await Auth.upsertProfile(profile); } catch(err){ Toast.show('Avatar upload failed; kept local preview.'); } } UserChip.refresh(); e.target.value=''; }; r.readAsDataURL(f);
     });
-    document.getElementById('settings-save-btn')?.addEventListener('click', () => {
+    document.getElementById('settings-save-btn')?.addEventListener('click', async () => {
       const payload = {
         display_name: document.getElementById('settings-display-name').value.trim(),
         username: document.getElementById('settings-username').value.trim(),
@@ -421,8 +574,9 @@ const Settings = (() => {
       };
       ProfileStore.write(payload);
       localStorage.setItem(USER_KEY, payload.display_name || payload.username || localStorage.getItem(USER_KEY) || 'you');
+      await Auth.upsertProfile({ ...ProfileStore.read(), ...payload });
+      UserAccess.refreshAccessState();
       UserChip.refresh();
-  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Profile Synced" : "Local Vault");
       const status = document.getElementById('settings-save-status');
       if (status) { status.textContent = '✓ saved to your universe'; status.classList.add('show'); setTimeout(() => status.classList.remove('show'), 2500); }
     });
@@ -447,6 +601,24 @@ const Settings = (() => {
     document.getElementById('society-export-signals-btn')?.addEventListener('click', () => SocietySignals.exportSignals());
     document.getElementById('alam-clear-chat-btn')?.addEventListener('click', () => { AlamAI.clearChat(); populateSocietyPrivacy(); });
     document.getElementById('alam-include-latest-setting')?.addEventListener('change', (event) => { writeLocalJSON('echovault_alam_ai_settings_v1', { ...readLocalJSON('echovault_alam_ai_settings_v1', {}), includeLatestEcho:event.target.checked }); Toast.show(event.target.checked ? 'alam.chat can include latest echo summary when you ask.' : 'alam.chat latest echo sharing is off.'); });
+    document.getElementById('premium-redeem-btn')?.addEventListener('click', async () => {
+      const input = document.getElementById('premium-access-code');
+      const result = await UserAccess.redeemAccessCode(input?.value || '');
+      if (!result.ok) return Toast.show(result.error, 3400);
+      if (input) input.value = '';
+      populatePremiumAccess();
+      refreshEchoDependentUI();
+      UserChip.refresh();
+      Toast.show(`${UserAccess.getTier()} access unlocked ✦`, 3200);
+    });
+    document.getElementById('premium-debug-override')?.addEventListener('change', (event) => {
+      if (event.target.checked) UserAccess.setLocalPremiumOverride(true);
+      else UserAccess.clearLocalPremiumOverride();
+      populatePremiumAccess();
+      refreshEchoDependentUI();
+      UserChip.refresh();
+      Toast.show(event.target.checked ? 'Debug premium override enabled.' : 'Debug premium override cleared.');
+    });
 
 
   document.getElementById('settings-clear-btn')?.addEventListener('click', () => {
@@ -545,6 +717,7 @@ const Login = (() => {
     if (!res.ok) return Toast.show('Invalid or expired code. If your email only has a magic link, open that link instead.', 4200);
     if (!res.data?.session) return Toast.show('Session not created. If your email has a magic link, open it instead.', 4200);
     const profile = await Auth.fetchProfile(); if (profile) ProfileStore.write(profile);
+    UserAccess.refreshAccessState();
     await Auth.upsertProfile({ ...ProfileStore.read(), display_name: nameInput.value.trim() || ProfileStore.read().display_name });
     UserChip.refresh();
   VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Profile Synced" : "Local Vault"); Toast.show('Vault unlocked. Welcome back.'); enterApp();
@@ -583,6 +756,7 @@ const Login = (() => {
       setButtonLoading(authSignIn, false, 'Sign in', 'Signing in…'); authSignUp.disabled=false;
       if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
       const profile = await Auth.fetchProfile(); if (profile) ProfileStore.write(profile);
+      UserAccess.refreshAccessState();
       UserChip.refresh();
   VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Profile Synced" : "Local Vault"); enterApp();
     });
@@ -2686,7 +2860,7 @@ const SignalCourierRoute = (() => {
   const nodes = {'Society Gate':[.50,.82], 'Lantern District':[.18,.32], 'Storm Works':[.44,.20], 'Bloom Market':[.74,.31], 'Moon Archive':[.26,.62], 'Weather Tower':[.61,.58], 'alam.chat Observatory':[.82,.68]};
   let open=false, raf=0, avatar={x:.50,y:.82,tx:.50,ty:.82}, active=null;
   function renderModal(){ return `<div class="courier-modal" id="courier-modal" role="dialog" aria-label="Signal Courier Route"><div class="courier-panel"><button class="courier-close" id="courier-close-btn">Close</button><h3>Signal Courier Route</h3><p>A tiny peaceful delivery prototype. No combat, no competitive scoring — just gold paths between districts.</p><div class="courier-layout"><canvas id="courier-canvas" width="680" height="420"></canvas><div class="courier-side"><h4>Delivery missions</h4>${missions.map(m=>`<button class="receipt-action-btn courier-mission" data-mission="${m.id}">${escapeHTML(m.label)}</button>`).join('')}<div class="courier-controls"><button data-move="up">↑</button><button data-move="left">←</button><button data-move="down">↓</button><button data-move="right">→</button></div><small>Tap a destination node or use the arrows.</small></div></div></div></div>`; }
-  function openRoute(){ if(!document.getElementById('courier-modal')) document.body.insertAdjacentHTML('beforeend', renderModal()); open=true; document.body.style.overflow='hidden'; bind(); drawLoop(); }
+  function openRoute(){ if(!UserAccess.requirePremium('signal_courier', { openSettings:true })) return; if(!document.getElementById('courier-modal')) document.body.insertAdjacentHTML('beforeend', renderModal()); open=true; document.body.style.overflow='hidden'; bind(); drawLoop(); }
   function closeRoute(){ open=false; cancelAnimationFrame(raf); document.getElementById('courier-modal')?.remove(); document.body.style.overflow=''; }
   function bind(){ const modal=document.getElementById('courier-modal'); document.getElementById('courier-close-btn')?.addEventListener('click', closeRoute); modal?.querySelectorAll('.courier-mission').forEach(btn=>btn.addEventListener('click',()=>{ active=missions.find(m=>m.id===btn.dataset.mission); const [x,y]=nodes[active.to]; avatar.tx=x; avatar.ty=y; Toast.show(`Courier carrying ${active.item}.`); })); modal?.querySelectorAll('[data-move]').forEach(btn=>btn.addEventListener('click',()=>{ const d=btn.dataset.move; avatar.tx=Math.max(.08,Math.min(.92,avatar.tx+(d==='left'?-0.08:d==='right'?0.08:0))); avatar.ty=Math.max(.10,Math.min(.88,avatar.ty+(d==='up'?-0.08:d==='down'?0.08:0))); })); document.getElementById('courier-canvas')?.addEventListener('pointerdown',(e)=>{ const c=e.currentTarget,r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height; let nearest=null,dist=99; Object.entries(nodes).forEach(([name,[nx,ny]])=>{ const d=Math.hypot(nx-x,ny-y); if(d<dist){dist=d;nearest=[name,nx,ny];} }); if(nearest){ avatar.tx=nearest[1]; avatar.ty=nearest[2]; } }); }
   function completeIfArrived(){ if(!active) return; const [x,y]=nodes[active.to]; if(Math.hypot(avatar.x-x,avatar.y-y)<.025){ VaultInventory.addMaterials([active.reward]); EchoAvatar.addXP?.(8, 'delivery_completed'); GentleQuests.evaluate('delivery_completed', active); SocietySignals.contributeDelivery(active); Toast.show(`Delivered ${active.item}. +${active.reward.qty} ${active.reward.name} · +8 XP`); active=null; rerenderSocietyGate(); } }
@@ -2791,6 +2965,7 @@ asking for my iman`;
     return `<section class="alam-portal" id="alam-portal"><div class="alam-orb"><span>alam</span></div><div><div class="echo-avatar-kicker">alam.chat Observatory</div><h4>alam.chat</h4><pre>${escapeHTML(bio)}</pre><p class="alam-status">${currentMode()}</p><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><button class="receipt-action-btn" id="alam-open-btn">Ask alam</button></div></section>`;
   }
   function openChat(){
+    if(!UserAccess.requirePremium('alam_chat', { openSettings:true })) return;
     if(!document.getElementById('alam-chat-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-chat-panel" id="alam-chat-panel" role="dialog" aria-modal="true" aria-label="alam.chat terminal"><div class="alam-chat-card"><header class="alam-chat-head"><div><span class="alam-chat-kicker">weird oracle-terminal</span><h3>alam.chat</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div class="alam-mode-row"><p class="alam-status" id="alam-mode-badge">${currentMode()}</p><button class="settings-secondary-btn" id="alam-local-btn" type="button">Keep it local</button></div><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><div id="alam-message-list" class="alam-message-list"></div><div class="alam-context-options"><label class="alam-toggle"><input type="checkbox" id="alam-include-latest"> Include latest echo summary</label><label class="alam-toggle"><input type="checkbox" id="alam-include-weather" checked> Include society weather label</label><label class="alam-toggle disabled"><input type="checkbox" disabled> Raw echoes — not available.</label></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask the weird little oracle…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
     document.body.style.overflow='hidden';
     const settings=readLocalJSON(settingsKey,{includeLatestEcho:false});
@@ -2824,7 +2999,7 @@ function buildEchoSocietyGate() {
   const district = getSocietyDistrictSuggestion(avatar.role || '');
   const requirements = `<ul class="society-requirements"><li class="${hasAvatar?'met':'missing'}">Create Echo Avatar</li><li class="${state.echoes.length >= 5?'met':'missing'}">Create 5 private echoes</li><li class="${artifactCount >= 1?'met':'missing'}">Save 1 artifact</li></ul>`;
   const echoCircles = `<section class="echo-circles-placeholder"><h4>Echo Circles</h4><p>Small symbolic circles are coming later. No public diary feed. No follower system. No raw echoes.</p></section>`;
-  if (!unlocked) return `<section class="echo-society-room society-locked"><div class="echo-avatar-kicker">Society Gate</div><h4>Society Gate is still sealed.</h4><p>EchoSociety opens only after your private vault has enough shape to enter without giving away raw echoes.</p><p>Society role: ${escapeHTML(avatar.role || 'unformed')} · Recommended district: ${escapeHTML(district)}</p><b>Requirements:</b>${requirements}${AlamAI.renderPortal()}${echoCircles}</section>`;
+  if (!UserAccess.canUse('society_gate')) return UserAccess.lockedHTML('society_gate') + `<section class="echo-society-room society-locked society-preview"><div class="echo-avatar-kicker">Society Gate</div><h4>Society Gate is still sealed.</h4><p>EchoSociety opens only after your private vault has enough shape to enter without giving away raw echoes.</p><p>Society role: ${escapeHTML(avatar.role || 'unformed')} · Recommended district: ${escapeHTML(district)}</p><b>Requirements:</b>${requirements}${AlamAI.renderPortal()}${echoCircles}</section>`;
   const privacy = `<section class="society-privacy-panel" id="society-privacy-panel" ${consent ? 'hidden' : ''}><div class="echo-avatar-kicker">Privacy Rules</div><h4>Privacy Rules</h4><p>${escapeHTML(SocietyPrivacy.explainPrivacy())}</p><p>You choose when to contribute. You can revoke consent anytime.</p><div class="society-actions"><button class="receipt-action-btn" id="society-understand-btn">I Understand</button><button class="receipt-action-btn ghost" id="society-stay-private-btn">Stay Private</button></div></section>`;
   const intro = `<section class="echo-society-room"><div class="echo-avatar-kicker">Society Gate</div><h4>Welcome to EchoSociety.</h4><p>A shared city built from anonymous symbolic signals — not a public diary feed.</p><p class="society-recommendation">Society role: <b>${escapeHTML(avatar.role || 'Signal Courier')}</b> · Recommended district: <b>${escapeHTML(district)}</b></p><div class="society-actions"><button class="receipt-action-btn" id="society-enter-btn">Enter Society</button><button class="receipt-action-btn ghost" id="society-private-btn">Stay Private</button><button class="receipt-action-btn" id="society-privacy-btn">Privacy Rules</button></div><small>${consent ? 'Consent stored locally; cloud consent syncs when logged in.' : 'Entry waits for consent; local mode remains fully usable.'}</small></section>`;
   const districts = [
@@ -2973,6 +3148,8 @@ const Rituals = (() => {
 
   function open(type) {
     if (type === 'alam') { AlamAI.openChat(); return; }
+    const premiumRitualMap = { lantern:'premium_rituals', stormjar:'premium_rituals', dna:'advanced_receipts', crash:'advanced_receipts', sound:'advanced_soundprint', vsvs:'premium_rituals', shatter:'premium_rituals' };
+    if (premiumRitualMap[type] && !UserAccess.requirePremium(premiumRitualMap[type], { openSettings:true })) return;
     const builders = {museum:buildMuseum,lantern:buildLantern,stormjar:buildStormJar,receipt:buildReceipt, dna:buildDNA, crash:buildCrash, sound:buildSound, vsvs:buildConflict, shatter:buildShatter};
     const fn = builders[type];
     if (!fn) return;
@@ -3453,7 +3630,12 @@ Insight: ${d.insight}`;
       if (key.includes('comet')) return 'relic-comet';
       return 'relic-token';
     };
-    const panelLock = (roomId, html) => VaultRooms.isUnlocked(roomId) ? html : `<div class="museum-locked"><h4>${escapeHTML(VaultRooms.getRooms().find(r=>r.id===roomId)?.name || 'Locked Room')}</h4><p>${escapeHTML(VaultRooms.getUnlockReason(roomId))}</p></div>`;
+    const premiumRoomFeatures = { weather_room:'premium_weather_map', soundprint_wall:'advanced_soundprint', relic_hall:'emotional_museum_full', archive_shelf:'artifact_archive', lantern_garden:'vault_rooms', crafting_table:'crafting_table', society_gate:'society_gate' };
+    const panelLock = (roomId, html) => {
+      const feature = premiumRoomFeatures[roomId];
+      if (feature && !UserAccess.canUse(feature)) return UserAccess.lockedHTML(feature);
+      return VaultRooms.isUnlocked(roomId) ? html : `<div class="museum-locked"><h4>${escapeHTML(VaultRooms.getRooms().find(r=>r.id===roomId)?.name || 'Locked Room')}</h4><p>${escapeHTML(VaultRooms.getUnlockReason(roomId))}</p></div>`;
+    };
     const roomMap = [
       ['weather_room','weather','Weather Room'],
       ['archetype_hall','archetype','Archetype Hall'],
@@ -3467,8 +3649,10 @@ Insight: ${d.insight}`;
     ];
     const tabButton = ([roomId, panel, label]) => {
       const unlockId = roomId === 'archetype_hall' ? 'weather_room' : roomId === 'materials_room' ? 'crafting_table' : roomId;
-      const unlocked = VaultRooms.isUnlocked(unlockId);
-      return `<button class="museum-tab ${panel==='weather'?'active':''} ${unlocked?'is-unlocked':'is-locked'}" data-room="${panel}" title="${escapeHTML(unlocked?'Awakened':VaultRooms.getUnlockReason(unlockId))}">${escapeHTML(label)}</button>`;
+      const premiumUnlocked = !premiumRoomFeatures[roomId] || UserAccess.canUse(premiumRoomFeatures[roomId]);
+      const unlocked = premiumUnlocked && VaultRooms.isUnlocked(unlockId);
+      const title = premiumUnlocked ? (unlocked ? 'Awakened' : VaultRooms.getUnlockReason(unlockId)) : UserAccess.getLockedCopy(premiumRoomFeatures[roomId]).body;
+      return `<button class="museum-tab ${panel==='weather'?'active':''} ${unlocked?'is-unlocked':'is-locked'}" data-room="${panel}" title="${escapeHTML(title)}">${premiumUnlocked ? '' : '✦ '}${escapeHTML(label)}</button>`;
     };
     const shellStart = `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-meta"><span>${echoes.length} echoes</span><span>${saved.length} artifacts</span><span>${totalMaterials} materials</span><span>${weather.name}</span><span>${arch.archetypeName}</span></div></header><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}${quest.xp ? ` · +${quest.xp} XP` : ''}`}</small></div>${avatarHtml}<nav class="museum-tabs" aria-label="Museum rooms">${roomMap.map(tabButton).join('')}</nav>`;
     if(!echoes.length) return `${shellStart}<section class="vault-materials"><h4>Vault Materials</h4>${materialRows}</section>${materialsPrep}${societyTeaser}<div class="museum-empty">The museum is quiet. Create echoes to awaken its rooms.</div></div>`;
@@ -3620,6 +3804,9 @@ function setPeriod(p, btn) {
 }
 document.getElementById('export-btn').addEventListener('click', () => Storage.exportVault(state.echoes));
 document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file').click());
+document.addEventListener('click', (event) => {
+  if (event.target.closest('.premium-settings-btn')) Settings.open();
+});
 
 const UserChip = (() => {
   const chip = document.getElementById('user-chip');
@@ -3629,11 +3816,14 @@ const UserChip = (() => {
     const profile = ProfileStore.read();
     const name = profile.display_name || Auth.user?.user_metadata?.display_name || localStorage.getItem(USER_KEY) || 'you';
     const email = Auth.user?.email || 'local mode';
+    const tier = UserAccess.getTier();
     if (!Auth.user && !localStorage.getItem(USER_KEY) && !profile.display_name) { chip?.classList.remove('visible'); return; }
     chip?.classList.add('visible');
     document.getElementById('chip-name').textContent = name;
     document.getElementById('chip-display-name').textContent = name;
-    document.getElementById('chip-email').textContent = email;
+    document.getElementById('chip-email').textContent = `${email} · ${tier} access`;
+    const syncLabel = document.getElementById('chip-sync-label');
+    if (syncLabel) syncLabel.textContent = UserAccess.isPremium() ? `${tier} access` : (Auth.user ? 'Profile Synced' : 'Local Vault');
     const avatarEl = document.getElementById('chip-avatar');
     const avatarUrl = profile.avatar_url || profile.avatar_data_url;
     if (avatarUrl && avatarEl) {
@@ -3870,6 +4060,11 @@ async function init() {
   } catch (error) {
     console.warn('Auth initialization failed; continuing in local mode.', error);
   }
+  if (Auth.user) {
+    const profile = await Auth.fetchProfile();
+    if (profile) ProfileStore.write(profile);
+  }
+  UserAccess.refreshAccessState();
   UserChip.refresh();
   VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Profile Synced" : "Local Vault");
   MigrationFlow.init();
@@ -3893,8 +4088,8 @@ const DebugPanel = (() => {
       document.body.appendChild(panel);
     }
     const profile = ProfileStore.read();
-    panel.innerHTML = `APP_VERSION:${APP_VERSION}<br>SW cache:${SW_CACHE_VERSION}<br>mode:${Auth.isLocalMode() ? 'local' : 'supabase'}<br>display:${AppEnvironment.isStandalone() ? 'standalone':'browser'}<br>echoes:${state.echoes.length}<br>artifacts:${ArtifactArchive.listArtifacts().length}<br>profile:${escapeHTML(profile.display_name || 'anon')}<br>sw:${navigator.serviceWorker?.controller ? 'active' : 'none'}`;
-    console.info('[EchoVault Debug]', { appVersion: APP_VERSION, swCacheVersion: SW_CACHE_VERSION, storageMode: Auth.isLocalMode() ? 'local' : 'supabase', standalone: AppEnvironment.isStandalone(), echoCount: state.echoes.length, artifactCount: ArtifactArchive.listArtifacts().length });
+    panel.innerHTML = `APP_VERSION:${APP_VERSION}<br>SW cache:${SW_CACHE_VERSION}<br>mode:${Auth.isLocalMode() ? 'local' : 'supabase'}<br>display:${AppEnvironment.isStandalone() ? 'standalone':'browser'}<br>echoes:${state.echoes.length}<br>artifacts:${ArtifactArchive.listArtifacts().length}<br>profile:${escapeHTML(profile.display_name || 'anon')}<br>access:${escapeHTML(UserAccess.getTier())} (${escapeHTML(UserAccess.getSource())})<br>sw:${navigator.serviceWorker?.controller ? 'active' : 'none'}`;
+    console.info('[EchoVault Debug]', { appVersion: APP_VERSION, swCacheVersion: SW_CACHE_VERSION, storageMode: Auth.isLocalMode() ? 'local' : 'supabase', standalone: AppEnvironment.isStandalone(), echoCount: state.echoes.length, artifactCount: ArtifactArchive.listArtifacts().length, accessTier: UserAccess.getTier(), accessSource: UserAccess.getSource() });
   }
   return { ensure };
 })();
