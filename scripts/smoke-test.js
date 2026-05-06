@@ -148,6 +148,8 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 
 // Phase 1 game/community foundation checks
 const sw = fs.readFileSync('sw.js','utf8');
+if (!script.includes("receipt-failsafe-rendering")) failures.push('APP_VERSION not updated to receipt-failsafe-rendering');
+if (!script.includes('echovault-v7-receipt-failsafe') && !sw.includes('echovault-v7-receipt-failsafe')) failures.push('Phase 2 cache marker missing');
 if (!script.includes("phase-2-relic-crafting-avatar-progression")) failures.push('APP_VERSION not updated to phase-2-relic-crafting-avatar-progression');
 if (!script.includes('echovault-v6-phase-2-game-loop') && !sw.includes('echovault-v6-phase-2-game-loop')) failures.push('Phase 2 cache marker missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');
@@ -176,6 +178,17 @@ if (!(script.includes('todayKey') && script.includes('completionKey') && script.
 }
 if (!(script.includes('completed_at') || script.includes('todayKey'))) failures.push('GentleQuests missing completed_at/todayKey completion marker');
 if (!(script.includes('Vault Holder') || script.includes('Cardholder'))) failures.push('Mood Receipt missing Vault Holder/Cardholder identity field');
+
+
+// Mood Receipt fail-safe rendering checks
+if (!script.includes('function safeGetReceiptData')) failures.push('safeGetReceiptData helper missing');
+if (!(script.includes('safeGetReceiptData(safeMode)') || script.includes('safeGetReceiptData(mode'))) failures.push('buildReceipt does not use safeGetReceiptData');
+if (!script.includes('Receipt failed to open')) failures.push('Receipt failure toast text missing');
+if (script.includes('Auth.hasSupabase?.()')) failures.push('Auth.hasSupabase?.() regression detected');
+if (!script.includes('receipt-error-card')) failures.push('receipt-error-card fallback missing');
+if (!(script.includes("let charImgHTML = ''") || script.includes('let charImgHTML=""') || script.includes("var charImgHTML = ''") || script.includes("charImgHTML = ''"))) failures.push('charImgHTML safe default missing');
+if (!/receipt\s*:\s*buildReceipt/.test(script)) failures.push('Ritual builders map missing receipt: buildReceipt');
+if (!script.includes("modal.classList.add('open')")) failures.push('Ritual open path no longer opens fun modal');
 if (!(script.includes('receiptClass') && script.includes('RECEIPT_CLASSES'))) failures.push('ReceiptRenderer missing receipt class generation');
 if (!(style.includes('.museum-shell') && style.includes('overflow-y:auto') && style.includes('max-height:calc(100dvh'))) failures.push('museum layout missing max-height/overflow-y');
 if (!(style.includes('.museum-tabs') && (style.includes('overflow-x:auto') || style.includes('grid-template-columns')))) failures.push('museum tabs missing overflow-x/responsive layout');

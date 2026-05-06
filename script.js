@@ -1,6 +1,8 @@
 (function EchoVault() {
 'use strict';
 
+const APP_VERSION = 'receipt-failsafe-rendering';
+const SW_CACHE_VERSION = 'echovault-v7-receipt-failsafe';
 const APP_VERSION = 'phase-2-relic-crafting-avatar-progression';
 const SW_CACHE_VERSION = 'echovault-v6-phase-2-game-loop';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
@@ -2070,45 +2072,74 @@ const ReceiptRenderer = (() => {
     return seed.split('').map((c,i)=>(c.charCodeAt(0)+i)%2?'|':'¦').join('').padEnd(26,'|').slice(0,26);
   }
   function vaultHolderName() {
-    const profileName = ProfileStore.read()?.display_name;
-    const emailPrefix = Auth.user?.email ? Auth.user.email.split('@')[0] : '';
-    const localName = localStorage.getItem(USER_KEY);
-    return [profileName, emailPrefix, localName].map(v => String(v || '').trim()).find(Boolean) || 'Local Voyager';
+    try {
+      const profileName = ProfileStore.read()?.display_name;
+      const emailPrefix = Auth.user?.email ? Auth.user.email.split('@')[0] : '';
+      const localName = localStorage.getItem(USER_KEY);
+      return [profileName, emailPrefix, localName].map(v => String(v || '').trim()).find(Boolean) || 'Local Voyager';
+    } catch(e) {
+      return 'Local Voyager';
+    }
   }
   function syncState() {
     if (Auth.user) return 'Profile Synced';
+    const canSync = typeof Auth.hasSupabase === 'function' ? Auth.hasSupabase() : Boolean(Auth.hasSupabase);
+    return canSync ? 'Sync Ready' : 'Local Vault';
     return Auth.hasSupabase?.() ? 'Sync Ready' : 'Local Vault';
   }
   function getData(mode='latest') {
-    const p = PatternEngine.analyze(state.echoes);
-    const a = ArchetypeEngine.compute(p);
-    const latest = state.echoes[0] || {};
-    const mood = mode === 'weekly' ? (p.dominantMood || 'reflective') : (latest.mood || p.dominantMood || 'reflective');
-    const intensity = mode === 'weekly' ? p.averageIntensity : (latest.intensity || 0);
-    const silence = mode === 'weekly' ? p.averageSilence : (latest.silence || 0);
+    const safeMode = mode === 'weekly' ? 'weekly' : 'latest';
+    const fallbackP = {
+      dominantMood:'reflective', averageIntensity:0, averageSilence:0, totalEchoes:0,
+      emotionalWeather:'shifting sky', voidCount:0, oneLineInsight:'You kept returning. That counts.'
+    };
+    const echoes = Array.isArray(state.echoes) ? state.echoes : [];
+    let p = fallbackP;
+    let a = { archetypeName:'The Unknown' };
+    let latest = echoes[0] || {};
+    try { p = { ...fallbackP, ...(PatternEngine.analyze(echoes) || {}) }; } catch(e) { p = fallbackP; }
+    try { a = { archetypeName:'The Unknown', ...(ArchetypeEngine.compute(p) || {}) }; } catch(e) { a = { archetypeName:'The Unknown' }; }
+    if (!latest || typeof latest !== 'object') latest = {};
+    const mood = safeMode === 'weekly' ? (p.dominantMood || 'reflective') : (latest.mood || p.dominantMood || 'reflective');
+    const intensity = Number(safeMode === 'weekly' ? p.averageIntensity : (latest.intensity ?? 0)) || 0;
+    const silence = Number(safeMode === 'weekly' ? p.averageSilence : (latest.silence ?? 0)) || 0;
     const date = new Date();
-    const receiptId = `EV-${Date.now().toString().slice(-6)}`;
-    const echoId = latest.id || `${mode}-${p.totalEchoes || 0}`;
-    const coordinates = `EV-${String(mood).toUpperCase()}-I${String(Math.round(intensity || 0)).padStart(2,'0')}-S${String(Math.round(silence || 0)).padStart(2,'0')}`;
+    const receiptId = `EV-${Date.now().toString().slice(-6)}` || 'EV-000000';
+    const echoId = latest.id || 'no-echo';
+    const coordinates = `EV-${String(mood || 'reflective').toUpperCase()}-I${String(Math.round(intensity)).padStart(2,'0')}-S${String(Math.round(silence)).padStart(2,'0')}` || 'EV-REFLECTIVE-I00-S00';
     const receiptClass = RECEIPT_CLASSES[mood] || 'Moon Archive Class';
+    let latestMaterials = [];
+    let latestCrafted = null;
+    let avatar = {};
+    let latestUnlocked = null;
+    try { latestMaterials = MaterialEngine.generateForEcho(latest).filter(m => latest.id); } catch(e) { latestMaterials = []; }
+    try { latestCrafted = ArtifactArchive.listArtifacts().find(item => item.source === 'crafted' || item.recipe_id) || null; } catch(e) { latestCrafted = null; }
+    try { avatar = EchoAvatar.load?.() || {}; } catch(e) { avatar = {}; }
+    try { latestUnlocked = VaultRooms.getUnlockedRooms?.().slice(-1)[0] || null; } catch(e) { latestUnlocked = null; }
+    const syncLabel = syncState() || 'Local Vault';
+    const safeString = `${mood || 'reflective'}:${p.totalEchoes || 0}:${safeMode}:${receiptId || 'EV-000000'}:${echoId || 'no-echo'}`;
     const latestMaterials = MaterialEngine.generateForEcho(latest).filter(m => latest.id);
     const latestCrafted = ArtifactArchive.listArtifacts().find(a => a.source === 'crafted' || a.recipe_id);
     const avatar = EchoAvatar.load?.() || {};
     const latestUnlocked = VaultRooms.getUnlockedRooms?.().slice(-1)[0];
     return {
-      mode,
+      mode: safeMode || 'latest',
       timestamp: date.toLocaleString(),
       date: date.toLocaleDateString(),
-      vaultHolder: vaultHolderName(),
-      echoId,
-      receiptId,
-      receiptNumber: receiptId,
-      receiptClass,
-      coordinates,
-      mood,
+      vaultHolder: vaultHolderName() || 'Local Voyager',
+      echoId: echoId || 'no-echo',
+      receiptId: receiptId || 'EV-000000',
+      receiptNumber: receiptId || 'EV-000000',
+      receiptClass: receiptClass || 'Moon Archive Class',
+      coordinates: coordinates || 'EV-REFLECTIVE-I00-S00',
+      mood: mood || 'reflective',
       intensity,
       silence,
       weather: p.emotionalWeather || 'shifting sky',
+      archetype: a.archetypeName || 'The Unknown',
+      voidStatus: safeMode === 'weekly' ? `${Number(p.voidCount) || 0} void entries` : (latest.void ? 'Void Signal' : 'Spoken Signal'),
+      insight: p.oneLineInsight || 'You kept returning. That counts.',
+      syncLabel,
       archetype: a.archetypeName,
       voidStatus: mode === 'weekly' ? `${p.voidCount} void entries` : (latest.void ? 'Void Signal' : 'Spoken Signal'),
       insight: p.oneLineInsight,
@@ -2117,11 +2148,29 @@ const ReceiptRenderer = (() => {
       craftedRelic: latestCrafted?.title || '',
       avatarRole: avatar.role ? `${avatar.role} · ${avatar.role_title || ''}`.trim() : '',
       roomUnlocked: latestUnlocked?.name || '',
+      barcode: makeBarcode(safeString)
       barcode: makeBarcode(`${mood}${p.totalEchoes}${mode}${receiptId}`)
     };
   }
   return { RECEIPT_CLASSES, getData, openLatest:()=>getData('latest'), openWeekly:()=>getData('weekly') };
 })();
+
+
+function isReceiptDebugMode() {
+  try { return new URLSearchParams(window.location.search).get('debug') === '1'; } catch(e) { return false; }
+}
+
+function safeGetReceiptData(mode = 'latest') {
+  try {
+    return mode === 'weekly'
+      ? ReceiptRenderer.openWeekly()
+      : ReceiptRenderer.openLatest();
+  } catch (error) {
+    console.warn('Receipt failed to render', error);
+    Toast.show('Receipt failed to open. Your echoes are still safe.');
+    return null;
+  }
+}
 
 /* ── FUN RITUALS ── */
 
@@ -2523,7 +2572,18 @@ const Rituals = (() => {
     const fn = builders[type];
     if (!fn) return;
     const shown = getRitualOb();
-    const doOpen = () => { content.innerHTML = fn(); modal.classList.add('open'); postBuild(type); };
+    const doOpen = () => {
+      try {
+        content.innerHTML = fn();
+      } catch (error) {
+        console.warn('Ritual failed to render', error);
+        content.innerHTML = type === 'receipt'
+          ? '<div class="receipt-error-card"><h3>Receipt unavailable</h3><p>Your echoes are safe. Try refreshing the app cache or creating one new echo.</p></div>'
+          : '<div class="ritual-error-card"><h3>Ritual unavailable</h3><p>Your vault is safe. Try refreshing the app cache.</p></div>';
+      }
+      modal.classList.add('open');
+      postBuild(type);
+    };
     if (!shown[type]) {
       showRitualOnboarding(type, doOpen);
     } else {
@@ -2558,10 +2618,11 @@ const Rituals = (() => {
       document.querySelectorAll('.art-fav').forEach(btn=>btn.addEventListener('click',()=>{ArtifactArchive.toggleFavorite(btn.dataset.id);btn.classList.toggle('active');}));
       document.querySelectorAll('.craft-btn').forEach(btn=>btn.addEventListener('click',()=>{const result=RelicCrafting.craft(btn.dataset.recipeId);if(result.ok){const preview=document.getElementById('crafted-preview');if(preview){preview.hidden=false;preview.innerHTML=`<b>Crafted Relic</b><span>${escapeHTML(result.artifact.title)}</span><small>${escapeHTML(result.artifact.description || result.artifact.subtitle || '')}</small>`;} refreshEchoDependentUI();}else if(result.missing?.length){Toast.show(`Missing: ${result.missing.map(m=>`${m.qty} ${m.name}`).join(', ')}`);}}));
       document.getElementById('save-receipt-latest')?.addEventListener('click',()=>{
-        const data = ReceiptRenderer.openLatest();
+        const data = safeGetReceiptData('latest');
+        if (!data) return;
         ArtifactArchive.saveArtifact({ type:'receipt', title:'Mood Receipt', subtitle:data.insight, data });
         GentleQuests.evaluate('receipt_exported');
-      Toast.show('Receipt saved ✓');
+        Toast.show('Receipt saved ✓');
       });
     }
     if (type === 'lantern') initLanternInteraction();
@@ -2586,11 +2647,10 @@ const Rituals = (() => {
       replayBtn.textContent = '? how to use';
       replayBtn.addEventListener('click', () => showRitualOnboarding('receipt', () => {}));
       content.appendChild(replayBtn);
-      document.querySelectorAll('.theme-btn').forEach(btn => {
+      document.querySelectorAll('.receipt-themes .theme-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-          if (btn.dataset.mode) return;
           receiptTheme = btn.dataset.theme;
-          document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.receipt-themes .theme-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           const mainArea = document.querySelector('.receipt-main-area');
           if (mainArea) mainArea.innerHTML = buildReceiptCore();
@@ -2666,25 +2726,40 @@ const Rituals = (() => {
     return imgs.map((src, i) => {
       const posClass = placements[i] || positions[1];
       const smallClass = i === 1 ? ' small' : '';
-      return `<img class="receipt-char-img ${posClass}${smallClass}" src="${src}" alt="" aria-hidden="true" crossorigin="anonymous">`;
+      return `<img class="receipt-char-img ${escapeHTML(posClass)}${smallClass}" src="${escapeHTML(src)}" alt="" aria-hidden="true" crossorigin="anonymous">`;
     }).join('');
   }
 
   function buildReceiptCore(mode='latest') {
-    const data = mode === 'weekly' ? ReceiptRenderer.openWeekly() : ReceiptRenderer.openLatest();
-    const charImgs = pickCharImgs();
-    const charImgHTML = buildCharImgHTML(charImgs);
+    const safeMode = mode === 'weekly' ? 'weekly' : 'latest';
+    const data = safeGetReceiptData(safeMode);
+    let charImgHTML = '';
+    if (isReceiptDebugMode()) console.info('[EchoVault Receipt]', data);
+    if (!data) {
+      return `<div class="receipt-error-card">
+        <h3>Receipt unavailable</h3>
+        <p>Your echoes are safe. Try refreshing the app cache or creating one new echo.</p>
+      </div>`;
+    }
+    try {
+      const charImgs = pickCharImgs();
+      charImgHTML = buildCharImgHTML(charImgs);
+    } catch (error) {
+      console.warn('Receipt decoration failed', error);
+      charImgHTML = '';
+    }
 
-    return `<div class="receipt ${receiptTheme}" id="receipt-el" style="position:relative">
+    return `<div class="receipt ${escapeHTML(receiptTheme)}" id="receipt-el" style="position:relative">
       <div class="receipt-paper">
         <div class="receipt-header">
           <div class="receipt-store">ECHOVAULT™</div>
           <div class="receipt-tagline">Emotional Surplus Store · Est. Today</div>
         </div>
         <hr class="receipt-divider">
-        <div class="receipt-line"><span>Receipt type</span><span>${mode === 'weekly' ? 'Weekly Summary' : 'Latest Echo'}</span></div>
+        <div class="receipt-line"><span>Receipt type</span><span>${escapeHTML(safeMode === 'weekly' ? 'Weekly Summary' : 'Latest Echo')}</span></div>
         <div class="receipt-line"><span>Vault Holder</span><span>${escapeHTML(data.vaultHolder)}</span></div>
         <div class="receipt-line"><span>Echo ID</span><span>${escapeHTML(data.echoId)}</span></div>
+        <div class="receipt-line"><span>Receipt ID</span><span>${escapeHTML(data.receiptId)}</span></div>
         <div class="receipt-line"><span>Receipt Class</span><span>${escapeHTML(data.receiptClass)}</span></div>
         <div class="receipt-line"><span>Coordinates</span><span>${escapeHTML(data.coordinates)}</span></div>
         <div class="receipt-line"><span>Mood</span><span>${escapeHTML(String(data.mood).toUpperCase())}</span></div>
@@ -2771,10 +2846,31 @@ const Rituals = (() => {
   }
 
   async function copyReceiptSummary() {
-    const mode = document.querySelector('.receipt-mode-btn.active')?.dataset.mode || 'latest';
-    const d = mode === 'weekly' ? ReceiptRenderer.openWeekly() : ReceiptRenderer.openLatest();
-    const txt = `EchoVault ${mode} receipt\nVault Holder: ${d.vaultHolder}\nReceipt ID: ${d.receiptId}\nEcho ID: ${d.echoId}\nReceipt Class: ${d.receiptClass}\nCoordinates: ${d.coordinates}\nMood: ${d.mood}\nIntensity: ${d.intensity}/10\nSilence: ${d.silence}/10\nEmotional Weather: ${d.weather}\nArchetype: ${d.archetype}\nVoid status: ${d.voidStatus}\nDate: ${d.date}\nSync state: ${d.syncLabel}\nInsight: ${d.insight}`;
-    try { await navigator.clipboard.writeText(txt); Toast.show('Summary copied ✓'); } catch { Toast.show('Copy failed.'); }
+    try {
+      const mode = document.querySelector('.receipt-mode-btn.active')?.dataset.mode || 'latest';
+      const d = safeGetReceiptData(mode);
+      if (!d) { Toast.show('Copy failed.'); return; }
+      const txt = `EchoVault ${mode} receipt
+Vault Holder: ${d.vaultHolder}
+Receipt ID: ${d.receiptId}
+Echo ID: ${d.echoId}
+Receipt Class: ${d.receiptClass}
+Coordinates: ${d.coordinates}
+Mood: ${d.mood}
+Intensity: ${d.intensity}/10
+Silence: ${d.silence}/10
+Emotional Weather: ${d.weather}
+Archetype: ${d.archetype}
+Void status: ${d.voidStatus}
+Date: ${d.date}
+Sync state: ${d.syncLabel}
+Insight: ${d.insight}`;
+      await navigator.clipboard.writeText(txt);
+      Toast.show('Summary copied ✓');
+    } catch(e) {
+      console.warn('Receipt copy failed', e);
+      Toast.show('Copy failed.');
+    }
   }
 
   function fallbackDownload(canvas) {

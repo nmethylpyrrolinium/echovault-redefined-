@@ -1,3 +1,5 @@
+const APP_VERSION = 'receipt-failsafe-rendering';
+const CACHE = 'echovault-v7-receipt-failsafe';
 const APP_VERSION = 'phase-2-relic-crafting-avatar-progression';
 const CACHE = 'echovault-v6-phase-2-game-loop';
 
