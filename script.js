@@ -2074,7 +2074,7 @@ const ReceiptRenderer = (() => {
   }
   function syncState() {
     if (Auth.user) return 'Profile Synced';
-    return Auth.hasSupabase?.() ? 'Cloud Ready' : 'Local Vault';
+    return Auth.hasSupabase ? 'Cloud Ready' : 'Local Vault';
   }
   function getData(mode='latest') {
     const p = PatternEngine.analyze(state.echoes);
