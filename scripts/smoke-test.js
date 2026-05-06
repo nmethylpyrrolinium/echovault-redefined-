@@ -148,22 +148,51 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 
 // Phase 1 game/community foundation checks
 const sw = fs.readFileSync('sw.js','utf8');
-if (!script.includes("receipt-failsafe-rendering")) failures.push('APP_VERSION not updated to receipt-failsafe-rendering');
-if (!script.includes('echovault-v7-receipt-failsafe') && !sw.includes('echovault-v7-receipt-failsafe')) failures.push('Phase 2 cache marker missing');
-if (!script.includes("phase-2-relic-crafting-avatar-progression")) failures.push('APP_VERSION not updated to phase-2-relic-crafting-avatar-progression');
-if (!script.includes('echovault-v6-phase-2-game-loop') && !sw.includes('echovault-v6-phase-2-game-loop')) failures.push('Phase 2 cache marker missing');
+if (!script.includes("phase-3-echo-society-foundation")) failures.push('APP_VERSION not updated to phase-3-echo-society-foundation');
+if (!script.includes('echovault-v8-phase-3-echo-society') && !sw.includes('echovault-v8-phase-3-echo-society')) failures.push('Phase 3 cache marker missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');
-['EchoAvatar','echovault_avatar_v1','MaterialEngine','VaultInventory','echovault_inventory_v1','GentleQuests','echovault_quests_v1','EchoSociety — coming later'].forEach((marker) => {
+['EchoAvatar','echovault_avatar_v1','MaterialEngine','VaultInventory','echovault_inventory_v1','GentleQuests','echovault_quests_v1','Society Gate'].forEach((marker) => {
   if (!script.includes(marker) && !index.includes(marker)) failures.push(`Missing Phase 1 marker: ${marker}`);
 });
 ['Void Lantern','Storm Jar','Emotional Museum','ArtifactArchive','signInWithOtp','auth-local-btn','beforeinstallprompt','echovault_echoes_v2','echovault_artifacts_v1'].forEach((marker) => {
   if (!script.includes(marker) && !index.includes(marker)) failures.push(`Required existing marker missing: ${marker}`);
 });
-if (/\b(leaderboard)\b/i.test(script.replace(/EchoSociety — coming later/g,''))) failures.push('Forbidden social/community implementation wording detected');
+if (/\b(leaderboard)\b/i.test(script)) failures.push('Forbidden social/community implementation wording detected');
 if (script.toLowerCase().includes('chatbot')) failures.push('Chatbot added unexpectedly');
 if (!script.includes('Profile Synced')) failures.push('Vault sync wording does not use Profile Synced');
 if (script.includes('Vault Synced')) failures.push('Vault Synced wording still present despite placeholder echo sync');
 
+
+
+
+// Phase 3 — EchoSociety privacy-first foundation checks
+[
+  ['SocietySignals exists', 'const SocietySignals = (() => {'],
+  ['SocietyWeather exists', 'const SocietyWeather = (() => {'],
+  ['consent key exists', 'echovault_society_consent_v1'],
+  ['signals key exists', 'echovault_society_signals_v1'],
+  ['reactions key exists', 'echovault_society_reactions_v1'],
+  ['Society Gate exists', 'Society Gate'],
+  ['Lantern District exists', 'Lantern District'],
+  ['Storm Works exists', 'Storm Works'],
+  ['Bloom Market exists', 'Bloom Market'],
+  ['Moon Archive exists', 'Moon Archive'],
+  ['Weather Tower exists', 'Weather Tower'],
+  ['Privacy Rules exists', 'Privacy Rules'],
+  ['raw echo sharing is not default', 'raw_echo_shared:false'],
+  ['EchoSociety Privacy settings exists', 'EchoSociety Privacy'],
+  ['symbolic witnessed reaction exists', 'witnessed'],
+  ['symbolic held reaction exists', 'held'],
+  ['symbolic softened reaction exists', 'softened'],
+  ['symbolic bloomed reaction exists', 'bloomed'],
+  ['symbolic charged reaction exists', 'charged'],
+  ['auth-local-btn still exists', 'auth-local-btn'],
+  ['echovault_echoes_v2 still exists', 'echovault_echoes_v2'],
+  ['EchoAvatar still exists', 'EchoAvatar'],
+  ['VaultInventory still exists', 'VaultInventory']
+].forEach(([label, marker]) => { if (!script.includes(marker) && !index.includes(marker)) failures.push(`Phase 3 check failed: ${label}`); });
+if (/\b(open chat|chat module|direct message|dm module|user search|public diary feed|like counts?|followers? module|leaderboard)\b/i.test(script)) failures.push('Forbidden EchoSociety social feature detected');
+if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte','socket.io'].includes(d))) failures.push('Heavy dependency added unexpectedly for EchoSociety');
 
 // Phase 1 hotfix/polish checks
 if (!script.includes('function escapeHTML(value)')) failures.push('escapeHTML helper missing');

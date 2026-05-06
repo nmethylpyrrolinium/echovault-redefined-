@@ -1,7 +1,5 @@
-const APP_VERSION = 'receipt-failsafe-rendering';
-const CACHE = 'echovault-v7-receipt-failsafe';
-const APP_VERSION = 'phase-2-relic-crafting-avatar-progression';
-const CACHE = 'echovault-v6-phase-2-game-loop';
+const APP_VERSION = 'phase-3-echo-society-foundation';
+const CACHE = 'echovault-v8-phase-3-echo-society';
 
 const toScopeUrl = (path) => new URL(path, self.registration.scope).toString();
 const PRECACHE = ['./', 'index.html', 'styles.css', 'script.js', 'manifest.json', 'icons/icon.svg', 'wrapped-cinematic-module.js'];
