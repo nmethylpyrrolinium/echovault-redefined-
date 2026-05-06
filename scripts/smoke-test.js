@@ -150,6 +150,8 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 const sw = fs.readFileSync('sw.js','utf8');
 if (!script.includes("receipt-failsafe-rendering")) failures.push('APP_VERSION not updated to receipt-failsafe-rendering');
 if (!script.includes('echovault-v7-receipt-failsafe') && !sw.includes('echovault-v7-receipt-failsafe')) failures.push('Phase 2 cache marker missing');
+if (!script.includes("phase-2-relic-crafting-avatar-progression")) failures.push('APP_VERSION not updated to phase-2-relic-crafting-avatar-progression');
+if (!script.includes('echovault-v6-phase-2-game-loop') && !sw.includes('echovault-v6-phase-2-game-loop')) failures.push('Phase 2 cache marker missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');
 ['EchoAvatar','echovault_avatar_v1','MaterialEngine','VaultInventory','echovault_inventory_v1','GentleQuests','echovault_quests_v1','EchoSociety — coming later'].forEach((marker) => {
   if (!script.includes(marker) && !index.includes(marker)) failures.push(`Missing Phase 1 marker: ${marker}`);

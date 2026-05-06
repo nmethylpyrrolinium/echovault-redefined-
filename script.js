@@ -3,6 +3,8 @@
 
 const APP_VERSION = 'receipt-failsafe-rendering';
 const SW_CACHE_VERSION = 'echovault-v7-receipt-failsafe';
+const APP_VERSION = 'phase-2-relic-crafting-avatar-progression';
+const SW_CACHE_VERSION = 'echovault-v6-phase-2-game-loop';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
@@ -2083,6 +2085,7 @@ const ReceiptRenderer = (() => {
     if (Auth.user) return 'Profile Synced';
     const canSync = typeof Auth.hasSupabase === 'function' ? Auth.hasSupabase() : Boolean(Auth.hasSupabase);
     return canSync ? 'Sync Ready' : 'Local Vault';
+    return Auth.hasSupabase?.() ? 'Sync Ready' : 'Local Vault';
   }
   function getData(mode='latest') {
     const safeMode = mode === 'weekly' ? 'weekly' : 'latest';
@@ -2115,6 +2118,10 @@ const ReceiptRenderer = (() => {
     try { latestUnlocked = VaultRooms.getUnlockedRooms?.().slice(-1)[0] || null; } catch(e) { latestUnlocked = null; }
     const syncLabel = syncState() || 'Local Vault';
     const safeString = `${mood || 'reflective'}:${p.totalEchoes || 0}:${safeMode}:${receiptId || 'EV-000000'}:${echoId || 'no-echo'}`;
+    const latestMaterials = MaterialEngine.generateForEcho(latest).filter(m => latest.id);
+    const latestCrafted = ArtifactArchive.listArtifacts().find(a => a.source === 'crafted' || a.recipe_id);
+    const avatar = EchoAvatar.load?.() || {};
+    const latestUnlocked = VaultRooms.getUnlockedRooms?.().slice(-1)[0];
     return {
       mode: safeMode || 'latest',
       timestamp: date.toLocaleString(),
@@ -2133,11 +2140,16 @@ const ReceiptRenderer = (() => {
       voidStatus: safeMode === 'weekly' ? `${Number(p.voidCount) || 0} void entries` : (latest.void ? 'Void Signal' : 'Spoken Signal'),
       insight: p.oneLineInsight || 'You kept returning. That counts.',
       syncLabel,
+      archetype: a.archetypeName,
+      voidStatus: mode === 'weekly' ? `${p.voidCount} void entries` : (latest.void ? 'Void Signal' : 'Spoken Signal'),
+      insight: p.oneLineInsight,
+      syncLabel: syncState(),
       materialsDiscovered: latestMaterials.length ? latestMaterials.map(m => `+${m.qty} ${m.name}`).join(' · ') : '',
       craftedRelic: latestCrafted?.title || '',
       avatarRole: avatar.role ? `${avatar.role} · ${avatar.role_title || ''}`.trim() : '',
       roomUnlocked: latestUnlocked?.name || '',
       barcode: makeBarcode(safeString)
+      barcode: makeBarcode(`${mood}${p.totalEchoes}${mode}${receiptId}`)
     };
   }
   return { RECEIPT_CLASSES, getData, openLatest:()=>getData('latest'), openWeekly:()=>getData('weekly') };
