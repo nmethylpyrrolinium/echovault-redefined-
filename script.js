@@ -1,8 +1,8 @@
 (function EchoVault() {
 'use strict';
 
-const APP_VERSION = 'phase-1-game-rituals-stability';
-const SW_CACHE_VERSION = 'echovault-v5-game-rituals-stability';
+const APP_VERSION = 'receipt-failsafe-rendering';
+const SW_CACHE_VERSION = 'echovault-v7-receipt-failsafe';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
@@ -1471,7 +1471,10 @@ const EntryForm = (() => {
     const discoveredMaterials = MaterialEngine.generateForEcho(echo);
     VaultInventory.addMaterials(discoveredMaterials);
     MaterialEngine.toast(discoveredMaterials);
+    MaterialEngine.showMaterialBurst(discoveredMaterials);
+    EchoAvatar.addXP?.(5, 'create echo');
     GentleQuests.evaluate('echo_created', echo);
+    VaultRooms.evaluate?.();
 
     const cx = window.innerWidth/2, cy = window.innerHeight/2;
     Ripple.spawn(cx, cy, MOOD_COLORS[echo.mood], echo.void, echo.intensity);
@@ -2067,50 +2070,95 @@ const ReceiptRenderer = (() => {
     return seed.split('').map((c,i)=>(c.charCodeAt(0)+i)%2?'|':'¦').join('').padEnd(26,'|').slice(0,26);
   }
   function vaultHolderName() {
-    const profileName = ProfileStore.read()?.display_name;
-    const emailPrefix = Auth.user?.email ? Auth.user.email.split('@')[0] : '';
-    const localName = localStorage.getItem(USER_KEY);
-    return [profileName, emailPrefix, localName].map(v => String(v || '').trim()).find(Boolean) || 'Local Voyager';
+    try {
+      const profileName = ProfileStore.read()?.display_name;
+      const emailPrefix = Auth.user?.email ? Auth.user.email.split('@')[0] : '';
+      const localName = localStorage.getItem(USER_KEY);
+      return [profileName, emailPrefix, localName].map(v => String(v || '').trim()).find(Boolean) || 'Local Voyager';
+    } catch(e) {
+      return 'Local Voyager';
+    }
   }
   function syncState() {
     if (Auth.user) return 'Profile Synced';
-    return Auth.hasSupabase?.() ? 'Cloud Ready' : 'Local Vault';
+    const canSync = typeof Auth.hasSupabase === 'function' ? Auth.hasSupabase() : Boolean(Auth.hasSupabase);
+    return canSync ? 'Sync Ready' : 'Local Vault';
   }
   function getData(mode='latest') {
-    const p = PatternEngine.analyze(state.echoes);
-    const a = ArchetypeEngine.compute(p);
-    const latest = state.echoes[0] || {};
-    const mood = mode === 'weekly' ? (p.dominantMood || 'reflective') : (latest.mood || p.dominantMood || 'reflective');
-    const intensity = mode === 'weekly' ? p.averageIntensity : (latest.intensity || 0);
-    const silence = mode === 'weekly' ? p.averageSilence : (latest.silence || 0);
+    const safeMode = mode === 'weekly' ? 'weekly' : 'latest';
+    const fallbackP = {
+      dominantMood:'reflective', averageIntensity:0, averageSilence:0, totalEchoes:0,
+      emotionalWeather:'shifting sky', voidCount:0, oneLineInsight:'You kept returning. That counts.'
+    };
+    const echoes = Array.isArray(state.echoes) ? state.echoes : [];
+    let p = fallbackP;
+    let a = { archetypeName:'The Unknown' };
+    let latest = echoes[0] || {};
+    try { p = { ...fallbackP, ...(PatternEngine.analyze(echoes) || {}) }; } catch(e) { p = fallbackP; }
+    try { a = { archetypeName:'The Unknown', ...(ArchetypeEngine.compute(p) || {}) }; } catch(e) { a = { archetypeName:'The Unknown' }; }
+    if (!latest || typeof latest !== 'object') latest = {};
+    const mood = safeMode === 'weekly' ? (p.dominantMood || 'reflective') : (latest.mood || p.dominantMood || 'reflective');
+    const intensity = Number(safeMode === 'weekly' ? p.averageIntensity : (latest.intensity ?? 0)) || 0;
+    const silence = Number(safeMode === 'weekly' ? p.averageSilence : (latest.silence ?? 0)) || 0;
     const date = new Date();
-    const receiptId = `EV-${Date.now().toString().slice(-6)}`;
-    const echoId = latest.id || `${mode}-${p.totalEchoes || 0}`;
-    const coordinates = `EV-${String(mood).toUpperCase()}-I${String(Math.round(intensity || 0)).padStart(2,'0')}-S${String(Math.round(silence || 0)).padStart(2,'0')}`;
+    const receiptId = `EV-${Date.now().toString().slice(-6)}` || 'EV-000000';
+    const echoId = latest.id || 'no-echo';
+    const coordinates = `EV-${String(mood || 'reflective').toUpperCase()}-I${String(Math.round(intensity)).padStart(2,'0')}-S${String(Math.round(silence)).padStart(2,'0')}` || 'EV-REFLECTIVE-I00-S00';
     const receiptClass = RECEIPT_CLASSES[mood] || 'Moon Archive Class';
+    let latestMaterials = [];
+    let latestCrafted = null;
+    let avatar = {};
+    let latestUnlocked = null;
+    try { latestMaterials = MaterialEngine.generateForEcho(latest).filter(m => latest.id); } catch(e) { latestMaterials = []; }
+    try { latestCrafted = ArtifactArchive.listArtifacts().find(item => item.source === 'crafted' || item.recipe_id) || null; } catch(e) { latestCrafted = null; }
+    try { avatar = EchoAvatar.load?.() || {}; } catch(e) { avatar = {}; }
+    try { latestUnlocked = VaultRooms.getUnlockedRooms?.().slice(-1)[0] || null; } catch(e) { latestUnlocked = null; }
+    const syncLabel = syncState() || 'Local Vault';
+    const safeString = `${mood || 'reflective'}:${p.totalEchoes || 0}:${safeMode}:${receiptId || 'EV-000000'}:${echoId || 'no-echo'}`;
     return {
-      mode,
+      mode: safeMode || 'latest',
       timestamp: date.toLocaleString(),
       date: date.toLocaleDateString(),
-      vaultHolder: vaultHolderName(),
-      echoId,
-      receiptId,
-      receiptNumber: receiptId,
-      receiptClass,
-      coordinates,
-      mood,
+      vaultHolder: vaultHolderName() || 'Local Voyager',
+      echoId: echoId || 'no-echo',
+      receiptId: receiptId || 'EV-000000',
+      receiptNumber: receiptId || 'EV-000000',
+      receiptClass: receiptClass || 'Moon Archive Class',
+      coordinates: coordinates || 'EV-REFLECTIVE-I00-S00',
+      mood: mood || 'reflective',
       intensity,
       silence,
       weather: p.emotionalWeather || 'shifting sky',
-      archetype: a.archetypeName,
-      voidStatus: mode === 'weekly' ? `${p.voidCount} void entries` : (latest.void ? 'Void Signal' : 'Spoken Signal'),
-      insight: p.oneLineInsight,
-      syncLabel: syncState(),
-      barcode: makeBarcode(`${mood}${p.totalEchoes}${mode}${receiptId}`)
+      archetype: a.archetypeName || 'The Unknown',
+      voidStatus: safeMode === 'weekly' ? `${Number(p.voidCount) || 0} void entries` : (latest.void ? 'Void Signal' : 'Spoken Signal'),
+      insight: p.oneLineInsight || 'You kept returning. That counts.',
+      syncLabel,
+      materialsDiscovered: latestMaterials.length ? latestMaterials.map(m => `+${m.qty} ${m.name}`).join(' · ') : '',
+      craftedRelic: latestCrafted?.title || '',
+      avatarRole: avatar.role ? `${avatar.role} · ${avatar.role_title || ''}`.trim() : '',
+      roomUnlocked: latestUnlocked?.name || '',
+      barcode: makeBarcode(safeString)
     };
   }
   return { RECEIPT_CLASSES, getData, openLatest:()=>getData('latest'), openWeekly:()=>getData('weekly') };
 })();
+
+
+function isReceiptDebugMode() {
+  try { return new URLSearchParams(window.location.search).get('debug') === '1'; } catch(e) { return false; }
+}
+
+function safeGetReceiptData(mode = 'latest') {
+  try {
+    return mode === 'weekly'
+      ? ReceiptRenderer.openWeekly()
+      : ReceiptRenderer.openLatest();
+  } catch (error) {
+    console.warn('Receipt failed to render', error);
+    Toast.show('Receipt failed to open. Your echoes are still safe.');
+    return null;
+  }
+}
 
 /* ── FUN RITUALS ── */
 
@@ -2144,7 +2192,7 @@ const ArtifactArchive = (() => {
   const KEY='echovault_artifacts_v1';
   const listArtifacts=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch{return[]}};
   const save=(arr)=>localStorage.setItem(KEY,JSON.stringify(arr));
-  const saveArtifact=(artifact)=>{const arr=listArtifacts();arr.unshift({...artifact,id:artifact.id||`art_${Date.now()}`,created_at:new Date().toISOString()});save(arr);GentleQuests?.evaluate?.('artifact_saved', artifact);return arr[0];};
+  const saveArtifact=(artifact)=>{const arr=listArtifacts();arr.unshift({...artifact,id:artifact.id||`art_${Date.now()}`,created_at:new Date().toISOString()});save(arr);EchoAvatar.addXP?.(8, 'save artifact');GentleQuests?.evaluate?.('artifact_saved', artifact);return arr[0];};
   const deleteArtifact=(id)=>save(listArtifacts().filter(a=>a.id!==id));
   const toggleFavorite=(id)=>save(listArtifacts().map(a=>a.id===id?{...a,favorite:!a.favorite}:a));
   return {KEY,saveArtifact,listArtifacts,deleteArtifact,toggleFavorite};
@@ -2154,6 +2202,17 @@ const ArtifactArchive = (() => {
 const MaterialEngine = (() => {
   const moodMaterials = {
     calm:'Calm Shard', chaos:'Storm Spark', reflective:'Moon Thread', anxious:'Compass Dust', joyful:'Bloom Seed', empty:'Void Stone'
+  };
+  const materialMeta = {
+    'Calm Shard':{ icon:'◇', mood:'calm', description:'A steady fragment from softened waters.' },
+    'Storm Spark':{ icon:'ϟ', mood:'chaos', description:'A charged fleck from intense weather.' },
+    'Moon Thread':{ icon:'☾', mood:'reflective', description:'A silver strand from reflective nights.' },
+    'Compass Dust':{ icon:'⌖', mood:'anxious', description:'Restless powder that still points somewhere.' },
+    'Bloom Seed':{ icon:'✿', mood:'joyful', description:'A small beginning that remembers light.' },
+    'Void Stone':{ icon:'●', mood:'empty', description:'Quiet material gathered from spacious silence.' },
+    'Silence Glass':{ icon:'◌', mood:'empty', description:'Transparent pressure from things almost said.' },
+    'Pressure Ember':{ icon:'◆', mood:'chaos', description:'Heat left behind by a feeling at its edge.' },
+    'Void Core':{ icon:'◉', mood:'empty', description:'A rare center from wordless signal.' }
   };
   function generateForEcho(echo={}) {
     const out = [];
@@ -2168,33 +2227,123 @@ const MaterialEngine = (() => {
     if (!materials.length) return;
     Toast.show(materials.map(m => `+${m.qty} ${m.name}${m.qty > 1 ? 's' : ''}`).join(' · '), 2800);
   }
-  return { generateForEcho, toast };
+  function showMaterialBurst(materials=[]) {
+    if (!materials.length || !document?.body) return toast(materials);
+    const burst = document.createElement('div');
+    burst.className = 'material-burst';
+    burst.setAttribute('role','status');
+    burst.innerHTML = materials.map(m => {
+      const meta = materialMeta[m.name] || { icon:'✦', mood:'reflective' };
+      return `<span class="material-burst-chip mood-${escapeHTML(meta.mood)}"><b>${escapeHTML(meta.icon)}</b> +${escapeHTML(m.qty)} ${escapeHTML(m.name)}${m.qty > 1 ? 's' : ''}</span>`;
+    }).join('');
+    document.body.appendChild(burst);
+    setTimeout(()=>burst.classList.add('show'), 20);
+    setTimeout(()=>burst.remove(), 3200);
+  }
+  return { generateForEcho, toast, showMaterialBurst, materialMeta };
 })();
 
 const VaultInventory = (() => {
   const KEY = 'echovault_inventory_v1';
-  function load(){ try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } }
-  function save(inv){ localStorage.setItem(KEY, JSON.stringify(inv || {})); return inv || {}; }
+  function normalize(inv){
+    const clean = {};
+    if (!inv || typeof inv !== 'object' || Array.isArray(inv)) return clean;
+    Object.entries(inv).forEach(([name, qty]) => {
+      const n = Number(qty);
+      if (name && Number.isFinite(n) && n > 0) clean[name] = Math.floor(n);
+    });
+    return clean;
+  }
+  function load(){ try { return normalize(JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { return {}; } }
+  function save(inv){ localStorage.setItem(KEY, JSON.stringify(normalize(inv))); return normalize(inv); }
   function addMaterials(materials=[]) {
     const inv = load();
-    materials.forEach(({name, qty=1}) => { inv[name] = (inv[name] || 0) + qty; });
+    materials.forEach(({name, qty=1}) => { const q = Math.max(0, Math.floor(Number(qty) || 0)); if (name && q) inv[name] = (inv[name] || 0) + q; });
     save(inv);
     return inv;
   }
+  function getMaterialCount(name){ return load()[name] || 0; }
+  function missingFor(cost=[]){ return cost.map(({name, qty=1}) => ({ name, qty:Math.max(0, Math.floor(Number(qty) || 0)), have:getMaterialCount(name) })).filter(m => m.have < m.qty).map(m => ({ name:m.name, qty:m.qty - m.have, have:m.have, required:m.qty })); }
+  function hasMaterials(cost=[]){ return missingFor(cost).length === 0; }
+  function spendMaterials(cost=[]) {
+    const inv = load();
+    const missing = cost.map(({name, qty=1}) => ({ name, qty:Math.max(0, Math.floor(Number(qty) || 0)), have:inv[name] || 0 })).filter(m => m.have < m.qty).map(m => ({ name:m.name, qty:m.qty - m.have, have:m.have, required:m.qty }));
+    if (missing.length) return { ok:false, missing };
+    cost.forEach(({name, qty=1}) => { inv[name] = Math.max(0, (inv[name] || 0) - Math.floor(Number(qty) || 0)); if (!inv[name]) delete inv[name]; });
+    return { ok:true, inventory:save(inv) };
+  }
   function getTotals(){ return load(); }
   function clearInventoryForTestingOnly(){ localStorage.removeItem(KEY); }
-  return { KEY, load, save, addMaterials, getTotals, clearInventoryForTestingOnly };
+  return { KEY, load, save, addMaterials, getTotals, getMaterialCount, hasMaterials, spendMaterials, clearInventoryForTestingOnly };
+})();
+
+const RelicCrafting = (() => {
+  const recipes = [
+    { id:'void_lantern', title:'Void Lantern', description:'A small light made from quiet material.', artifactType:'lantern', cost:[{name:'Void Stone',qty:3},{name:'Moon Thread',qty:1}] },
+    { id:'storm_jar', title:'Storm Jar', description:'Sparks contained before they become weather.', artifactType:'stormjar', cost:[{name:'Storm Spark',qty:4},{name:'Pressure Ember',qty:1}] },
+    { id:'bloom_token', title:'Bloom Token', description:'A small proof that light returned.', artifactType:'bloom_token', cost:[{name:'Bloom Seed',qty:3},{name:'Calm Shard',qty:1}] },
+    { id:'moon_compass', title:'Moon Compass', description:'A direction finder for reflective nights.', artifactType:'moon_compass', cost:[{name:'Compass Dust',qty:2},{name:'Moon Thread',qty:2}] },
+    { id:'silence_bell', title:'Silence Bell', description:'A bell made from things almost said.', artifactType:'silence_bell', cost:[{name:'Silence Glass',qty:3}] },
+    { id:'glass_comet', title:'Glass Comet', description:'A bright fragment from intense quiet.', artifactType:'glass_comet', cost:[{name:'Storm Spark',qty:2},{name:'Silence Glass',qty:2}] }
+  ];
+  const listRecipes=()=>recipes.map(r=>({...r,cost:r.cost.map(c=>({...c}))}));
+  const getRecipe=(recipeId)=>listRecipes().find(r=>r.id===recipeId) || null;
+  const getMissingMaterials=(recipeId)=>{ const r=getRecipe(recipeId); return r ? r.cost.map(c=>({ ...c, have:VaultInventory.getMaterialCount(c.name) })).filter(c=>c.have<c.qty).map(c=>({ name:c.name, qty:c.qty-c.have, have:c.have, required:c.qty })) : []; };
+  const canCraft=(recipeId)=>{ const r=getRecipe(recipeId); return Boolean(r && VaultInventory.hasMaterials(r.cost)); };
+  function craft(recipeId){
+    const recipe = getRecipe(recipeId);
+    if (!recipe) return { ok:false, missing:[], error:'Recipe not found' };
+    const missing = getMissingMaterials(recipeId);
+    if (missing.length) return { ok:false, missing };
+    const spent = VaultInventory.spendMaterials(recipe.cost);
+    if (!spent.ok) return spent;
+    const artifact = ArtifactArchive.saveArtifact({ type:recipe.artifactType, recipe_id:recipe.id, title:recipe.title, subtitle:recipe.description, description:recipe.description, created_at:new Date().toISOString(), source:'crafted', data:{ recipe_id:recipe.id, cost:recipe.cost } });
+    Toast.show(`Crafted: ${recipe.title}`);
+    GentleQuests.evaluate('relic_crafted', artifact);
+    EchoAvatar.addXP?.(12, 'craft relic');
+    VaultRooms.evaluate?.();
+    return { ok:true, artifact };
+  }
+  return { listRecipes, getRecipe, canCraft, getMissingMaterials, craft };
+})();
+
+const VaultRooms = (() => {
+  const KEY = 'echovault_rooms_v1';
+  const rooms = [
+    { id:'weather_room', name:'Weather Room', reason:'Requires at least 1 echo.', test:()=>state.echoes.length >= 1 },
+    { id:'crafting_table', name:'Crafting Table', reason:'Requires at least 3 total materials.', test:()=>Object.values(VaultInventory.getTotals()).reduce((a,b)=>a+Number(b||0),0) >= 3 },
+    { id:'relic_hall', name:'Relic Hall', reason:'Requires at least 1 crafted artifact.', test:()=>ArtifactArchive.listArtifacts().some(a=>a.source==='crafted' || a.recipe_id) },
+    { id:'lantern_garden', name:'Lantern Garden', reason:'Requires crafted Void Lantern.', test:()=>ArtifactArchive.listArtifacts().some(a=>a.recipe_id==='void_lantern' || (a.source==='crafted' && a.type==='lantern')) },
+    { id:'storm_chamber', name:'Storm Chamber', reason:'Requires crafted Storm Jar.', test:()=>ArtifactArchive.listArtifacts().some(a=>a.recipe_id==='storm_jar' || (a.source==='crafted' && a.type==='stormjar')) },
+    { id:'soundprint_wall', name:'Soundprint Wall', reason:'Requires at least 3 echoes.', test:()=>state.echoes.length >= 3 },
+    { id:'archive_shelf', name:'Archive Shelf', reason:'Requires at least 3 saved artifacts.', test:()=>ArtifactArchive.listArtifacts().length >= 3 },
+    { id:'society_gate', name:'Society Gate', reason:'Requires Echo Avatar + 5 echoes.', test:()=>Object.keys(EchoAvatar.load()).length > 0 && state.echoes.length >= 5 }
+  ];
+  function load(){ try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } }
+  function getRooms(){ const saved=load(); return rooms.map(r=>({ id:r.id, name:r.name, unlocked:Boolean(saved[r.id]?.unlocked || r.test()), reason:r.reason })); }
+  function getUnlockedRooms(){ return getRooms().filter(r=>r.unlocked); }
+  function isUnlocked(roomId){ return Boolean(getRooms().find(r=>r.id===roomId)?.unlocked); }
+  function getUnlockReason(roomId){ return rooms.find(r=>r.id===roomId)?.reason || 'Keep building your private vault.'; }
+  function detectNewUnlocks(previousState={}){ return rooms.filter(r=>r.test() && !previousState[r.id]?.unlocked).map(r=>({ id:r.id, name:r.name })); }
+  function saveUnlockState(){ const out={}; rooms.forEach(r=>{ out[r.id]={ unlocked:Boolean(r.test()), checked_at:new Date().toISOString() }; }); localStorage.setItem(KEY, JSON.stringify(out)); return out; }
+  function evaluate(){ const prev=load(); const newly=detectNewUnlocks(prev); const saved=saveUnlockState(); newly.forEach(r=>{ Toast.show(`${r.name} awakened.`); GentleQuests.evaluate('room_unlocked', r); EchoAvatar.addXP?.(15, 'unlock room'); }); return saved; }
+  return { KEY, getRooms, getUnlockedRooms, isUnlocked, getUnlockReason, detectNewUnlocks, saveUnlockState, evaluate };
 })();
 
 const GentleQuests = (() => {
   const KEY = 'echovault_quests_v1';
   const catalog = [
-    { id:'void_echo', text:'Create one echo without words.', reward:{ name:'Void Stone', qty:1 }, test:(event, data)=>event==='echo_created' && data?.void },
-    { id:'save_artifact', text:'Save one artifact.', reward:{ name:'Moon Thread', qty:1 }, test:(event)=>event==='artifact_saved' },
-    { id:'light_lantern', text:'Light the Void Lantern once.', reward:{ name:'Moon Thread', qty:1 }, test:(event)=>event==='lantern_lit' },
-    { id:'visit_weather', text:'Visit the Weather Room.', reward:{ name:'Calm Shard', qty:1 }, test:(event)=>event==='weather_room_visited' },
-    { id:'low_intensity', text:'Create one low-intensity echo.', reward:{ name:'Silence Glass', qty:1 }, test:(event, data)=>event==='echo_created' && (data?.intensity || 0) <= 3 },
-    { id:'export_receipt', text:'Export a receipt.', reward:{ name:'Bloom Seed', qty:1 }, test:(event)=>event==='receipt_exported' }
+    { id:'void_echo', text:'Create one echo without words.', reward:{ name:'Void Stone', qty:1 }, xp:0, test:(event, data)=>event==='echo_created' && data?.void },
+    { id:'save_artifact', text:'Save one artifact.', reward:{ name:'Moon Thread', qty:1 }, xp:0, test:(event)=>event==='artifact_saved' },
+    { id:'light_lantern', text:'Light the Void Lantern once.', reward:{ name:'Moon Thread', qty:1 }, xp:0, test:(event)=>event==='lantern_lit' },
+    { id:'visit_weather', text:'Visit the Weather Room.', reward:{ name:'Calm Shard', qty:1 }, xp:0, test:(event)=>event==='weather_room_visited' },
+    { id:'low_intensity', text:'Create one low-intensity echo.', reward:{ name:'Silence Glass', qty:1 }, xp:0, test:(event, data)=>event==='echo_created' && (data?.intensity || 0) <= 3 },
+    { id:'export_receipt', text:'Export a receipt.', reward:{ name:'Bloom Seed', qty:1 }, xp:0, test:(event)=>event==='receipt_exported' },
+    { id:'craft_one_relic', text:'Craft one relic.', reward:{ name:'Bloom Seed', qty:1 }, xp:5, test:(event)=>event==='relic_crafted' },
+    { id:'visit_crafting_table', text:'Visit the Crafting Table.', reward:{ name:'Compass Dust', qty:1 }, xp:3, test:(event)=>event==='crafting_table_visited' },
+    { id:'save_crafted_artifact', text:'Save one crafted artifact.', reward:{ name:'Calm Shard', qty:1 }, xp:5, test:(event, data)=>event==='artifact_saved' && (data?.source==='crafted' || data?.recipe_id) },
+    { id:'unlock_one_room', text:'Unlock one room.', reward:{ name:'Moon Thread', qty:1 }, xp:8, test:(event)=>event==='room_unlocked' },
+    { id:'generate_avatar', text:'Generate your Echo Avatar.', reward:{ name:'Silence Glass', qty:1 }, xp:5, test:(event)=>event==='avatar_generated' }
   ];
   function todayKey(date = new Date()) {
     const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -2221,16 +2370,18 @@ const GentleQuests = (() => {
   function todayId(){ return catalog[new Date().getDate() % catalog.length].id; }
   function current(){ const q = catalog.find(x => x.id === todayId()) || catalog[0]; const data = load(); const key = completionKey(q.id); return { ...q, todayKey:todayKey(), completionKey:key, completed: Boolean(data[key]?.completed) }; }
   function evaluate(event, data) {
-    const q = current();
-    if (q.completed || !q.test(event, data)) return false;
     const saved = load();
-    saved[q.completionKey] = { completed:true, completed_at:new Date().toISOString(), todayKey:q.todayKey };
+    const q = catalog.find(item => item.test(event, data) && !saved[completionKey(item.id)]);
+    if (!q) return false;
+    const key = completionKey(q.id);
+    saved[key] = { completed:true, completed_at:new Date().toISOString(), todayKey:todayKey(), event };
     save(saved);
     VaultInventory.addMaterials([q.reward]);
-    Toast.show(`Gentle Quest complete · +${q.reward.qty} ${q.reward.name}`, 3200);
+    if (q.xp && EchoAvatar.addXP) EchoAvatar.addXP(q.xp, `quest:${q.id}`);
+    Toast.show(`Gentle Quest complete · +${q.reward.qty} ${q.reward.name}${q.xp ? ` · +${q.xp} XP` : ''}`, 3200);
     return true;
   }
-  return { KEY, todayKey, completionKey, current, evaluate, load, save };
+  return { KEY, catalog, todayKey, completionKey, current, evaluate, load, save };
 })();
 
 const EchoAvatar = (() => {
@@ -2246,32 +2397,67 @@ const EchoAvatar = (() => {
     glassComet:['Relic Runner','crystal ember trail','comet boots and relic satchel','☄️'],
     softWitness:['Archive Witness','mist gold aura','warm shawl with archive pins','👁️']
   };
-  function load(){ try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } }
-  function save(avatar){ localStorage.setItem(KEY, JSON.stringify(avatar)); return avatar; }
+  const thresholds = [
+    { xp:300, title:'Mythbearer', accessory:'mythic mantle trim' },
+    { xp:150, title:'Cartographer', accessory:'coordinate sash' },
+    { xp:75, title:'Archivist', accessory:'archive pin' },
+    { xp:25, title:'Keeper', accessory:'small lantern charm' },
+    { xp:0, title:'Initiate', accessory:'first vault thread' }
+  ];
+  function getLevelTitle(xp=0){ return thresholds.find(t => xp >= t.xp)?.title || 'Initiate'; }
+  function getLevelNumber(xp=0){ return thresholds.slice().reverse().filter(t => xp >= t.xp).length; }
+  function getNextUnlock(){ const avatar=load(); const xp=Number(avatar.role_xp || 0); return thresholds.slice().reverse().find(t => t.xp > xp) || null; }
+  function normalize(avatar={}){
+    const xp = Math.max(0, Number(avatar.role_xp || 0));
+    return { ...avatar, level:avatar.level || getLevelNumber(xp), role_xp:xp, role_title:avatar.role_title || getLevelTitle(xp), unlocked_accessories:Array.isArray(avatar.unlocked_accessories)?avatar.unlocked_accessories:[], last_progress_at:avatar.last_progress_at || avatar.updated_at || avatar.created_at || new Date().toISOString() };
+  }
+  function load(){ try { return normalize(JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { return normalize({}); } }
+  function save(avatar){ localStorage.setItem(KEY, JSON.stringify(normalize(avatar))); return normalize(avatar); }
   function build() {
     const arch = ArchetypeEngine.compute(PatternEngine.analyze(state.echoes));
     const profile = ProfileStore.read();
     const key = arch.archetypeKey || 'shiftingSky';
     const [role, aura, outfit_hint, companion_symbol] = roleMap[key] || roleMap.shiftingSky;
     const previous = load();
-    return save({ avatar_name: profile.display_name || previous.avatar_name || 'Echo Voyager', archetype_key:key, role, aura, outfit_hint, companion_symbol, created_at:previous.created_at || new Date().toISOString(), updated_at:new Date().toISOString() });
+    const xp = Number(previous.role_xp || 0);
+    const avatar = save({ ...previous, avatar_name: profile.display_name || previous.avatar_name || 'Echo Voyager', archetype_key:key, role, aura, outfit_hint, companion_symbol, level:getLevelNumber(xp), role_xp:xp, role_title:getLevelTitle(xp), created_at:previous.created_at || new Date().toISOString(), updated_at:new Date().toISOString(), last_progress_at:previous.last_progress_at || new Date().toISOString() });
+    GentleQuests.evaluate('avatar_generated', avatar);
+    VaultRooms.evaluate?.();
+    return avatar;
   }
   function regenerateRole(){ return build(); }
+  function addXP(amount=0, reason='progress'){
+    const current = Object.keys(load()).length ? load() : build();
+    const beforeTitle = getLevelTitle(current.role_xp || 0);
+    const nextXp = Math.max(0, Number(current.role_xp || 0) + Number(amount || 0));
+    const nextTitle = getLevelTitle(nextXp);
+    const unlocked_accessories = new Set(current.unlocked_accessories || []);
+    thresholds.filter(t => nextXp >= t.xp).forEach(t => unlocked_accessories.add(t.accessory));
+    const saved = save({ ...current, role_xp:nextXp, level:getLevelNumber(nextXp), role_title:nextTitle, unlocked_accessories:[...unlocked_accessories], last_progress_at:new Date().toISOString(), last_progress_reason:reason });
+    if (nextTitle !== beforeTitle) Toast.show(`Echo Avatar evolved: ${nextTitle}`);
+    return saved;
+  }
+  function getProgress(){ const avatar=load(); const xp=Number(avatar.role_xp || 0); const current=thresholds.find(t=>xp>=t.xp) || thresholds[thresholds.length-1]; const next=getNextUnlock(); const span=next ? next.xp-current.xp : 1; const pct=next ? Math.max(4, Math.min(100, ((xp-current.xp)/span)*100)) : 100; return { xp, level:avatar.level, role_title:avatar.role_title || getLevelTitle(xp), current, next, percent:pct }; }
+  function renderProgress(){ const p=getProgress(); return `<div class="avatar-progress"><div class="avatar-progress-head"><span>${escapeHTML(p.role_title)}</span><b>${escapeHTML(p.xp)} XP</b></div><div class="avatar-progress-bar"><i style="width:${p.percent}%"></i></div><small>${p.next ? `Next unlock: ${escapeHTML(p.next.title)} at ${p.next.xp} XP · accessory: ${escapeHTML(p.next.accessory)}` : 'All current avatar milestones awakened.'}</small></div>`; }
   function render(){
     const avatar = Object.keys(load()).length ? load() : build();
     const arch = ArchetypeEngine.compute(PatternEngine.analyze(state.echoes));
+    const next = getNextUnlock();
+    const latestAccessory = (avatar.unlocked_accessories || []).slice(-1)[0] || 'first vault thread';
     const safe = {
       symbol: escapeHTML(avatar.companion_symbol),
       name: escapeHTML(avatar.avatar_name),
       role: escapeHTML(avatar.role),
+      roleTitle: escapeHTML(avatar.role_title || getLevelTitle(avatar.role_xp)),
       aura: escapeHTML(avatar.aura),
       outfit: escapeHTML(avatar.outfit_hint),
-      archetype: escapeHTML(arch.archetypeName)
+      archetype: escapeHTML(arch.archetypeName),
+      accessory: escapeHTML(latestAccessory)
     };
-    return `<div class="echo-avatar-card"><div class="echo-avatar-orb"><span>${safe.symbol}</span></div><div class="echo-avatar-kicker">Echo Avatar</div><h4>${safe.name}</h4><div class="echo-avatar-role" data-society-role="${safe.role}">${safe.role}</div><p>Aura: ${safe.aura}</p><p>Archetype: ${safe.archetype}</p><p class="echo-avatar-outfit">${safe.outfit}</p><div class="phase-two-note">Role can later map into EchoSociety; for now it stays local to this vault.</div><div class="echo-avatar-actions"><button class="receipt-action-btn" id="avatar-generate-btn">Generate from my profile</button><button class="receipt-action-btn" id="avatar-regenerate-btn">Regenerate role</button><button class="receipt-action-btn" disabled>Use as Society Character · coming soon</button></div></div>`;
+    return `<div class="echo-avatar-card"><div class="echo-avatar-orb"><span>${safe.symbol}</span></div><div class="echo-avatar-kicker">Echo Avatar</div><h4>${safe.name}</h4><div class="echo-avatar-role" data-society-role="${safe.role}">${safe.role} · ${safe.roleTitle}</div>${renderProgress()}<p>Aura: ${safe.aura}</p><p>Archetype: ${safe.archetype}</p><p>Companion symbol: ${safe.symbol}</p><p class="echo-avatar-outfit">${safe.outfit}</p><p class="avatar-accessory-hint">Accessory hint: ${safe.accessory}</p><p class="avatar-next-hint">${next ? `Next unlock: ${escapeHTML(next.title)} at ${next.xp} XP.` : 'Your current path is fully awakened.'}</p><div class="phase-two-note">Role can later map into EchoSociety; for now it stays local to this vault.</div><div class="echo-avatar-actions"><button class="receipt-action-btn" id="avatar-generate-btn">Generate from my profile</button><button class="receipt-action-btn" id="avatar-regenerate-btn">Regenerate role</button><button class="receipt-action-btn" disabled>Use as Society Character · coming soon</button></div></div>`;
   }
   function bind(){ document.getElementById('avatar-generate-btn')?.addEventListener('click',()=>{build(); refreshEchoDependentUI(); Toast.show('Echo Avatar refreshed.');}); document.getElementById('avatar-regenerate-btn')?.addEventListener('click',()=>{regenerateRole(); refreshEchoDependentUI(); Toast.show('Role regenerated locally.');}); }
-  return { KEY, load, save, build, regenerateRole, render, bind };
+  return { KEY, load, save, build, regenerateRole, addXP, getProgress, getLevelTitle, getNextUnlock, renderProgress, render, bind };
 })();
 
 const CinematicCardRenderer = (() => {
@@ -2374,7 +2560,18 @@ const Rituals = (() => {
     const fn = builders[type];
     if (!fn) return;
     const shown = getRitualOb();
-    const doOpen = () => { content.innerHTML = fn(); modal.classList.add('open'); postBuild(type); };
+    const doOpen = () => {
+      try {
+        content.innerHTML = fn();
+      } catch (error) {
+        console.warn('Ritual failed to render', error);
+        content.innerHTML = type === 'receipt'
+          ? '<div class="receipt-error-card"><h3>Receipt unavailable</h3><p>Your echoes are safe. Try refreshing the app cache or creating one new echo.</p></div>'
+          : '<div class="ritual-error-card"><h3>Ritual unavailable</h3><p>Your vault is safe. Try refreshing the app cache.</p></div>';
+      }
+      modal.classList.add('open');
+      postBuild(type);
+    };
     if (!shown[type]) {
       showRitualOnboarding(type, doOpen);
     } else {
@@ -2397,6 +2594,7 @@ const Rituals = (() => {
         const panel = document.querySelector(`[data-room-panel="${room}"]`);
         panel?.classList.add('active');
         document.querySelector('.museum-shell')?.setAttribute('data-room', room);
+        if (room === 'crafting') GentleQuests.evaluate('crafting_table_visited');
       }));
       document.getElementById('dl-weather')?.addEventListener('click',()=>CinematicCardRenderer.downloadCanvas(CinematicCardRenderer.renderWeatherCard(w),'weather-card.png'));
       document.getElementById('save-weather')?.addEventListener('click',()=>{ArtifactArchive.saveArtifact({type:'weather',title:w.name,subtitle:w.summary,data:w});Toast.show('Weather artifact saved ✓');});
@@ -2406,11 +2604,13 @@ const Rituals = (() => {
       document.querySelectorAll('.relic-save').forEach(btn=>btn.addEventListener('click',()=>{const r=RelicEngine.fromEchoes(state.echoes).find(x=>x.id===btn.dataset.id);if(!r)return;ArtifactArchive.saveArtifact({type:'relic',title:r.title,subtitle:r.description,data:r});btn.closest('.relic-item')?.classList.add('is-saved');Toast.show('Relic saved ✓');}));
       document.querySelectorAll('.art-del').forEach(btn=>btn.addEventListener('click',()=>{if(confirm('Remove this artifact from your local museum?')){ArtifactArchive.deleteArtifact(btn.dataset.id);btn.closest('.artifact-row')?.remove();}}));
       document.querySelectorAll('.art-fav').forEach(btn=>btn.addEventListener('click',()=>{ArtifactArchive.toggleFavorite(btn.dataset.id);btn.classList.toggle('active');}));
+      document.querySelectorAll('.craft-btn').forEach(btn=>btn.addEventListener('click',()=>{const result=RelicCrafting.craft(btn.dataset.recipeId);if(result.ok){const preview=document.getElementById('crafted-preview');if(preview){preview.hidden=false;preview.innerHTML=`<b>Crafted Relic</b><span>${escapeHTML(result.artifact.title)}</span><small>${escapeHTML(result.artifact.description || result.artifact.subtitle || '')}</small>`;} refreshEchoDependentUI();}else if(result.missing?.length){Toast.show(`Missing: ${result.missing.map(m=>`${m.qty} ${m.name}`).join(', ')}`);}}));
       document.getElementById('save-receipt-latest')?.addEventListener('click',()=>{
-        const data = ReceiptRenderer.openLatest();
+        const data = safeGetReceiptData('latest');
+        if (!data) return;
         ArtifactArchive.saveArtifact({ type:'receipt', title:'Mood Receipt', subtitle:data.insight, data });
         GentleQuests.evaluate('receipt_exported');
-      Toast.show('Receipt saved ✓');
+        Toast.show('Receipt saved ✓');
       });
     }
     if (type === 'lantern') initLanternInteraction();
@@ -2435,11 +2635,10 @@ const Rituals = (() => {
       replayBtn.textContent = '? how to use';
       replayBtn.addEventListener('click', () => showRitualOnboarding('receipt', () => {}));
       content.appendChild(replayBtn);
-      document.querySelectorAll('.theme-btn').forEach(btn => {
+      document.querySelectorAll('.receipt-themes .theme-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-          if (btn.dataset.mode) return;
           receiptTheme = btn.dataset.theme;
-          document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.receipt-themes .theme-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           const mainArea = document.querySelector('.receipt-main-area');
           if (mainArea) mainArea.innerHTML = buildReceiptCore();
@@ -2515,25 +2714,40 @@ const Rituals = (() => {
     return imgs.map((src, i) => {
       const posClass = placements[i] || positions[1];
       const smallClass = i === 1 ? ' small' : '';
-      return `<img class="receipt-char-img ${posClass}${smallClass}" src="${src}" alt="" aria-hidden="true" crossorigin="anonymous">`;
+      return `<img class="receipt-char-img ${escapeHTML(posClass)}${smallClass}" src="${escapeHTML(src)}" alt="" aria-hidden="true" crossorigin="anonymous">`;
     }).join('');
   }
 
   function buildReceiptCore(mode='latest') {
-    const data = mode === 'weekly' ? ReceiptRenderer.openWeekly() : ReceiptRenderer.openLatest();
-    const charImgs = pickCharImgs();
-    const charImgHTML = buildCharImgHTML(charImgs);
+    const safeMode = mode === 'weekly' ? 'weekly' : 'latest';
+    const data = safeGetReceiptData(safeMode);
+    let charImgHTML = '';
+    if (isReceiptDebugMode()) console.info('[EchoVault Receipt]', data);
+    if (!data) {
+      return `<div class="receipt-error-card">
+        <h3>Receipt unavailable</h3>
+        <p>Your echoes are safe. Try refreshing the app cache or creating one new echo.</p>
+      </div>`;
+    }
+    try {
+      const charImgs = pickCharImgs();
+      charImgHTML = buildCharImgHTML(charImgs);
+    } catch (error) {
+      console.warn('Receipt decoration failed', error);
+      charImgHTML = '';
+    }
 
-    return `<div class="receipt ${receiptTheme}" id="receipt-el" style="position:relative">
+    return `<div class="receipt ${escapeHTML(receiptTheme)}" id="receipt-el" style="position:relative">
       <div class="receipt-paper">
         <div class="receipt-header">
           <div class="receipt-store">ECHOVAULT™</div>
           <div class="receipt-tagline">Emotional Surplus Store · Est. Today</div>
         </div>
         <hr class="receipt-divider">
-        <div class="receipt-line"><span>Receipt type</span><span>${mode === 'weekly' ? 'Weekly Summary' : 'Latest Echo'}</span></div>
+        <div class="receipt-line"><span>Receipt type</span><span>${escapeHTML(safeMode === 'weekly' ? 'Weekly Summary' : 'Latest Echo')}</span></div>
         <div class="receipt-line"><span>Vault Holder</span><span>${escapeHTML(data.vaultHolder)}</span></div>
         <div class="receipt-line"><span>Echo ID</span><span>${escapeHTML(data.echoId)}</span></div>
+        <div class="receipt-line"><span>Receipt ID</span><span>${escapeHTML(data.receiptId)}</span></div>
         <div class="receipt-line"><span>Receipt Class</span><span>${escapeHTML(data.receiptClass)}</span></div>
         <div class="receipt-line"><span>Coordinates</span><span>${escapeHTML(data.coordinates)}</span></div>
         <div class="receipt-line"><span>Mood</span><span>${escapeHTML(String(data.mood).toUpperCase())}</span></div>
@@ -2543,6 +2757,10 @@ const Rituals = (() => {
         <div class="receipt-line"><span>Archetype</span><span>${escapeHTML(data.archetype)}</span></div>
         <div class="receipt-line"><span>Void status</span><span>${escapeHTML(data.voidStatus)}</span></div>
         <div class="receipt-line"><span>Sync state</span><span>${escapeHTML(data.syncLabel)}</span></div>
+        ${data.materialsDiscovered ? `<div class="receipt-line"><span>Materials Discovered</span><span>${escapeHTML(data.materialsDiscovered)}</span></div>` : ''}
+        ${data.craftedRelic ? `<div class="receipt-line"><span>Crafted Relic</span><span>${escapeHTML(data.craftedRelic)}</span></div>` : ''}
+        ${data.avatarRole ? `<div class="receipt-line"><span>Avatar Role</span><span>${escapeHTML(data.avatarRole)}</span></div>` : ''}
+        ${data.roomUnlocked ? `<div class="receipt-line"><span>Room Unlocked</span><span>${escapeHTML(data.roomUnlocked)}</span></div>` : ''}
         <div class="receipt-line"><span>Date</span><span>${escapeHTML(data.date)}</span></div>
         <hr class="receipt-divider">
         <div class="receipt-line bold"><span>INSIGHT</span><span>#${escapeHTML(data.receiptNumber)}</span></div>
@@ -2616,10 +2834,31 @@ const Rituals = (() => {
   }
 
   async function copyReceiptSummary() {
-    const mode = document.querySelector('.receipt-mode-btn.active')?.dataset.mode || 'latest';
-    const d = mode === 'weekly' ? ReceiptRenderer.openWeekly() : ReceiptRenderer.openLatest();
-    const txt = `EchoVault ${mode} receipt\nVault Holder: ${d.vaultHolder}\nReceipt ID: ${d.receiptId}\nEcho ID: ${d.echoId}\nReceipt Class: ${d.receiptClass}\nCoordinates: ${d.coordinates}\nMood: ${d.mood}\nIntensity: ${d.intensity}/10\nSilence: ${d.silence}/10\nEmotional Weather: ${d.weather}\nArchetype: ${d.archetype}\nVoid status: ${d.voidStatus}\nDate: ${d.date}\nSync state: ${d.syncLabel}\nInsight: ${d.insight}`;
-    try { await navigator.clipboard.writeText(txt); Toast.show('Summary copied ✓'); } catch { Toast.show('Copy failed.'); }
+    try {
+      const mode = document.querySelector('.receipt-mode-btn.active')?.dataset.mode || 'latest';
+      const d = safeGetReceiptData(mode);
+      if (!d) { Toast.show('Copy failed.'); return; }
+      const txt = `EchoVault ${mode} receipt
+Vault Holder: ${d.vaultHolder}
+Receipt ID: ${d.receiptId}
+Echo ID: ${d.echoId}
+Receipt Class: ${d.receiptClass}
+Coordinates: ${d.coordinates}
+Mood: ${d.mood}
+Intensity: ${d.intensity}/10
+Silence: ${d.silence}/10
+Emotional Weather: ${d.weather}
+Archetype: ${d.archetype}
+Void status: ${d.voidStatus}
+Date: ${d.date}
+Sync state: ${d.syncLabel}
+Insight: ${d.insight}`;
+      await navigator.clipboard.writeText(txt);
+      Toast.show('Summary copied ✓');
+    } catch(e) {
+      console.warn('Receipt copy failed', e);
+      Toast.show('Copy failed.');
+    }
   }
 
   function fallbackDownload(canvas) {
@@ -2766,20 +3005,28 @@ const Rituals = (() => {
     return `<div class="ritual-scene storm-scene"><h3>Storm Jar</h3><p>Put the weather somewhere it can’t swallow you.</p><canvas id="storm-canvas" width="520" height="300"></canvas><div id="storm-msg" class="ritual-msg">Tap the jar to give the storm a shape.</div><div class="ritual-actions" id="storm-actions" hidden><button class="receipt-action-btn" id="save-storm">Save Storm Artifact</button><button class="receipt-action-btn" id="dl-storm">Download Storm Card</button></div></div>`;
   }
   function buildMuseum(){
-    const echoes = state.echoes || [];
+    VaultRooms.evaluate?.();
+    const echoes=state.echoes;
     const saved=ArtifactArchive.listArtifacts();
     const materials = VaultInventory.getTotals();
-    const materialRows = Object.entries(materials).map(([name,count])=>`<div class="material-pill"><span>${escapeHTML(name)}</span><b>${escapeHTML(count)}</b></div>`).join('') || '<div class="museum-empty">No materials discovered yet. Create an echo to uncover the first fragment.</div>';
-    const materialsPrep = '<div class="phase-two-note">Materials can later be used for crafting; today they stay local-first inventory fragments.</div>';
-    const questPrep = '<div class="phase-two-note">Quests can later unlock rooms without adding public feeds or profiles.</div>';
+    const totalMaterials = Object.values(materials).reduce((sum, qty)=>sum + Number(qty || 0), 0);
+    const meta = MaterialEngine.materialMeta || {};
+    const materialRows = Object.entries(materials).map(([name,count])=>{ const m=meta[name] || { icon:'✦', description:'A private emotional material.', mood:'reflective' }; return `<div class="material-pill mood-${escapeHTML(m.mood)}"><span><b>${escapeHTML(m.icon)}</b> ${escapeHTML(name)}<small>${escapeHTML(m.description)}</small></span><strong>${escapeHTML(count)}</strong></div>`; }).join('') || '<div class="museum-empty">No materials discovered yet. Create an echo to uncover the first fragment.</div>';
+    const craftCards = RelicCrafting.listRecipes().map(recipe => {
+      const missing = RelicCrafting.getMissingMaterials(recipe.id);
+      const can = missing.length === 0;
+      const costs = recipe.cost.map(c => { const have=VaultInventory.getMaterialCount(c.name); return `<span class="cost-chip ${have>=c.qty?'has':'missing'}">${escapeHTML(c.name)} <b>${escapeHTML(have)}/${escapeHTML(c.qty)}</b></span>`; }).join('');
+      const missText = missing.map(m=>`${m.qty} ${m.name}`).join(', ');
+      return `<article class="craft-recipe-card ${can?'can-craft':'is-missing'}"><div class="craft-recipe-top"><span class="craft-rune">✦</span><div><h5>${escapeHTML(recipe.title)}</h5><p>${escapeHTML(recipe.description)}</p></div></div><div class="craft-costs">${costs}</div>${can ? '<small class="craft-ready">Materials aligned.</small>' : `<small class="craft-missing">missing: ${escapeHTML(missText)}</small>`}<button class="receipt-action-btn craft-btn" data-recipe-id="${escapeHTML(recipe.id)}" ${can?'':'disabled'}>Craft</button></article>`;
+    }).join('');
+    const materialsPrep = '<div class="phase-two-note">Materials remain local-first in <code>echovault_inventory_v1</code>; crafting only spends local inventory when every cost is available.</div>';
     const quest = GentleQuests.current();
     const avatarHtml = EchoAvatar.render();
-    const societyTeaser = `<div class="echo-society-teaser"><div class="echo-avatar-kicker">EchoSociety — coming later</div><p>Your avatar will one day carry signals through shared districts. For now, your society begins inside your vault.</p></div>`;
-    if(!echoes.length) return `<div class="museum-shell"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}`}</small></div>${avatarHtml}<section class="vault-materials"><h4>Vault Materials</h4>${materialRows}</section>${materialsPrep}${societyTeaser}<div class="museum-empty">The museum is quiet. Create echoes to awaken its rooms.</div></div>`;
-    const relics=RelicEngine.fromEchoes(echoes);
+    const societyTeaser = `<div class="echo-society-teaser"><div class="echo-avatar-kicker">EchoSociety — coming later</div><p>EchoSociety is not open yet. Your avatar will one day carry signals through shared districts. For now, your society begins inside your vault.</p><small>Requires Echo Avatar + 5 echoes.</small><div class="phase-two-note">No chat, backend, public profiles, feeds, likes, followers, or multiplayer systems are active here.</div></div>`;
     const weather=WeatherMap.compute(echoes);
     const arch=ArchetypeEngine.compute(PatternEngine.analyze(echoes));
     const tracks=SOUNDPRINTS[weather.mood]||SOUNDPRINTS.reflective;
+    const relics=RelicEngine.fromEchoes(echoes);
     const relicVisual = (name) => {
       const key = name.toLowerCase();
       if (key.includes('signal')) return 'relic-star';
@@ -2788,8 +3035,26 @@ const Rituals = (() => {
       if (key.includes('comet')) return 'relic-comet';
       return 'relic-token';
     };
-    const tabs = ['weather','avatar','materials','archetype','soundprint','relics','receipts','archive','lanterns'];
-    return `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-meta"><span>${echoes.length} echoes</span><span>${saved.length} artifacts</span><span>${weather.name}</span><span>${arch.archetypeName}</span></div></header><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}`}</small></div>${questPrep}<nav class="museum-tabs" aria-label="Museum rooms">${tabs.map(r=>`<button class="museum-tab ${r==='weather'?'active':''}" data-room="${r}">${r}</button>`).join('')}</nav><div class="museum-room active" data-room-panel="weather"><h4>Weather Room</h4><p>${weather.summary}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div></div><div class="museum-room" data-room-panel="avatar"><h4>Echo Avatar</h4>${avatarHtml}${societyTeaser}</div><div class="museum-room" data-room-panel="materials"><h4>Vault Materials</h4><section class="vault-materials">${materialRows}</section>${materialsPrep}</div><div class="museum-room" data-room-panel="archetype"><h4>Archetype Hall</h4><p>${arch.archetypeName} · ${arch.archetypeDescription}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></div><div class="museum-room" data-room-panel="soundprint"><h4>Soundprint Wall</h4>${tracks.slice(0,3).map(t=>`<div class='track-item'><div><b>${t.song}</b><small>${t.artist}</small></div><a class='track-link spotify' href='${t.spotify}' target='_blank' rel='noopener noreferrer'>Spotify</a><a class='track-link youtube' href='${t.youtube}' target='_blank' rel='noopener noreferrer'>YouTube</a></div>`).join('')}<button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button></div><div class="museum-room" data-room-panel="relics"><h4>Memory Relics</h4><div class="relic-grid">${relics.map((r,i)=>`<article class='relic-item mood-${escapeHTML(r.mood)}' style='--delay:${i * 120}ms'><div class='relic-visual ${relicVisual(r.title)}'></div><b>${escapeHTML(r.title)}</b><span class='rarity'>${escapeHTML(r.rarity)}</span><small>${escapeHTML(r.coordinates)}</small><p>${escapeHTML(r.description)}</p><button class='receipt-action-btn relic-dl' data-id='${escapeHTML(r.id)}'>Download Card</button><button class='receipt-action-btn relic-save' data-id='${escapeHTML(r.id)}'>Save Artifact</button></article>`).join('')}</div></div><div class="museum-room" data-room-panel="receipts"><h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button></div><div class="museum-room" data-room-panel="archive"><h4>Artifact Archive</h4><div class="artifact-shelf" id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${escapeHTML(a.title)}</b><small>${escapeHTML(a.type)}</small><button class='receipt-action-btn art-fav' data-id='${escapeHTML(a.id)}'>☆</button><button class='receipt-action-btn art-del' data-id='${escapeHTML(a.id)}'>Delete</button></div>`).join('') || 'No artifacts saved yet. Create one from a ritual.'}</div></div><div class="museum-room" data-room-panel="lanterns"><h4>Void Lanterns</h4><p>Still here is still a signal.</p></div></div>`;
+    const panelLock = (roomId, html) => VaultRooms.isUnlocked(roomId) ? html : `<div class="museum-locked"><h4>${escapeHTML(VaultRooms.getRooms().find(r=>r.id===roomId)?.name || 'Locked Room')}</h4><p>${escapeHTML(VaultRooms.getUnlockReason(roomId))}</p></div>`;
+    const roomMap = [
+      ['weather_room','weather','Weather Room'],
+      ['archetype_hall','archetype','Archetype Hall'],
+      ['soundprint_wall','soundprint','Soundprint Wall'],
+      ['relic_hall','relics','Memory Relics'],
+      ['archive_shelf','receipts','Receipt Archive'],
+      ['lantern_garden','lanterns','Void Lanterns'],
+      ['crafting_table','crafting','Crafting Table'],
+      ['materials_room','materials','Vault Materials'],
+      ['society_gate','society','Society Gate']
+    ];
+    const tabButton = ([roomId, panel, label]) => {
+      const unlockId = roomId === 'archetype_hall' ? 'weather_room' : roomId === 'materials_room' ? 'crafting_table' : roomId;
+      const unlocked = VaultRooms.isUnlocked(unlockId);
+      return `<button class="museum-tab ${panel==='weather'?'active':''} ${unlocked?'is-unlocked':'is-locked'}" data-room="${panel}" title="${escapeHTML(unlocked?'Awakened':VaultRooms.getUnlockReason(unlockId))}">${escapeHTML(label)}</button>`;
+    };
+    const shellStart = `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-meta"><span>${echoes.length} echoes</span><span>${saved.length} artifacts</span><span>${totalMaterials} materials</span><span>${weather.name}</span><span>${arch.archetypeName}</span></div></header><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}${quest.xp ? ` · +${quest.xp} XP` : ''}`}</small></div>${avatarHtml}<nav class="museum-tabs" aria-label="Museum rooms">${roomMap.map(tabButton).join('')}</nav>`;
+    if(!echoes.length) return `${shellStart}<section class="vault-materials"><h4>Vault Materials</h4>${materialRows}</section>${materialsPrep}${societyTeaser}<div class="museum-empty">The museum is quiet. Create echoes to awaken its rooms.</div></div>`;
+    return `${shellStart}<div class="museum-room active" data-room-panel="weather">${panelLock('weather_room', `<h4>Weather Room</h4><p>${weather.summary}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div>`)}</div><div class="museum-room" data-room-panel="archetype"><h4>Archetype Hall</h4><p>${arch.archetypeName} · ${arch.archetypeDescription}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></div><div class="museum-room" data-room-panel="soundprint">${panelLock('soundprint_wall', `<h4>Soundprint Wall</h4>${tracks.slice(0,3).map(t=>`<div class='track-item'><div><b>${t.song}</b><small>${t.artist}</small></div><a class='track-link spotify' href='${t.spotify}' target='_blank' rel='noopener noreferrer'>Spotify</a><a class='track-link youtube' href='${t.youtube}' target='_blank' rel='noopener noreferrer'>YouTube</a></div>`).join('')}<button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button>`)}</div><div class="museum-room" data-room-panel="relics">${panelLock('relic_hall', `<h4>Memory Relics</h4><div class="relic-grid">${relics.map((r,i)=>`<article class='relic-item mood-${escapeHTML(r.mood)}' style='--delay:${i * 120}ms'><div class='relic-visual ${relicVisual(r.title)}'></div><b>${escapeHTML(r.title)}</b><span class='rarity'>${escapeHTML(r.rarity)}</span><small>${escapeHTML(r.coordinates)}</small><p>${escapeHTML(r.description)}</p><button class='receipt-action-btn relic-dl' data-id='${escapeHTML(r.id)}'>Download Card</button><button class='receipt-action-btn relic-save' data-id='${escapeHTML(r.id)}'>Save Artifact</button></article>`).join('')}</div>`)}</div><div class="museum-room" data-room-panel="receipts">${panelLock('archive_shelf', `<h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button><div class="artifact-shelf" id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${escapeHTML(a.title)}</b><small>${escapeHTML(a.type)}</small><button class='receipt-action-btn art-fav' data-id='${escapeHTML(a.id)}'>☆</button><button class='receipt-action-btn art-del' data-id='${escapeHTML(a.id)}'>Delete</button></div>`).join('') || 'No artifacts saved yet. Create one from a ritual.'}</div>`)}</div><div class="museum-room" data-room-panel="lanterns">${panelLock('lantern_garden', `<h4>Void Lanterns</h4><p>Still here is still a signal. Crafted lanterns gather here as a private garden.</p>`)}</div><div class="museum-room" data-room-panel="crafting">${panelLock('crafting_table', `<section class="crafting-table"><div class="crafting-head"><div><h4>Crafting Table</h4><p>Shape emotional materials into relics.</p></div><span>${totalMaterials} materials</span></div><section class="vault-materials compact"><h4>Inventory Summary</h4>${materialRows}</section><div class="craft-grid">${craftCards}</div><div id="crafted-preview" class="crafted-preview" hidden></div></section>`)}</div><div class="museum-room" data-room-panel="materials"><h4>Vault Materials</h4><section class="vault-materials">${materialRows}</section>${materialsPrep}</div><div class="museum-room" data-room-panel="society">${panelLock('society_gate', societyTeaser)}</div></div>`;
   }
   function startConflictAnimation() {
     const canvas = document.getElementById('conflict-canvas');

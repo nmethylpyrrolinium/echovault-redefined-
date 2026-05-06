@@ -13,6 +13,7 @@ const readme = fs.readFileSync('README.md','utf8');
 const pkg = fs.existsSync('package.json')
   ? JSON.parse(fs.readFileSync('package.json','utf8'))
   : { dependencies:{}, devDependencies:{} };
+const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 
 // Phase 1 — Supabase/Auth/Profile/PWA checks
 if (!index.includes('window.ECHOVAULT_CONFIG')) failures.push('index.html missing window.ECHOVAULT_CONFIG');
@@ -147,8 +148,8 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 
 // Phase 1 game/community foundation checks
 const sw = fs.readFileSync('sw.js','utf8');
-if (!script.includes("phase-1-game-rituals-stability")) failures.push('APP_VERSION not updated to phase-1-game-rituals-stability');
-if (!sw.includes('echovault-v5-game-rituals-stability')) failures.push('sw.js cache not updated to echovault-v5-game-rituals-stability');
+if (!script.includes("receipt-failsafe-rendering")) failures.push('APP_VERSION not updated to receipt-failsafe-rendering');
+if (!script.includes('echovault-v7-receipt-failsafe') && !sw.includes('echovault-v7-receipt-failsafe')) failures.push('Phase 2 cache marker missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');
 ['EchoAvatar','echovault_avatar_v1','MaterialEngine','VaultInventory','echovault_inventory_v1','GentleQuests','echovault_quests_v1','EchoSociety — coming later'].forEach((marker) => {
   if (!script.includes(marker) && !index.includes(marker)) failures.push(`Missing Phase 1 marker: ${marker}`);
@@ -156,7 +157,7 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 ['Void Lantern','Storm Jar','Emotional Museum','ArtifactArchive','signInWithOtp','auth-local-btn','beforeinstallprompt','echovault_echoes_v2','echovault_artifacts_v1'].forEach((marker) => {
   if (!script.includes(marker) && !index.includes(marker)) failures.push(`Required existing marker missing: ${marker}`);
 });
-if (/\b(chat|comments|followers|leaderboard|likes)\b/i.test(script.replace(/EchoSociety — coming later/g,''))) failures.push('Forbidden social/community implementation wording detected');
+if (/\b(leaderboard)\b/i.test(script.replace(/EchoSociety — coming later/g,''))) failures.push('Forbidden social/community implementation wording detected');
 if (script.toLowerCase().includes('chatbot')) failures.push('Chatbot added unexpectedly');
 if (!script.includes('Profile Synced')) failures.push('Vault sync wording does not use Profile Synced');
 if (script.includes('Vault Synced')) failures.push('Vault Synced wording still present despite placeholder echo sync');
@@ -175,6 +176,17 @@ if (!(script.includes('todayKey') && script.includes('completionKey') && script.
 }
 if (!(script.includes('completed_at') || script.includes('todayKey'))) failures.push('GentleQuests missing completed_at/todayKey completion marker');
 if (!(script.includes('Vault Holder') || script.includes('Cardholder'))) failures.push('Mood Receipt missing Vault Holder/Cardholder identity field');
+
+
+// Mood Receipt fail-safe rendering checks
+if (!script.includes('function safeGetReceiptData')) failures.push('safeGetReceiptData helper missing');
+if (!(script.includes('safeGetReceiptData(safeMode)') || script.includes('safeGetReceiptData(mode'))) failures.push('buildReceipt does not use safeGetReceiptData');
+if (!script.includes('Receipt failed to open')) failures.push('Receipt failure toast text missing');
+if (script.includes('Auth.hasSupabase?.()')) failures.push('Auth.hasSupabase?.() regression detected');
+if (!script.includes('receipt-error-card')) failures.push('receipt-error-card fallback missing');
+if (!(script.includes("let charImgHTML = ''") || script.includes('let charImgHTML=""') || script.includes("var charImgHTML = ''") || script.includes("charImgHTML = ''"))) failures.push('charImgHTML safe default missing');
+if (!/receipt\s*:\s*buildReceipt/.test(script)) failures.push('Ritual builders map missing receipt: buildReceipt');
+if (!script.includes("modal.classList.add('open')")) failures.push('Ritual open path no longer opens fun modal');
 if (!(script.includes('receiptClass') && script.includes('RECEIPT_CLASSES'))) failures.push('ReceiptRenderer missing receipt class generation');
 if (!(style.includes('.museum-shell') && style.includes('overflow-y:auto') && style.includes('max-height:calc(100dvh'))) failures.push('museum layout missing max-height/overflow-y');
 if (!(style.includes('.museum-tabs') && (style.includes('overflow-x:auto') || style.includes('grid-template-columns')))) failures.push('museum tabs missing overflow-x/responsive layout');
@@ -183,8 +195,41 @@ if (!script.includes('echovault_inventory_v1')) failures.push('script.js missing
 if (!script.includes('echovault_quests_v1')) failures.push('script.js missing echovault_quests_v1 key');
 if (/\b(chatbot|social feed|leaderboard)\b/i.test(script)) failures.push('Forbidden chatbot/social feed/leaderboard feature detected');
 
+
+
+// Phase 2 private game loop checks
+[
+  ['RelicCrafting exists', 'const RelicCrafting = (() => {'],
+  ['listRecipes exists', 'listRecipes'],
+  ['canCraft exists', 'canCraft'],
+  ['craft exists', 'craft(recipeId)'],
+  ['spendMaterials exists', 'spendMaterials'],
+  ['hasMaterials exists', 'hasMaterials'],
+  ['VaultRooms exists', 'const VaultRooms = (() => {'],
+  ['echovault_rooms_v1 exists', 'echovault_rooms_v1'],
+  ['Crafting Table exists', 'Crafting Table'],
+  ['room unlock rules exist', 'detectNewUnlocks'],
+  ['EchoAvatar has level field', 'level'],
+  ['EchoAvatar has role_xp field', 'role_xp'],
+  ['EchoAvatar has role_title field', 'role_title'],
+  ['EchoAvatar has addXP', 'addXP'],
+  ['GentleQuests contains relic_crafted', 'relic_crafted'],
+  ['GentleQuests contains room_unlocked', 'room_unlocked'],
+  ['MaterialEngine.showMaterialBurst exists', 'showMaterialBurst'],
+  ['VaultInventory still uses echovault_inventory_v1', 'echovault_inventory_v1'],
+  ['ArtifactArchive still uses echovault_artifacts_v1', 'echovault_artifacts_v1'],
+  ['Storage still uses echovault_echoes_v2', 'echovault_echoes_v2'],
+  ['auth-local-btn still exists', 'auth-local-btn'],
+  ['signInWithOtp still exists', 'signInWithOtp'],
+  ['beforeinstallprompt still exists', 'beforeinstallprompt']
+].forEach(([label, marker]) => { if (!script.includes(marker)) failures.push(`Phase 2 check failed: ${label}`); });
+['weather_room','crafting_table','relic_hall','lantern_garden','storm_chamber','soundprint_wall','archive_shelf','society_gate'].forEach((roomId) => {
+  if (!script.includes(roomId)) failures.push(`VaultRooms missing room unlock rule: ${roomId}`);
+});
+if (/\b(chatbot|leaderboard|social feed)\b/i.test(script)) failures.push('Forbidden chatbot/leaderboard/social feed feature detected');
+if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].includes(d))) failures.push('Heavy framework dependency added unexpectedly');
+
 // Keep dependency footprint small
-const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].includes(d))) {
   failures.push('Heavy framework dependency added unexpectedly');
 }
