@@ -435,6 +435,7 @@ const Settings = (() => {
   });
   document.getElementById('settings-export-btn')?.addEventListener('click', () => Storage.exportVault(state.echoes));
     document.getElementById('society-revoke-consent-btn')?.addEventListener('click', () => { SocietySignals.revokeConsent(); populateSocietyPrivacy(); updateSocietyConsentUI({ privateState:true }); Toast.show('EchoSociety consent revoked.'); });
+    document.getElementById('society-revoke-consent-btn')?.addEventListener('click', () => { SocietySignals.revokeConsent(); populateSocietyPrivacy(); Toast.show('EchoSociety consent revoked.'); });
     document.getElementById('society-clear-signals-btn')?.addEventListener('click', () => { if (!confirm('Clear local EchoSociety signals and reactions? Your echoes stay untouched.')) return; SocietySignals.clearLocalSignals(); populateSocietyPrivacy(); Toast.show('Local society signals cleared.'); });
     document.getElementById('society-export-signals-btn')?.addEventListener('click', () => SocietySignals.exportSignals());
 
@@ -2516,6 +2517,7 @@ const SocietySignals = (() => {
   function exportSignals(){ ensureKeys(); const blob = new Blob([JSON.stringify({ version:1, consent:readJSON(CONSENT_KEY,{}), signals:listLocalSignals(), reactions:listReactions() }, null, 2)], {type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='echovault-society-signals.json'; a.click(); URL.revokeObjectURL(url); }
   function listReactions(){ ensureKeys(); return readJSON(REACTIONS_KEY, {}) || {}; }
   function addReaction(signalId, reaction){ if (!requireConsent()) return null; const allowed=['witnessed','held','softened','bloomed','charged']; if(!allowed.includes(reaction)) return null; const all=listReactions(); const key=String(signalId); const current=Array.isArray(all[key]) ? all[key] : []; if(!current.includes(reaction)) current.push(reaction); all[key]=current; writeJSON(REACTIONS_KEY, all); return current; }
+  function addReaction(signalId, reaction){ const allowed=['witnessed','held','softened','bloomed','charged']; if(!allowed.includes(reaction)) return null; const all=listReactions(); const key=String(signalId); const current=Array.isArray(all[key]) ? all[key] : []; if(!current.includes(reaction)) current.push(reaction); all[key]=current; writeJSON(REACTIONS_KEY, all); return current; }
   function contributeWeather(){ return createSignal('weather'); }
   function contributeLantern(){ return createSignal('lantern', { mood: latestEcho().mood || 'empty', silence: latestEcho().silence ?? 9 }); }
   function contributeStorm(){ return createSignal('storm', { mood: latestEcho().mood || 'chaos', intensity: latestEcho().intensity ?? 9 }); }
@@ -2525,6 +2527,7 @@ const SocietySignals = (() => {
   function maybePrepareFutureSync(signal){ if(!isSupabaseSocietyAvailable() || !getConsent()) return { ok:false, reason:'local_preview_only' }; window.__echovault_pending_society_signal = { ...signal, raw_echo_shared:false }; return { ok:true, prepared:true }; }
   ensureKeys();
   return { CONSENT_KEY, SIGNALS_KEY, REACTIONS_KEY, SIGNAL_TYPES, createSignal, listLocalSignals, contributeWeather, contributeLantern, contributeStorm, contributeBloom, contributeArchiveLine, getConsent, setConsent, revokeConsent, clearLocalSignals, exportSignals, listReactions, addReaction, isSupabaseSocietyAvailable, maybePrepareFutureSync, requireConsent };
+  return { CONSENT_KEY, SIGNALS_KEY, REACTIONS_KEY, SIGNAL_TYPES, createSignal, listLocalSignals, contributeWeather, contributeLantern, contributeStorm, contributeBloom, contributeArchiveLine, getConsent, setConsent, revokeConsent, clearLocalSignals, exportSignals, listReactions, addReaction, isSupabaseSocietyAvailable, maybePrepareFutureSync };
 })();
 
 const SocietyWeather = (() => {
@@ -2636,6 +2639,20 @@ function bindEchoSocietyGate() {
   document.getElementById('society-stay-private-btn')?.addEventListener('click', stayPrivate);
   document.getElementById('society-understand-btn')?.addEventListener('click', () => { SocietySignals.setConsent(true); Toast.show('EchoSociety consent saved locally.'); rerenderSocietyGate() || updateSocietyConsentUI({ privateState:false }); });
   const contribute = (fn, msg) => { const signal = fn(); if (!signal) { updateSocietyConsentUI({ privateState:true }); return; } Toast.show(msg); rerenderSocietyGate(); };
+  return `${intro}${privacy}<section class="society-city" id="society-city" ${consent ? '' : 'hidden'}><div class="society-city-sky"><canvas id="society-particles-canvas" width="720" height="220" aria-hidden="true"></canvas></div><div class="society-district-grid">${districts}</div>${weather}<section class="society-local-signals"><h4>Local symbolic signals</h4>${signals}</section></section>`;
+}
+
+function bindEchoSocietyGate() {
+  const privacyPanel = document.getElementById('society-privacy-panel');
+  const city = document.getElementById('society-city');
+  const showPrivacy = () => { if(privacyPanel) privacyPanel.hidden = false; };
+  const showCity = () => { if(city) city.hidden = false; if(privacyPanel) privacyPanel.hidden = true; setTimeout(startSocietyParticles, 60); };
+  document.getElementById('society-privacy-btn')?.addEventListener('click', showPrivacy);
+  document.getElementById('society-enter-btn')?.addEventListener('click', () => SocietySignals.getConsent() ? showCity() : showPrivacy());
+  document.getElementById('society-private-btn')?.addEventListener('click', () => Toast.show('Stayed private. No society signal shared.'));
+  document.getElementById('society-stay-private-btn')?.addEventListener('click', () => { SocietySignals.setConsent(false); if(privacyPanel) privacyPanel.hidden = true; Toast.show('EchoSociety consent declined.'); });
+  document.getElementById('society-understand-btn')?.addEventListener('click', () => { SocietySignals.setConsent(true); Toast.show('EchoSociety consent saved locally.'); showCity(); });
+  const contribute = (fn, msg) => { fn(); Toast.show(msg); Rituals.open?.('museum'); };
   document.getElementById('society-lantern-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeLantern, 'Anonymous lantern lit.'));
   document.getElementById('society-storm-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeStorm, 'Storm spark contained.'));
   document.getElementById('society-bloom-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeBloom, 'Bloom seed planted.'));
@@ -2643,6 +2660,9 @@ function bindEchoSocietyGate() {
   document.getElementById('society-archive-btn')?.addEventListener('click', () => { const line=document.getElementById('society-archive-line')?.value || ''; const signal = SocietySignals.contributeArchiveLine(line); if (!signal) { updateSocietyConsentUI({ privateState:true }); return; } Toast.show('Moon Archive signal saved.'); rerenderSocietyGate(); });
   document.querySelectorAll('.society-reactions button').forEach(btn => btn.addEventListener('click', () => { const id=btn.closest('.society-signal')?.dataset.signalId; const reaction = SocietySignals.addReaction(id, btn.dataset.reaction); if (!reaction) { updateSocietyConsentUI({ privateState:true }); return; } btn.classList.add('active'); Toast.show(`${btn.textContent.trim()} locally recorded.`); }));
   updateSocietyConsentUI({ privateState:false });
+  document.getElementById('society-archive-btn')?.addEventListener('click', () => { const line=document.getElementById('society-archive-line')?.value || ''; SocietySignals.contributeArchiveLine(line); Toast.show('Moon Archive signal saved.'); Rituals.open?.('museum'); });
+  document.querySelectorAll('.society-reactions button').forEach(btn => btn.addEventListener('click', () => { const id=btn.closest('.society-signal')?.dataset.signalId; SocietySignals.addReaction(id, btn.dataset.reaction); btn.classList.add('active'); Toast.show(`${btn.textContent.trim()} locally recorded.`); }));
+  if (SocietySignals.getConsent()) setTimeout(startSocietyParticles, 60);
 }
 
 function startSocietyParticles() {
