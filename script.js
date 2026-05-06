@@ -1,10 +1,8 @@
 (function EchoVault() {
 'use strict';
 
-const APP_VERSION = 'receipt-failsafe-rendering';
-const SW_CACHE_VERSION = 'echovault-v7-receipt-failsafe';
-const APP_VERSION = 'phase-2-relic-crafting-avatar-progression';
-const SW_CACHE_VERSION = 'echovault-v6-phase-2-game-loop';
+const APP_VERSION = 'phase-3-echo-society-foundation';
+const SW_CACHE_VERSION = 'echovault-v8-phase-3-echo-society';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
@@ -345,6 +343,7 @@ const Settings = (() => {
     populateStats();
     populateArchetype();
     populateEchoAvatar();
+    populateSocietyPrivacy();
   }
   function close() {
     overlay?.classList.remove('open');
@@ -380,6 +379,12 @@ const Settings = (() => {
     if (!mount) return;
     mount.innerHTML = EchoAvatar.render();
     EchoAvatar.bind();
+  }
+  function populateSocietyPrivacy() {
+    const status = document.getElementById('society-consent-status');
+    if (!status || typeof SocietySignals === 'undefined') return;
+    const count = SocietySignals.listLocalSignals().length;
+    status.textContent = `Society consent status: ${SocietySignals.getConsent() ? 'consented locally' : 'not consented'} · ${count} local symbolic signals`;
   }
   async function init() {
     const profile = ProfileStore.read();
@@ -429,6 +434,9 @@ const Settings = (() => {
     Toast.show('Local session cleared.');
   });
   document.getElementById('settings-export-btn')?.addEventListener('click', () => Storage.exportVault(state.echoes));
+    document.getElementById('society-revoke-consent-btn')?.addEventListener('click', () => { SocietySignals.revokeConsent(); populateSocietyPrivacy(); Toast.show('EchoSociety consent revoked.'); });
+    document.getElementById('society-clear-signals-btn')?.addEventListener('click', () => { if (!confirm('Clear local EchoSociety signals and reactions? Your echoes stay untouched.')) return; SocietySignals.clearLocalSignals(); populateSocietyPrivacy(); Toast.show('Local society signals cleared.'); });
+    document.getElementById('society-export-signals-btn')?.addEventListener('click', () => SocietySignals.exportSignals());
 
   document.getElementById('settings-clear-btn')?.addEventListener('click', () => {
       if (!window.confirm('This will permanently delete all your echoes. This cannot be undone.')) return;
@@ -2085,7 +2093,6 @@ const ReceiptRenderer = (() => {
     if (Auth.user) return 'Profile Synced';
     const canSync = typeof Auth.hasSupabase === 'function' ? Auth.hasSupabase() : Boolean(Auth.hasSupabase);
     return canSync ? 'Sync Ready' : 'Local Vault';
-    return Auth.hasSupabase?.() ? 'Sync Ready' : 'Local Vault';
   }
   function getData(mode='latest') {
     const safeMode = mode === 'weekly' ? 'weekly' : 'latest';
@@ -2118,10 +2125,6 @@ const ReceiptRenderer = (() => {
     try { latestUnlocked = VaultRooms.getUnlockedRooms?.().slice(-1)[0] || null; } catch(e) { latestUnlocked = null; }
     const syncLabel = syncState() || 'Local Vault';
     const safeString = `${mood || 'reflective'}:${p.totalEchoes || 0}:${safeMode}:${receiptId || 'EV-000000'}:${echoId || 'no-echo'}`;
-    const latestMaterials = MaterialEngine.generateForEcho(latest).filter(m => latest.id);
-    const latestCrafted = ArtifactArchive.listArtifacts().find(a => a.source === 'crafted' || a.recipe_id);
-    const avatar = EchoAvatar.load?.() || {};
-    const latestUnlocked = VaultRooms.getUnlockedRooms?.().slice(-1)[0];
     return {
       mode: safeMode || 'latest',
       timestamp: date.toLocaleString(),
@@ -2140,16 +2143,11 @@ const ReceiptRenderer = (() => {
       voidStatus: safeMode === 'weekly' ? `${Number(p.voidCount) || 0} void entries` : (latest.void ? 'Void Signal' : 'Spoken Signal'),
       insight: p.oneLineInsight || 'You kept returning. That counts.',
       syncLabel,
-      archetype: a.archetypeName,
-      voidStatus: mode === 'weekly' ? `${p.voidCount} void entries` : (latest.void ? 'Void Signal' : 'Spoken Signal'),
-      insight: p.oneLineInsight,
-      syncLabel: syncState(),
       materialsDiscovered: latestMaterials.length ? latestMaterials.map(m => `+${m.qty} ${m.name}`).join(' · ') : '',
       craftedRelic: latestCrafted?.title || '',
       avatarRole: avatar.role ? `${avatar.role} · ${avatar.role_title || ''}`.trim() : '',
       roomUnlocked: latestUnlocked?.name || '',
       barcode: makeBarcode(safeString)
-      barcode: makeBarcode(`${mood}${p.totalEchoes}${mode}${receiptId}`)
     };
   }
   return { RECEIPT_CLASSES, getData, openLatest:()=>getData('latest'), openWeekly:()=>getData('weekly') };
@@ -2329,7 +2327,7 @@ const VaultRooms = (() => {
     { id:'storm_chamber', name:'Storm Chamber', reason:'Requires crafted Storm Jar.', test:()=>ArtifactArchive.listArtifacts().some(a=>a.recipe_id==='storm_jar' || (a.source==='crafted' && a.type==='stormjar')) },
     { id:'soundprint_wall', name:'Soundprint Wall', reason:'Requires at least 3 echoes.', test:()=>state.echoes.length >= 3 },
     { id:'archive_shelf', name:'Archive Shelf', reason:'Requires at least 3 saved artifacts.', test:()=>ArtifactArchive.listArtifacts().length >= 3 },
-    { id:'society_gate', name:'Society Gate', reason:'Requires Echo Avatar + 5 echoes.', test:()=>Object.keys(EchoAvatar.load()).length > 0 && state.echoes.length >= 5 }
+    { id:'society_gate', name:'Society Gate', reason:'Requires Echo Avatar + 5 echoes + 1 saved or crafted artifact.', test:()=>Object.keys(EchoAvatar.load()).length > 0 && state.echoes.length >= 5 && ArtifactArchive.listArtifacts().length >= 1 }
   ];
   function load(){ try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } }
   function getRooms(){ const saved=load(); return rooms.map(r=>({ id:r.id, name:r.name, unlocked:Boolean(saved[r.id]?.unlocked || r.test()), reason:r.reason })); }
@@ -2466,11 +2464,157 @@ const EchoAvatar = (() => {
       archetype: escapeHTML(arch.archetypeName),
       accessory: escapeHTML(latestAccessory)
     };
-    return `<div class="echo-avatar-card"><div class="echo-avatar-orb"><span>${safe.symbol}</span></div><div class="echo-avatar-kicker">Echo Avatar</div><h4>${safe.name}</h4><div class="echo-avatar-role" data-society-role="${safe.role}">${safe.role} · ${safe.roleTitle}</div>${renderProgress()}<p>Aura: ${safe.aura}</p><p>Archetype: ${safe.archetype}</p><p>Companion symbol: ${safe.symbol}</p><p class="echo-avatar-outfit">${safe.outfit}</p><p class="avatar-accessory-hint">Accessory hint: ${safe.accessory}</p><p class="avatar-next-hint">${next ? `Next unlock: ${escapeHTML(next.title)} at ${next.xp} XP.` : 'Your current path is fully awakened.'}</p><div class="phase-two-note">Role can later map into EchoSociety; for now it stays local to this vault.</div><div class="echo-avatar-actions"><button class="receipt-action-btn" id="avatar-generate-btn">Generate from my profile</button><button class="receipt-action-btn" id="avatar-regenerate-btn">Regenerate role</button><button class="receipt-action-btn" disabled>Use as Society Character · coming soon</button></div></div>`;
+    return `<div class="echo-avatar-card"><div class="echo-avatar-orb"><span>${safe.symbol}</span></div><div class="echo-avatar-kicker">Echo Avatar</div><h4>${safe.name}</h4><div class="echo-avatar-role" data-society-role="${safe.role}">${safe.role} · ${safe.roleTitle}</div>${renderProgress()}<p>Aura: ${safe.aura}</p><p>Archetype: ${safe.archetype}</p><p>Companion symbol: ${safe.symbol}</p><p class="echo-avatar-outfit">${safe.outfit}</p><p class="avatar-accessory-hint">Accessory hint: ${safe.accessory}</p><p class="avatar-next-hint">${next ? `Next unlock: ${escapeHTML(next.title)} at ${next.xp} XP.` : 'Your current path is fully awakened.'}</p><div class="phase-two-note">Role now recommends an EchoSociety district; entry remains optional and local-first.</div><div class="echo-avatar-actions"><button class="receipt-action-btn" id="avatar-generate-btn">Generate from my profile</button><button class="receipt-action-btn" id="avatar-regenerate-btn">Regenerate role</button></div></div>`;
   }
   function bind(){ document.getElementById('avatar-generate-btn')?.addEventListener('click',()=>{build(); refreshEchoDependentUI(); Toast.show('Echo Avatar refreshed.');}); document.getElementById('avatar-regenerate-btn')?.addEventListener('click',()=>{regenerateRole(); refreshEchoDependentUI(); Toast.show('Role regenerated locally.');}); }
   return { KEY, load, save, build, regenerateRole, addXP, getProgress, getLevelTitle, getNextUnlock, renderProgress, render, bind };
 })();
+
+
+const SocietySignals = (() => {
+  const CONSENT_KEY = 'echovault_society_consent_v1';
+  const SIGNALS_KEY = 'echovault_society_signals_v1';
+  const REACTIONS_KEY = 'echovault_society_reactions_v1';
+  const SIGNAL_TYPES = ['weather','lantern','storm','bloom','archive'];
+  const DISTRICTS = { weather:'Weather Tower', lantern:'Lantern District', storm:'Storm Works', bloom:'Bloom Market', archive:'Moon Archive' };
+  const ANON_LABELS = ['Moon Signal','Lantern Wisp','Quiet Comet','Bloom Shade','Storm Mote','Archive Finch','Drift Spark','Soft Witness'];
+  function readJSON(key, fallback){ try { const parsed = JSON.parse(localStorage.getItem(key) || ''); return parsed ?? fallback; } catch { return fallback; } }
+  function writeJSON(key, value){ localStorage.setItem(key, JSON.stringify(value)); return value; }
+  function ensureKeys(){ if (localStorage.getItem(CONSENT_KEY) === null) localStorage.setItem(CONSENT_KEY, JSON.stringify({ consent:false, updated_at:null })); if (localStorage.getItem(SIGNALS_KEY) === null) localStorage.setItem(SIGNALS_KEY, JSON.stringify([])); if (localStorage.getItem(REACTIONS_KEY) === null) localStorage.setItem(REACTIONS_KEY, JSON.stringify({})); }
+  function getConsent(){ ensureKeys(); const stored = readJSON(CONSENT_KEY, { consent:false }); return Boolean(stored?.consent); }
+  function setConsent(consent){ return writeJSON(CONSENT_KEY, { consent:Boolean(consent), updated_at:new Date().toISOString(), local_only:Auth.isLocalMode() }); }
+  function revokeConsent(){ return setConsent(false); }
+  function latestEcho(){ return state.echoes?.[0] || {}; }
+  function band(value, lowLabel, midLabel, highLabel){ const n = Number(value || 0); if (n >= 8) return highLabel; if (n >= 4) return midLabel; return lowLabel; }
+  function resolveArchetype(){ try { return ArchetypeEngine.compute(PatternEngine.analyze(state.echoes)).archetypeName; } catch { return 'The Unknown'; } }
+  function sanitizeArchiveLine(line=''){ return String(line).replace(/[\r\n]+/g,' ').trim().slice(0,80); }
+  function createSignal(type='weather', source={}){
+    ensureKeys();
+    const signalType = SIGNAL_TYPES.includes(type) ? type : 'weather';
+    const echo = source.echo || latestEcho();
+    const safeLine = signalType === 'archive' ? sanitizeArchiveLine(source.optionalLine || source.line || '') : '';
+    const signal = {
+      id:`soc_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+      mood: source.mood || echo.mood || PatternEngine.analyze(state.echoes).dominantMood || 'empty',
+      intensity_band: source.intensity_band || band(source.intensity ?? echo.intensity, 'low', 'medium', 'high'),
+      silence_band: source.silence_band || band(source.silence ?? echo.silence, 'soft', 'hushed', 'deep'),
+      archetype: source.archetype || resolveArchetype(),
+      signal_type: signalType,
+      district: DISTRICTS[signalType],
+      created_at:new Date().toISOString(),
+      anonymous_label: source.anonymous_label || ANON_LABELS[Math.floor(Math.random()*ANON_LABELS.length)]
+    };
+    if (safeLine) signal.archive_line = safeLine;
+    const arr = listLocalSignals(); arr.unshift(signal); writeJSON(SIGNALS_KEY, arr.slice(0,120));
+    maybePrepareFutureSync(signal);
+    return signal;
+  }
+  function listLocalSignals(){ ensureKeys(); const arr = readJSON(SIGNALS_KEY, []); return Array.isArray(arr) ? arr : []; }
+  function clearLocalSignals(){ writeJSON(SIGNALS_KEY, []); writeJSON(REACTIONS_KEY, {}); }
+  function exportSignals(){ ensureKeys(); const blob = new Blob([JSON.stringify({ version:1, consent:readJSON(CONSENT_KEY,{}), signals:listLocalSignals(), reactions:listReactions() }, null, 2)], {type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='echovault-society-signals.json'; a.click(); URL.revokeObjectURL(url); }
+  function listReactions(){ ensureKeys(); return readJSON(REACTIONS_KEY, {}) || {}; }
+  function addReaction(signalId, reaction){ const allowed=['witnessed','held','softened','bloomed','charged']; if(!allowed.includes(reaction)) return null; const all=listReactions(); const key=String(signalId); const current=Array.isArray(all[key]) ? all[key] : []; if(!current.includes(reaction)) current.push(reaction); all[key]=current; writeJSON(REACTIONS_KEY, all); return current; }
+  function contributeWeather(){ return createSignal('weather'); }
+  function contributeLantern(){ return createSignal('lantern', { mood: latestEcho().mood || 'empty', silence: latestEcho().silence ?? 9 }); }
+  function contributeStorm(){ return createSignal('storm', { mood: latestEcho().mood || 'chaos', intensity: latestEcho().intensity ?? 9 }); }
+  function contributeBloom(){ return createSignal('bloom', { mood: latestEcho().mood || 'joyful', intensity: latestEcho().intensity ?? 4 }); }
+  function contributeArchiveLine(optionalLine=''){ return createSignal('archive', { optionalLine }); }
+  function isSupabaseSocietyAvailable(){ return Boolean(Auth.client && Auth.user && !Auth.isLocalMode()); }
+  function maybePrepareFutureSync(signal){ if(!isSupabaseSocietyAvailable() || !getConsent()) return { ok:false, reason:'local_preview_only' }; window.__echovault_pending_society_signal = { ...signal, raw_echo_shared:false }; return { ok:true, prepared:true }; }
+  ensureKeys();
+  return { CONSENT_KEY, SIGNALS_KEY, REACTIONS_KEY, SIGNAL_TYPES, createSignal, listLocalSignals, contributeWeather, contributeLantern, contributeStorm, contributeBloom, contributeArchiveLine, getConsent, setConsent, revokeConsent, clearLocalSignals, exportSignals, listReactions, addReaction, isSupabaseSocietyAvailable, maybePrepareFutureSync };
+})();
+
+const SocietyWeather = (() => {
+  function ambientSeed(){ const d = new Date(); return (d.getUTCFullYear()*372 + (d.getUTCMonth()+1)*31 + d.getUTCDate()) % 97; }
+  function countBy(signals, field){ return signals.reduce((acc, s)=>{ const k=s[field] || 'unknown'; acc[k]=(acc[k]||0)+1; return acc; }, {}); }
+  function top(counts, fallback='empty'){ return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || fallback; }
+  function compute(){
+    const signals = SocietySignals.listLocalSignals();
+    const patterns = PatternEngine.analyze(state.echoes);
+    const seed = ambientSeed();
+    const moodCounts = countBy(signals, 'mood');
+    if (patterns.dominantMood) moodCounts[patterns.dominantMood] = (moodCounts[patterns.dominantMood] || 0) + 2;
+    const mostCommonMood = top(moodCounts, patterns.dominantMood || 'empty');
+    const localCount = signals.length;
+    const ambient = Math.max(12, 24 + seed + Math.round((patterns.totalEchoes || 0) * 1.6));
+    const contributions = localCount + ambient;
+    const typeCounts = countBy(signals, 'signal_type');
+    const lanterns = (typeCounts.lantern || 0) + 6 + (seed % 11);
+    const storms = (typeCounts.storm || 0) + 2 + (seed % 7);
+    const blooms = (typeCounts.bloom || 0) + 4 + (seed % 13);
+    const moodName = { calm:'Moonlit Drift', chaos:'Electric Front', reflective:'Mirror Night', anxious:'Restless Wind', joyful:'Bloom Current', empty:'Quiet Haze' }[mostCommonMood] || 'Moonlit Drift';
+    const tail = patterns.averageSilence >= 7 ? 'with Deep Quiet' : patterns.averageIntensity >= 8 ? 'with Charged Skies' : mostCommonMood === 'anxious' ? 'with Restless Wind' : mostCommonMood === 'joyful' ? 'with Gold Bloom' : 'with Soft Signals';
+    return { name:`${moodName} ${tail}`, contributions, most_common_mood:mostCommonMood, lanterns_lit:lanterns, storms_contained:storms, blooms_planted:blooms, connected:SocietySignals.isSupabaseSocietyAvailable() && SocietySignals.getConsent(), label:(SocietySignals.isSupabaseSocietyAvailable() && SocietySignals.getConsent()) ? 'Connected preview' : 'Local preview' };
+  }
+  function render(){ const w=compute(); return `<section class="society-weather-card"><span>${escapeHTML(w.label)}</span><h4>${escapeHTML(w.name)}</h4><p>${escapeHTML(w.contributions)} anonymous signals shaped today’s weather.</p><div class="society-weather-grid"><b>${escapeHTML(w.most_common_mood)}</b><small>most common mood</small><b>${escapeHTML(w.lanterns_lit)}</b><small>lanterns lit</small><b>${escapeHTML(w.storms_contained)}</b><small>storms contained</small><b>${escapeHTML(w.blooms_planted)}</b><small>blooms planted</small></div></section>`; }
+  return { compute, render };
+})();
+
+
+function getSocietyDistrictSuggestion(role='') {
+  const map = {
+    'Lantern Keeper':'Lantern District',
+    'Stormwright':'Storm Works',
+    'Moon Archivist':'Moon Archive',
+    'Weather Cartographer':'Weather Tower',
+    'Bloom Tender':'Bloom Market',
+    'Signal Courier':'all districts'
+  };
+  return map[role] || (role.includes('Storm') ? 'Storm Works' : role.includes('Bloom') ? 'Bloom Market' : role.includes('Archive') ? 'Moon Archive' : role.includes('Lantern') || role.includes('Void') ? 'Lantern District' : 'Weather Tower');
+}
+
+function buildEchoSocietyGate() {
+  const avatar = EchoAvatar.load?.() || {};
+  const hasAvatar = Boolean(Object.keys(avatar).length && avatar.role);
+  const artifactCount = ArtifactArchive.listArtifacts().length;
+  const unlocked = hasAvatar && state.echoes.length >= 5 && artifactCount >= 1;
+  const consent = SocietySignals.getConsent();
+  const district = getSocietyDistrictSuggestion(avatar.role || '');
+  const requirements = `<ul class="society-requirements"><li class="${hasAvatar?'met':'missing'}">Create Echo Avatar</li><li class="${state.echoes.length >= 5?'met':'missing'}">Create 5 echoes</li><li class="${artifactCount >= 1?'met':'missing'}">Craft or save 1 artifact</li></ul>`;
+  if (!unlocked) return `<section class="echo-society-room society-locked"><div class="echo-avatar-kicker">Society Gate</div><h4>Society Gate is still sealed.</h4><p>EchoSociety opens only after your private vault has enough shape to enter without giving away raw echoes.</p><b>Requirements:</b>${requirements}</section>`;
+  const weather = SocietyWeather.render();
+  const privacy = `<section class="society-privacy-panel" id="society-privacy-panel" ${consent ? 'hidden' : ''}><div class="echo-avatar-kicker">Privacy Rules</div><h4>Privacy Rules</h4><p>EchoSociety never shares your raw echoes by default.</p><p>Only anonymous mood/weather signals are used.</p><p>You choose when to contribute.</p><p>You can stay fully local.</p><div class="society-actions"><button class="receipt-action-btn" id="society-understand-btn">I Understand</button><button class="receipt-action-btn ghost" id="society-stay-private-btn">Stay Private</button></div></section>`;
+  const intro = `<section class="echo-society-room"><div class="echo-avatar-kicker">Society Gate</div><h4>Welcome to EchoSociety.</h4><p>A shared city built from anonymous echoes.</p><p class="society-recommendation">Recommended district for your avatar: <b>${escapeHTML(district)}</b></p><div class="society-actions"><button class="receipt-action-btn" id="society-enter-btn">Enter Society</button><button class="receipt-action-btn ghost" id="society-private-btn">Stay Private</button><button class="receipt-action-btn" id="society-privacy-btn">Privacy Rules</button></div><small>${consent ? 'Consent stored locally. You can revoke it in Settings.' : 'Entry waits for consent; staying private keeps everything local.'}</small></section>`;
+  const districts = [
+    ['lantern','Lantern District','Light an anonymous lantern','good for empty/silence signals','🕯️','society-lantern-btn'],
+    ['storm','Storm Works','Add a storm spark','good for chaos/high intensity','⚡','society-storm-btn'],
+    ['bloom','Bloom Market','Plant a bloom seed','good for joyful/calm','🌸','society-bloom-btn'],
+    ['archive','Moon Archive','Leave an optional anonymous one-line signal','max 80 characters · no raw echo import by default','🌙','society-archive-btn'],
+    ['weather','Weather Tower','View Society Weather','local/mock weather from anonymous symbolic signals','🧭','society-weather-btn']
+  ].map(([type,title,action,sub,icon,id])=>`<article class="society-district mood-${escapeHTML(type)}"><div class="society-district-icon">${icon}</div><h5>${escapeHTML(title)}</h5><p>${escapeHTML(action)}</p><small>${escapeHTML(sub)}</small>${type==='archive' ? '<input class="society-archive-input" id="society-archive-line" maxlength="80" placeholder="optional anonymous line…">' : ''}<button class="receipt-action-btn" id="${id}">${escapeHTML(action)}</button></article>`).join('');
+  const signals = SocietySignals.listLocalSignals().slice(0,8).map(signal => `<article class="society-signal" data-signal-id="${escapeHTML(signal.id)}"><span>${escapeHTML(signal.anonymous_label)}</span><b>${escapeHTML(signal.signal_type)} · ${escapeHTML(signal.mood)}</b><small>${escapeHTML(signal.intensity_band)} intensity · ${escapeHTML(signal.silence_band)} silence · ${escapeHTML(signal.archetype)}</small>${signal.archive_line ? `<p>${escapeHTML(signal.archive_line)}</p>` : ''}<div class="society-reactions"><button data-reaction="witnessed">🌙 witnessed</button><button data-reaction="held">🕯️ held</button><button data-reaction="softened">🌊 softened</button><button data-reaction="bloomed">🌸 bloomed</button><button data-reaction="charged">⚡ charged</button></div></article>`).join('') || '<p class="society-empty">No local society signals yet. Contributions stay symbolic.</p>';
+  return `${intro}${privacy}<section class="society-city" id="society-city" ${consent ? '' : 'hidden'}><div class="society-city-sky"><canvas id="society-particles-canvas" width="720" height="220" aria-hidden="true"></canvas></div><div class="society-district-grid">${districts}</div>${weather}<section class="society-local-signals"><h4>Local symbolic signals</h4>${signals}</section></section>`;
+}
+
+function bindEchoSocietyGate() {
+  const privacyPanel = document.getElementById('society-privacy-panel');
+  const city = document.getElementById('society-city');
+  const showPrivacy = () => { if(privacyPanel) privacyPanel.hidden = false; };
+  const showCity = () => { if(city) city.hidden = false; if(privacyPanel) privacyPanel.hidden = true; setTimeout(startSocietyParticles, 60); };
+  document.getElementById('society-privacy-btn')?.addEventListener('click', showPrivacy);
+  document.getElementById('society-enter-btn')?.addEventListener('click', () => SocietySignals.getConsent() ? showCity() : showPrivacy());
+  document.getElementById('society-private-btn')?.addEventListener('click', () => Toast.show('Stayed private. No society signal shared.'));
+  document.getElementById('society-stay-private-btn')?.addEventListener('click', () => { SocietySignals.setConsent(false); if(privacyPanel) privacyPanel.hidden = true; Toast.show('EchoSociety consent declined.'); });
+  document.getElementById('society-understand-btn')?.addEventListener('click', () => { SocietySignals.setConsent(true); Toast.show('EchoSociety consent saved locally.'); showCity(); });
+  const contribute = (fn, msg) => { fn(); Toast.show(msg); Rituals.open?.('museum'); };
+  document.getElementById('society-lantern-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeLantern, 'Anonymous lantern lit.'));
+  document.getElementById('society-storm-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeStorm, 'Storm spark contained.'));
+  document.getElementById('society-bloom-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeBloom, 'Bloom seed planted.'));
+  document.getElementById('society-weather-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeWeather, 'Weather signal added.'));
+  document.getElementById('society-archive-btn')?.addEventListener('click', () => { const line=document.getElementById('society-archive-line')?.value || ''; SocietySignals.contributeArchiveLine(line); Toast.show('Moon Archive signal saved.'); Rituals.open?.('museum'); });
+  document.querySelectorAll('.society-reactions button').forEach(btn => btn.addEventListener('click', () => { const id=btn.closest('.society-signal')?.dataset.signalId; SocietySignals.addReaction(id, btn.dataset.reaction); btn.classList.add('active'); Toast.show(`${btn.textContent.trim()} locally recorded.`); }));
+  if (SocietySignals.getConsent()) setTimeout(startSocietyParticles, 60);
+}
+
+function startSocietyParticles() {
+  const canvas = document.getElementById('society-particles-canvas'); if(!canvas) return;
+  const ctx = canvas.getContext('2d'); const w = canvas.width, h = canvas.height;
+  const dots = Array.from({length:46}, (_,i)=>({ x:(i*37)%w, y:(i*53)%h, r:1+((i%5)/2), v:.2+(i%7)*.025, hue:i%3 }));
+  let frame = 0;
+  function draw(){ if(!document.getElementById('society-particles-canvas')) return; frame++; ctx.clearRect(0,0,w,h); const g=ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'rgba(9,12,24,.78)'); g.addColorStop(1,'rgba(39,25,47,.52)'); ctx.fillStyle=g; ctx.fillRect(0,0,w,h); dots.forEach(d=>{ d.y-=d.v; if(d.y<0)d.y=h; const a=.25+Math.sin((frame+d.x)*.025)*.2; ctx.fillStyle=d.hue===0?`rgba(214,179,106,${a})`:d.hue===1?`rgba(143,121,216,${a})`:`rgba(107,162,208,${a})`; ctx.beginPath(); ctx.arc(d.x,d.y,d.r,0,Math.PI*2); ctx.fill(); }); requestAnimationFrame(draw); }
+  draw();
+}
 
 const CinematicCardRenderer = (() => {
   const MOOD_AURA = { calm:'#6ba2d0', chaos:'#cf5a74', reflective:'#8f79d8', anxious:'#c8935a', joyful:'#8bc97f', empty:'#7f8798' };
@@ -2599,6 +2743,7 @@ const Rituals = (() => {
       WeatherMap.render(document.getElementById('weather-map-canvas'), w);
       GentleQuests.evaluate('weather_room_visited', w);
       EchoAvatar.bind();
+      bindEchoSocietyGate();
       document.querySelectorAll('.museum-tab').forEach(btn=>btn.addEventListener('click',()=>{
         const room = btn.dataset.room;
         document.querySelectorAll('.museum-tab,.museum-room').forEach(el=>el.classList.remove('active'));
@@ -3034,7 +3179,7 @@ Insight: ${d.insight}`;
     const materialsPrep = '<div class="phase-two-note">Materials remain local-first in <code>echovault_inventory_v1</code>; crafting only spends local inventory when every cost is available.</div>';
     const quest = GentleQuests.current();
     const avatarHtml = EchoAvatar.render();
-    const societyTeaser = `<div class="echo-society-teaser"><div class="echo-avatar-kicker">EchoSociety — coming later</div><p>EchoSociety is not open yet. Your avatar will one day carry signals through shared districts. For now, your society begins inside your vault.</p><small>Requires Echo Avatar + 5 echoes.</small><div class="phase-two-note">No chat, backend, public profiles, feeds, likes, followers, or multiplayer systems are active here.</div></div>`;
+    const societyTeaser = buildEchoSocietyGate();
     const weather=WeatherMap.compute(echoes);
     const arch=ArchetypeEngine.compute(PatternEngine.analyze(echoes));
     const tracks=SOUNDPRINTS[weather.mood]||SOUNDPRINTS.reflective;
@@ -3066,7 +3211,7 @@ Insight: ${d.insight}`;
     };
     const shellStart = `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-meta"><span>${echoes.length} echoes</span><span>${saved.length} artifacts</span><span>${totalMaterials} materials</span><span>${weather.name}</span><span>${arch.archetypeName}</span></div></header><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}${quest.xp ? ` · +${quest.xp} XP` : ''}`}</small></div>${avatarHtml}<nav class="museum-tabs" aria-label="Museum rooms">${roomMap.map(tabButton).join('')}</nav>`;
     if(!echoes.length) return `${shellStart}<section class="vault-materials"><h4>Vault Materials</h4>${materialRows}</section>${materialsPrep}${societyTeaser}<div class="museum-empty">The museum is quiet. Create echoes to awaken its rooms.</div></div>`;
-    return `${shellStart}<div class="museum-room active" data-room-panel="weather">${panelLock('weather_room', `<h4>Weather Room</h4><p>${weather.summary}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div>`)}</div><div class="museum-room" data-room-panel="archetype"><h4>Archetype Hall</h4><p>${arch.archetypeName} · ${arch.archetypeDescription}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></div><div class="museum-room" data-room-panel="soundprint">${panelLock('soundprint_wall', `<h4>Soundprint Wall</h4>${tracks.slice(0,3).map(t=>`<div class='track-item'><div><b>${t.song}</b><small>${t.artist}</small></div><a class='track-link spotify' href='${t.spotify}' target='_blank' rel='noopener noreferrer'>Spotify</a><a class='track-link youtube' href='${t.youtube}' target='_blank' rel='noopener noreferrer'>YouTube</a></div>`).join('')}<button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button>`)}</div><div class="museum-room" data-room-panel="relics">${panelLock('relic_hall', `<h4>Memory Relics</h4><div class="relic-grid">${relics.map((r,i)=>`<article class='relic-item mood-${escapeHTML(r.mood)}' style='--delay:${i * 120}ms'><div class='relic-visual ${relicVisual(r.title)}'></div><b>${escapeHTML(r.title)}</b><span class='rarity'>${escapeHTML(r.rarity)}</span><small>${escapeHTML(r.coordinates)}</small><p>${escapeHTML(r.description)}</p><button class='receipt-action-btn relic-dl' data-id='${escapeHTML(r.id)}'>Download Card</button><button class='receipt-action-btn relic-save' data-id='${escapeHTML(r.id)}'>Save Artifact</button></article>`).join('')}</div>`)}</div><div class="museum-room" data-room-panel="receipts">${panelLock('archive_shelf', `<h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button><div class="artifact-shelf" id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${escapeHTML(a.title)}</b><small>${escapeHTML(a.type)}</small><button class='receipt-action-btn art-fav' data-id='${escapeHTML(a.id)}'>☆</button><button class='receipt-action-btn art-del' data-id='${escapeHTML(a.id)}'>Delete</button></div>`).join('') || 'No artifacts saved yet. Create one from a ritual.'}</div>`)}</div><div class="museum-room" data-room-panel="lanterns">${panelLock('lantern_garden', `<h4>Void Lanterns</h4><p>Still here is still a signal. Crafted lanterns gather here as a private garden.</p>`)}</div><div class="museum-room" data-room-panel="crafting">${panelLock('crafting_table', `<section class="crafting-table"><div class="crafting-head"><div><h4>Crafting Table</h4><p>Shape emotional materials into relics.</p></div><span>${totalMaterials} materials</span></div><section class="vault-materials compact"><h4>Inventory Summary</h4>${materialRows}</section><div class="craft-grid">${craftCards}</div><div id="crafted-preview" class="crafted-preview" hidden></div></section>`)}</div><div class="museum-room" data-room-panel="materials"><h4>Vault Materials</h4><section class="vault-materials">${materialRows}</section>${materialsPrep}</div><div class="museum-room" data-room-panel="society">${panelLock('society_gate', societyTeaser)}</div></div>`;
+    return `${shellStart}<div class="museum-room active" data-room-panel="weather">${panelLock('weather_room', `<h4>Weather Room</h4><p>${weather.summary}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div>`)}</div><div class="museum-room" data-room-panel="archetype"><h4>Archetype Hall</h4><p>${arch.archetypeName} · ${arch.archetypeDescription}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></div><div class="museum-room" data-room-panel="soundprint">${panelLock('soundprint_wall', `<h4>Soundprint Wall</h4>${tracks.slice(0,3).map(t=>`<div class='track-item'><div><b>${t.song}</b><small>${t.artist}</small></div><a class='track-link spotify' href='${t.spotify}' target='_blank' rel='noopener noreferrer'>Spotify</a><a class='track-link youtube' href='${t.youtube}' target='_blank' rel='noopener noreferrer'>YouTube</a></div>`).join('')}<button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button>`)}</div><div class="museum-room" data-room-panel="relics">${panelLock('relic_hall', `<h4>Memory Relics</h4><div class="relic-grid">${relics.map((r,i)=>`<article class='relic-item mood-${escapeHTML(r.mood)}' style='--delay:${i * 120}ms'><div class='relic-visual ${relicVisual(r.title)}'></div><b>${escapeHTML(r.title)}</b><span class='rarity'>${escapeHTML(r.rarity)}</span><small>${escapeHTML(r.coordinates)}</small><p>${escapeHTML(r.description)}</p><button class='receipt-action-btn relic-dl' data-id='${escapeHTML(r.id)}'>Download Card</button><button class='receipt-action-btn relic-save' data-id='${escapeHTML(r.id)}'>Save Artifact</button></article>`).join('')}</div>`)}</div><div class="museum-room" data-room-panel="receipts">${panelLock('archive_shelf', `<h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button><div class="artifact-shelf" id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${escapeHTML(a.title)}</b><small>${escapeHTML(a.type)}</small><button class='receipt-action-btn art-fav' data-id='${escapeHTML(a.id)}'>☆</button><button class='receipt-action-btn art-del' data-id='${escapeHTML(a.id)}'>Delete</button></div>`).join('') || 'No artifacts saved yet. Create one from a ritual.'}</div>`)}</div><div class="museum-room" data-room-panel="lanterns">${panelLock('lantern_garden', `<h4>Void Lanterns</h4><p>Still here is still a signal. Crafted lanterns gather here as a private garden.</p>`)}</div><div class="museum-room" data-room-panel="crafting">${panelLock('crafting_table', `<section class="crafting-table"><div class="crafting-head"><div><h4>Crafting Table</h4><p>Shape emotional materials into relics.</p></div><span>${totalMaterials} materials</span></div><section class="vault-materials compact"><h4>Inventory Summary</h4>${materialRows}</section><div class="craft-grid">${craftCards}</div><div id="crafted-preview" class="crafted-preview" hidden></div></section>`)}</div><div class="museum-room" data-room-panel="materials"><h4>Vault Materials</h4><section class="vault-materials">${materialRows}</section>${materialsPrep}</div><div class="museum-room" data-room-panel="society">${societyTeaser}</div></div>`;
   }
   function startConflictAnimation() {
     const canvas = document.getElementById('conflict-canvas');
