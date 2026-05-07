@@ -15,6 +15,13 @@ const CinematicWrapped = (() => {
   const ARCHETYPE_NAMES = bridge.ARCHETYPE_NAMES || {};
   const ARCHETYPE_DESCS = bridge.ARCHETYPE_DESCS || {};
   const SOUNDPRINTS = bridge.SOUNDPRINTS || {};
+  const moodFamily = typeof bridge.moodFamily === 'function' ? bridge.moodFamily : (mood) => {
+    const families = { calm:'calm', chaos:'chaos', reflective:'reflective', anxious:'anxious', joyful:'joyful', empty:'empty', numb:'empty', overwhelmed:'chaos', lonely:'reflective', hopeful:'joyful', angry:'chaos', guilty:'anxious', restless:'anxious', soft:'calm', detached:'empty', confused:'anxious', 'burnt out':'empty', grieving:'reflective', romantic:'joyful', content:'calm', ashamed:'anxious', longing:'reflective', pressured:'chaos', safe:'calm', irritated:'chaos', dreamy:'reflective' };
+    return families[String(mood || '').toLowerCase()] || 'reflective';
+  };
+  const getSoundprintForEcho = typeof bridge.getSoundprintForEcho === 'function' ? bridge.getSoundprintForEcho : null;
+  const escapeHTML = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+  const moodColor = (mood) => MOOD_COLORS[moodFamily(mood)] || '#7c6fa0';
 
   // ── SCENE DEFINITIONS ──
   const SCENES = ['sky','core','identity','sound','final'];
@@ -44,7 +51,7 @@ const CinematicWrapped = (() => {
     const echoes = getState().echoes.filter(e=>Date.now()-new Date(e.date)<cutoff);
     if(!echoes.length) return null;
     const mc={};let totalInt=0;
-    echoes.forEach(e=>{mc[e.mood]=(mc[e.mood]||0)+1;totalInt+=e.intensity;});
+    echoes.forEach(e=>{ const family = moodFamily(e.mood); mc[family]=(mc[family]||0)+1; totalInt+=Number(e.intensity || 0); });
     const sorted=Object.entries(mc).sort((a,b)=>b[1]-a[1]);
     const total=echoes.length, dom=sorted[0][0];
     const avg=(totalInt/total).toFixed(1);
@@ -318,7 +325,7 @@ const CinematicWrapped = (() => {
 
     if(idx===0) {
       wrappedData.sorted.forEach(([mood,count],i)=>{
-        const col=new THREE.Color(MOOD_COLORS[mood]);
+        const col=new THREE.Color(moodColor(mood));
         const geo=new THREE.SphereGeometry(3+count*1.5,10,10);
         const mat=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.55});
         const m=new THREE.Mesh(geo,mat);
@@ -334,7 +341,7 @@ const CinematicWrapped = (() => {
         orbGroup.add(ring);
       });
     } else if(idx===1) {
-      const col=new THREE.Color(MOOD_COLORS[wrappedData.dom]);
+      const col=new THREE.Color(moodColor(wrappedData.dom));
       for(let i=0;i<3;i++){
         const geo=new THREE.SphereGeometry(13-i*2.5,20,20);
         const mat=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.1+i*.08,wireframe:i===2});
@@ -354,7 +361,7 @@ const CinematicWrapped = (() => {
     } else if(idx===2) {
       for(let i=0;i<55;i++){
         const mood=wrappedData.sorted[i%wrappedData.sorted.length][0];
-        const col=new THREE.Color(MOOD_COLORS[mood]);
+        const col=new THREE.Color(moodColor(mood));
         const geo=new THREE.TetrahedronGeometry(1.2+Math.random()*1.8,0);
         const mat=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.4+Math.random()*.35,wireframe:Math.random()>.5});
         const m=new THREE.Mesh(geo,mat);
@@ -364,7 +371,7 @@ const CinematicWrapped = (() => {
         orbGroup.add(m);
       }
     } else if(idx===3) {
-      const col=new THREE.Color(MOOD_COLORS[wrappedData.dom]);
+      const col=new THREE.Color(moodColor(wrappedData.dom));
       for(let i=0;i<3;i++){
         const geo=new THREE.PlaneGeometry(20,12);
         const mat=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.1,side:THREE.DoubleSide});
@@ -381,7 +388,7 @@ const CinematicWrapped = (() => {
       }
     } else if(idx===4) {
       wrappedData.sorted.forEach(([mood,count],mi)=>{
-        const col=new THREE.Color(MOOD_COLORS[mood]);
+        const col=new THREE.Color(moodColor(mood));
         for(let k=0;k<Math.min(count,6);k++){
           const geo=new THREE.SphereGeometry(1.8+Math.random()*2.5,7,7);
           const mat=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.3+Math.random()*.3});
@@ -451,7 +458,7 @@ const CinematicWrapped = (() => {
     if(!canvas) return;
     const ctx=canvas.getContext('2d');
     const w=180,h=180,cx=90,cy=90;
-    const color=MOOD_COLORS[wrappedData?.dom]||'#7c6fa0';
+    const color=moodColor(wrappedData?.dom);
     let a=0;
     function frame(){
       if(currentScene!==1||!document.getElementById('cw-core-canvas')){ return; }
@@ -488,7 +495,7 @@ const CinematicWrapped = (() => {
       return;
     }
     const {dom,sorted,total,avg,chaos,voidCnt,mc}=wrappedData;
-    const domColor=MOOD_COLORS[dom];
+    const domColor=moodColor(dom);
     const MOOD_EMOJIS_LOCAL={calm:'🌊',chaos:'⚡',reflective:'🌙',anxious:'🌀',joyful:'🌸',empty:'🪨'};
     const COVER_EMOJI={calm:'🌊',chaos:'⚡',reflective:'🌙',anxious:'🌀',joyful:'🌸',empty:'🌑'};
 
@@ -509,8 +516,8 @@ const CinematicWrapped = (() => {
       const row=document.createElement('div');
       row.className='cw-bar-row';
       row.innerHTML=`
-        <div class="cw-bar-name">${mood}</div>
-        <div class="cw-bar-track"><div class="cw-bar-fill" style="background:${MOOD_COLORS[mood]}"></div></div>
+        <div class="cw-bar-name">${escapeHTML(mood)}</div>
+        <div class="cw-bar-track"><div class="cw-bar-fill" style="background:${moodColor(mood)}"></div></div>
         <div class="cw-bar-pct">${pct}%</div>`;
       row.querySelector('.cw-bar-fill').dataset.pct=pct;
       barsEl.appendChild(row);
@@ -520,7 +527,8 @@ const CinematicWrapped = (() => {
     stage.querySelector('#cw-s3-void').textContent   = voidCnt;
 
     // Scene 4
-    const tracks=(SOUNDPRINTS[dom]||SOUNDPRINTS.reflective).slice(0,3);
+    const newestEcho = wrappedData.echoes[0] || { mood: dom, intensity: 5, silence: 5 };
+    const tracks=(getSoundprintForEcho ? getSoundprintForEcho(newestEcho, { dominantMood: dom }) : (SOUNDPRINTS[dom]||SOUNDPRINTS.reflective||[])).slice(0,3);
     const tracksEl=stage.querySelector('#cw-s4-tracks');
     tracksEl.innerHTML='';
     tracks.forEach((t,i)=>{
@@ -529,11 +537,11 @@ const CinematicWrapped = (() => {
       el.innerHTML=`
         <div class="cw-track-cover" style="background:linear-gradient(135deg,${domColor}55,${domColor}18)">${COVER_EMOJI[dom]||'🎵'}</div>
         <div style="flex:1;min-width:0">
-          <div class="cw-track-song">${t.song}</div>
-          <div class="cw-track-artist">${t.artist}</div>
+          <div class="cw-track-song">${escapeHTML(t.song)}</div>
+          <div class="cw-track-artist">${escapeHTML(t.artist)}</div>
           <div style="display:flex;gap:6px">
-            <a class="cw-link sp" href="${t.spotify}" target="_blank" rel="noopener noreferrer">▶ Spotify</a>
-            <a class="cw-link yt" href="${t.youtube}" target="_blank" rel="noopener noreferrer">▶ YouTube</a>
+            <a class="cw-link sp" href="${escapeHTML(t.spotify)}" target="_blank" rel="noopener noreferrer">▶ Spotify</a>
+            <a class="cw-link yt" href="${escapeHTML(t.youtube)}" target="_blank" rel="noopener noreferrer">▶ YouTube</a>
           </div>
         </div>`;
       tracksEl.appendChild(el);

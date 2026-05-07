@@ -63,7 +63,7 @@ window.ECHOVAULT_CONFIG = {
   </div>
 </div>
 
-<button class="alam-floating-portal" id="alam-floating-portal" type="button" aria-label="Open alam.chat"><span class="alam-floating-orb" aria-hidden="true"></span><span>alam.chat</span></button>
+<button class="alam-floating-portal" id="alam-floating-portal" data-feature="alam_chat" type="button" aria-label="Open alam.ai"><span class="alam-floating-orb" aria-hidden="true"></span><span>alam.ai</span></button>
 
 <!-- Sync toast -->
 <div id="sync-toast"><div class="sync-dot"></div><span id="sync-msg">syncing…</span></div>
@@ -90,12 +90,13 @@ window.ECHOVAULT_CONFIG = {
   <!-- Step 1: Stress Orb -->
   <div class="login-step active" id="ls-orb">
     <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:.3em;color:var(--gold);text-transform:uppercase;margin-bottom:32px;opacity:.7">EchoVault</div>
-    <div id="stress-orb-wrap" role="button" tabindex="0" aria-label="Press the orb to begin">
+    <div id="stress-orb-wrap" role="button" tabindex="0" aria-label="Tap or press the orb to begin">
       <div id="stress-orb"></div>
-      <div class="stress-hint">press to begin</div>
+      <div class="stress-hint">tap / press to begin</div>
     </div>
+    <button class="stress-continue-btn" id="stress-continue-btn" type="button">Continue</button>
     <div class="stress-title" style="margin-top:36px">Feel something?</div>
-    <div class="stress-sub">This is your emotional universe.<br>Press the orb to step inside.</div>
+    <div class="stress-sub">This is your emotional universe.<br>Tap, press, or hit Enter to step inside.</div>
   </div>
 
   <!-- Step 2: Breathing Animation -->
@@ -213,12 +214,32 @@ window.ECHOVAULT_CONFIG = {
         <div class="form-section">
           <label class="form-label" id="mood-label">Emotional Resonance</label>
           <div class="mood-grid" role="group" aria-labelledby="mood-label">
-            <button class="mood-btn" data-mood="calm"       aria-label="Calm mood"><span class="mood-icon" aria-hidden="true">🌊</span>calm</button>
-            <button class="mood-btn" data-mood="chaos"      aria-label="Chaos mood"><span class="mood-icon" aria-hidden="true">⚡</span>chaos</button>
+            <button class="mood-btn" data-mood="calm" aria-label="Calm mood"><span class="mood-icon" aria-hidden="true">🌊</span>calm</button>
+            <button class="mood-btn" data-mood="chaos" aria-label="Chaos mood"><span class="mood-icon" aria-hidden="true">⚡</span>chaos</button>
             <button class="mood-btn" data-mood="reflective" aria-label="Reflective mood"><span class="mood-icon" aria-hidden="true">🌙</span>reflective</button>
-            <button class="mood-btn" data-mood="anxious"    aria-label="Anxious mood"><span class="mood-icon" aria-hidden="true">🌀</span>anxious</button>
-            <button class="mood-btn" data-mood="joyful"     aria-label="Joyful mood"><span class="mood-icon" aria-hidden="true">🌸</span>joyful</button>
-            <button class="mood-btn" data-mood="empty"      aria-label="Empty mood"><span class="mood-icon" aria-hidden="true">🪨</span>empty</button>
+            <button class="mood-btn" data-mood="anxious" aria-label="Anxious mood"><span class="mood-icon" aria-hidden="true">🌀</span>anxious</button>
+            <button class="mood-btn" data-mood="joyful" aria-label="Joyful mood"><span class="mood-icon" aria-hidden="true">🌸</span>joyful</button>
+            <button class="mood-btn" data-mood="empty" aria-label="Empty mood"><span class="mood-icon" aria-hidden="true">🪨</span>empty</button>
+            <button class="mood-btn" data-mood="numb" aria-label="Numb mood"><span class="mood-icon" aria-hidden="true">🫥</span>numb</button>
+            <button class="mood-btn" data-mood="overwhelmed" aria-label="Overwhelmed mood"><span class="mood-icon" aria-hidden="true">🌪️</span>overwhelmed</button>
+            <button class="mood-btn" data-mood="lonely" aria-label="Lonely mood"><span class="mood-icon" aria-hidden="true">🌧️</span>lonely</button>
+            <button class="mood-btn" data-mood="hopeful" aria-label="Hopeful mood"><span class="mood-icon" aria-hidden="true">🌱</span>hopeful</button>
+            <button class="mood-btn" data-mood="angry" aria-label="Angry mood"><span class="mood-icon" aria-hidden="true">🔥</span>angry</button>
+            <button class="mood-btn" data-mood="guilty" aria-label="Guilty mood"><span class="mood-icon" aria-hidden="true">🫧</span>guilty</button>
+            <button class="mood-btn" data-mood="restless" aria-label="Restless mood"><span class="mood-icon" aria-hidden="true">🕯️</span>restless</button>
+            <button class="mood-btn" data-mood="soft" aria-label="Soft mood"><span class="mood-icon" aria-hidden="true">🪽</span>soft</button>
+            <button class="mood-btn" data-mood="detached" aria-label="Detached mood"><span class="mood-icon" aria-hidden="true">🪐</span>detached</button>
+            <button class="mood-btn" data-mood="confused" aria-label="Confused mood"><span class="mood-icon" aria-hidden="true">🧭</span>confused</button>
+            <button class="mood-btn" data-mood="burnt out" aria-label="Burnt Out mood"><span class="mood-icon" aria-hidden="true">🕳️</span>burnt out</button>
+            <button class="mood-btn" data-mood="grieving" aria-label="Grieving mood"><span class="mood-icon" aria-hidden="true">🕯️</span>grieving</button>
+            <button class="mood-btn" data-mood="romantic" aria-label="Romantic mood"><span class="mood-icon" aria-hidden="true">💗</span>romantic</button>
+            <button class="mood-btn" data-mood="content" aria-label="Content mood"><span class="mood-icon" aria-hidden="true">☁️</span>content</button>
+            <button class="mood-btn" data-mood="ashamed" aria-label="Ashamed mood"><span class="mood-icon" aria-hidden="true">🌫️</span>ashamed</button>
+            <button class="mood-btn" data-mood="longing" aria-label="Longing mood"><span class="mood-icon" aria-hidden="true">🌌</span>longing</button>
+            <button class="mood-btn" data-mood="pressured" aria-label="Pressured mood"><span class="mood-icon" aria-hidden="true">⏳</span>pressured</button>
+            <button class="mood-btn" data-mood="safe" aria-label="Safe mood"><span class="mood-icon" aria-hidden="true">🛋️</span>safe</button>
+            <button class="mood-btn" data-mood="irritated" aria-label="Irritated mood"><span class="mood-icon" aria-hidden="true">🧨</span>irritated</button>
+            <button class="mood-btn" data-mood="dreamy" aria-label="Dreamy mood"><span class="mood-icon" aria-hidden="true">✨</span>dreamy</button>
           </div>
         </div>
 
@@ -320,19 +341,26 @@ window.ECHOVAULT_CONFIG = {
     <div class="fun-grid">
       <div class="fun-featured-wrap">
       
-      <div class="fun-card" data-fun="museum" style="--card-glow:rgba(201,168,76,.14)" role="button" tabindex="0" aria-label="Open Emotional Museum">
+      <div class="fun-card" data-fun="museum" data-feature="emotional_museum_full" style="--card-glow:rgba(201,168,76,.14)" role="button" tabindex="0" aria-label="Open Emotional Museum">
         <div class="fun-card-icon" aria-hidden="true">🏛️</div>
         <div class="fun-card-title">Emotional Museum</div>
         <div class="fun-card-desc">Walk through the artifacts your echoes became.</div><div class="fun-card-meta"><span id="museum-echo-count">0 echoes</span><span id="museum-artifact-count">0 artifacts</span><span id="museum-weather">quiet haze</span></div>
       </div>
       </div>
-      <div class="fun-card alam-fun-card" data-fun="alam" data-feature="alam_chat" role="button" tabindex="0" aria-label="Open alam.chat">
-        <div class="fun-card-icon alam-card-orb" aria-hidden="true">◉</div>
-        <div class="fun-card-title">alam.chat</div>
-        <div class="fun-card-desc">a strange little oracle terminal for your vault</div>
+
+      <div class="fun-card special-access-entry" data-fun="special-access" role="button" tabindex="0" aria-label="Open Special Access">
+        <div class="fun-card-icon" aria-hidden="true">✦</div>
+        <div class="fun-card-title">Special Access</div>
+        <div class="fun-card-desc">for the girls who fw alam</div>
+        <div class="fun-card-meta"><span>Some parts of the vault open differently.</span></div>
       </div>
-      <div class="fun-card" data-fun="lantern" data-feature="premium_rituals" role="button" tabindex="0" aria-label="Open Void Lantern"><div class="fun-card-icon">🏮</div><div class="fun-card-title">Void Lantern</div><div class="fun-card-desc">Light stillness into a soft lantern glow.</div></div>
-      <div class="fun-card" data-fun="stormjar" data-feature="premium_rituals" role="button" tabindex="0" aria-label="Open Storm Jar"><div class="fun-card-icon">🫙</div><div class="fun-card-title">Storm Jar</div><div class="fun-card-desc">Capture sparks from intense weather.</div></div>
+      <div class="fun-card alam-fun-card" data-fun="alam" data-feature="alam_chat" role="button" tabindex="0" aria-label="Open alam.ai">
+        <div class="fun-card-icon alam-card-orb" aria-hidden="true">◉</div>
+        <div class="fun-card-title">alam.ai</div>
+        <div class="fun-card-desc">a soft private oracle room</div>
+      </div>
+      <div class="fun-card" data-fun="lantern" data-feature="old_rituals" role="button" tabindex="0" aria-label="Open Void Lantern"><div class="fun-card-icon">🏮</div><div class="fun-card-title">Void Lantern</div><div class="fun-card-desc">Light stillness into a soft lantern glow.</div></div>
+      <div class="fun-card" data-fun="stormjar" data-feature="old_rituals" role="button" tabindex="0" aria-label="Open Storm Jar"><div class="fun-card-icon">🫙</div><div class="fun-card-title">Storm Jar</div><div class="fun-card-desc">Capture sparks from intense weather.</div></div>
 <div class="fun-card" data-fun="receipt" style="--card-glow:rgba(201,168,76,.06)" role="button" tabindex="0" aria-label="Open Mood Receipt">
         <div class="fun-card-icon" aria-hidden="true">🧾</div>
         <div class="fun-card-title">Mood Receipt</div>
@@ -348,7 +376,7 @@ window.ECHOVAULT_CONFIG = {
         <div class="fun-card-title">Crash Report</div>
         <div class="fun-card-desc">System error: too many feelings.</div>
       </div>
-      <div class="fun-card" data-fun="sound" data-feature="advanced_soundprint" style="--card-glow:rgba(100,180,100,.06)" role="button" tabindex="0" aria-label="Open Echo Soundprint">
+      <div class="fun-card" data-fun="sound" data-feature="soundprint" style="--card-glow:rgba(100,180,100,.06)" role="button" tabindex="0" aria-label="Open Echo Soundprint">
         <div class="fun-card-icon" aria-hidden="true">🎧</div>
         <div class="fun-card-title">Echo Soundprint</div>
         <div class="fun-card-desc">Songs resonating with your frequency.</div>
@@ -358,7 +386,7 @@ window.ECHOVAULT_CONFIG = {
         <div class="fun-card-title">Shatter Softly</div>
         <div class="fun-card-desc">A quiet ritual of release. Let it break, gently.</div>
       </div>
-      <div class="fun-card" data-fun="vsvs" data-feature="premium_rituals" style="--card-glow:rgba(100,160,200,.06)" role="button" tabindex="0" aria-label="Open Inner Conflict">
+      <div class="fun-card" data-fun="vsvs" data-feature="inner_conflict" style="--card-glow:rgba(100,160,200,.06)" role="button" tabindex="0" aria-label="Open Inner Conflict">
         <div class="fun-card-icon" aria-hidden="true">⚔️</div>
         <div class="fun-card-title">Inner Conflict</div>
         <div class="fun-card-desc">Past self meets present self — cinematic.</div>
@@ -508,16 +536,17 @@ window.ECHOVAULT_CONFIG = {
     </div>
 
     <div class="settings-section">
-      <div class="settings-section-label">Premium Access</div>
-      <div class="society-settings-box premium-access-box">
-        <p id="premium-access-status">Current tier: free<br>Source: free</p>
-        <p>Redeem a manually granted Premium, Founder, or Alpha code. This is access unlocking only — no checkout, subscriptions, or payment flow.</p>
+      <div class="settings-section-label">Special Access</div>
+      <div class="society-settings-box premium-access-box special-access-settings">
+        <p id="premium-access-status">Current access: Free</p>
+        <p><b>for the girls who fw alam</b></p>
+        <p>EchoVault core stays yours. Special Access opens deeper rooms and alam.ai.</p>
         <div class="premium-code-row">
-          <input class="settings-input" id="premium-access-code" type="text" placeholder="access code" autocomplete="off" spellcheck="false">
-          <button class="settings-secondary-btn" id="premium-redeem-btn" type="button">Redeem Code</button>
+          <input class="settings-input" id="premium-access-code" type="text" placeholder="special code" autocomplete="off" spellcheck="false">
+          <button class="settings-secondary-btn" id="premium-redeem-btn" type="button">Unlock</button>
         </div>
-        <label class="alam-toggle"><input type="checkbox" id="premium-debug-override"> Debug local premium override</label>
-        <small>Your echoes, local mode, and export/import are never gated.</small>
+        <label class="alam-toggle"><input type="checkbox" id="premium-debug-override"> Debug local special override</label>
+        <small>Your echoes, local mode, and export/import are never gated.</small><button class="settings-secondary-btn special-access-open" type="button">Open Special Access portal</button><button class="settings-secondary-btn" id="premium-clear-local" type="button">Clear local access state</button>
       </div>
     </div>
 
@@ -535,11 +564,11 @@ window.ECHOVAULT_CONFIG = {
         <small>These controls never delete echoes.</small>
       </div>
       <div class="society-settings-box alam-settings-box">
-        <p>alam.chat mode: Local only / Remote endpoint if configured. No frontend API keys are used.</p>
+        <p>alam.ai</p>
         <label class="alam-toggle"><input type="checkbox" id="alam-include-latest-setting"> Include latest echo summary (default OFF)</label>
         <label class="alam-toggle disabled"><input type="checkbox" disabled> Include raw echoes — not available</label>
         <div class="settings-actions">
-          <button class="settings-secondary-btn" id="alam-clear-chat-btn">Clear alam.chat history</button>
+          <button class="settings-secondary-btn" id="alam-clear-chat-btn">Clear alam.ai history</button>
         </div>
       </div>
     </div>

@@ -1,8 +1,8 @@
 (function EchoVault() {
 'use strict';
 
-const APP_VERSION = 'phase-3-echo-society-foundation';
-const SW_CACHE_VERSION = 'echovault-v8-phase-3-echo-society';
+const APP_VERSION = 'special-access-v4-login-press-fix';
+const SW_CACHE_VERSION = 'echovault-v12-login-press-fix';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
@@ -32,16 +32,23 @@ function escapeHTML(value) {
   }[char]));
 }
 
+const MOOD_FAMILIES = {
+  calm:'calm', chaos:'chaos', reflective:'reflective', anxious:'anxious', joyful:'joyful', empty:'empty',
+  numb:'empty', overwhelmed:'chaos', lonely:'reflective', hopeful:'joyful', angry:'chaos', guilty:'anxious', restless:'anxious', soft:'calm', detached:'empty', confused:'anxious', 'burnt out':'empty', grieving:'reflective', romantic:'joyful', content:'calm', ashamed:'anxious', longing:'reflective', pressured:'chaos', safe:'calm', irritated:'chaos', dreamy:'reflective'
+};
+function moodFamily(mood) { return MOOD_FAMILIES[String(mood || '').toLowerCase()] || 'reflective'; }
 const MOOD_COLORS = {
   calm:'#5b8fa8', chaos:'#c44b4b', reflective:'#7c6fa0',
-  anxious:'#c47a3a', joyful:'#7aab6e', empty:'#4a4a5a'
+  anxious:'#c47a3a', joyful:'#7aab6e', empty:'#4a4a5a',
+  numb:'#4a4a5a', overwhelmed:'#c44b4b', lonely:'#7c6fa0', hopeful:'#7aab6e', angry:'#c44b4b', guilty:'#c47a3a', restless:'#c47a3a', soft:'#5b8fa8', detached:'#4a4a5a', confused:'#c47a3a', 'burnt out':'#4a4a5a', grieving:'#7c6fa0', romantic:'#7aab6e', content:'#5b8fa8', ashamed:'#c47a3a', longing:'#7c6fa0', pressured:'#c44b4b', safe:'#5b8fa8', irritated:'#c44b4b', dreamy:'#7c6fa0'
 };
 const MOOD_EMOJIS = {
-  calm:'🌊', chaos:'⚡', reflective:'🌙',
-  anxious:'🌀', joyful:'🌸', empty:'🪨'
+  calm:'🌊', chaos:'⚡', reflective:'🌙', anxious:'🌀', joyful:'🌸', empty:'🪨',
+  numb:'🫥', overwhelmed:'🌪️', lonely:'🌧️', hopeful:'🌱', angry:'🔥', guilty:'🫧', restless:'🕯️', soft:'🪽', detached:'🪐', confused:'🧭', 'burnt out':'🕳️', grieving:'🕯️', romantic:'💗', content:'☁️', ashamed:'🌫️', longing:'🌌', pressured:'⏳', safe:'🛋️', irritated:'🧨', dreamy:'✨'
 };
 const MOOD_COVER_EMOJI = {
-  calm:'🌊', chaos:'⚡', reflective:'🌙', anxious:'🌀', joyful:'🌸', empty:'🌑'
+  calm:'🌊', chaos:'⚡', reflective:'🌙', anxious:'🌀', joyful:'🌸', empty:'🌑',
+  numb:'🫥', overwhelmed:'🌪️', lonely:'🌧️', hopeful:'🌱', angry:'🔥', guilty:'🫧', restless:'🕯️', soft:'🪽', detached:'🪐', confused:'🧭', 'burnt out':'🕳️', grieving:'🕯️', romantic:'💗', content:'☁️', ashamed:'🌫️', longing:'🌌', pressured:'⏳', safe:'🛋️', irritated:'🧨', dreamy:'✨'
 };
 const ARCHETYPE_NAMES = {
   calm:'The Still Lake', chaos:'The Electric Storm', reflective:'The Night Wanderer',
@@ -57,36 +64,107 @@ const ARCHETYPE_DESCS = {
 };
 const SOUNDPRINTS = {
   calm:[
-    {song:'Motion Picture Soundtrack',artist:'Radiohead',reason:'It drifts like you do right now — in and out of the world.',spotify:'https://open.spotify.com/search/Motion%20Picture%20Soundtrack%20Radiohead',youtube:'https://www.youtube.com/results?search_query=Motion+Picture+Soundtrack+Radiohead'},
-    {song:'Holocene',artist:'Bon Iver',reason:'The sound of feeling small in the most beautiful way.',spotify:'https://open.spotify.com/search/Holocene%20Bon%20Iver',youtube:'https://www.youtube.com/results?search_query=Holocene+Bon+Iver'},
-    {song:'Gymnopédie No.1',artist:'Erik Satie',reason:'Pure stillness, distilled into notes.',spotify:'https://open.spotify.com/search/Gymnopedie%20Satie',youtube:'https://www.youtube.com/results?search_query=Gymnop%C3%A9die+No+1+Satie'}
+    {song:'Holocene',artist:'Bon Iver',reason:'A gentle room for soft nervous systems and safer breathing.',purpose:'breathe',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Holocene%20Bon%20Iver',youtube:'https://www.youtube.com/results?search_query=Holocene+Bon+Iver'},
+    {song:'Anchor',artist:'Novo Amor',reason:'A gentle room for soft nervous systems and safer breathing.',purpose:'hold',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Anchor%20Novo%20Amor',youtube:'https://www.youtube.com/results?search_query=Anchor+Novo+Amor'},
+    {song:'Bloom',artist:'The Paper Kites',reason:'A gentle room for soft nervous systems and safer breathing.',purpose:'breathe',intensity:'low',silence:'medium',spotify:'https://open.spotify.com/search/Bloom%20The%20Paper%20Kites',youtube:'https://www.youtube.com/results?search_query=Bloom+The+Paper+Kites'},
+    {song:'Sunset Lover',artist:'Petit Biscuit',reason:'A gentle room for soft nervous systems and safer breathing.',purpose:'lift',intensity:'medium',silence:'low',spotify:'https://open.spotify.com/search/Sunset%20Lover%20Petit%20Biscuit',youtube:'https://www.youtube.com/results?search_query=Sunset+Lover+Petit+Biscuit'},
+    {song:'Nardis',artist:'Bill Evans',reason:'A gentle room for soft nervous systems and safer breathing.',purpose:'ground',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/Nardis%20Bill%20Evans',youtube:'https://www.youtube.com/results?search_query=Nardis+Bill+Evans'},
+    {song:'Clair de Lune',artist:'Debussy',reason:'A gentle room for soft nervous systems and safer breathing.',purpose:'breathe',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Clair%20de%20Lune%20Debussy',youtube:'https://www.youtube.com/results?search_query=Clair+de+Lune+Debussy'},
+    {song:'Gymnopédie No.1',artist:'Erik Satie',reason:'A gentle room for soft nervous systems and safer breathing.',purpose:'ground',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Gymnop%C3%A9die%20No.1%20Erik%20Satie',youtube:'https://www.youtube.com/results?search_query=Gymnop%C3%A9die+No.1+Erik+Satie'},
+    {song:'Weightless',artist:'Marconi Union',reason:'A gentle room for soft nervous systems and safer breathing.',purpose:'breathe',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Weightless%20Marconi%20Union',youtube:'https://www.youtube.com/results?search_query=Weightless+Marconi+Union'},
+    {song:'To Build a Home',artist:'The Cinematic Orchestra',reason:'A gentle room for soft nervous systems and safer breathing.',purpose:'hold',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/To%20Build%20a%20Home%20The%20Cinematic%20Orchestra',youtube:'https://www.youtube.com/results?search_query=To+Build+a+Home+The+Cinematic+Orchestra'},
+    {song:'Hoppípolla',artist:'Sigur Rós',reason:'A gentle room for soft nervous systems and safer breathing.',purpose:'lift',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/Hopp%C3%ADpolla%20Sigur%20R%C3%B3s',youtube:'https://www.youtube.com/results?search_query=Hopp%C3%ADpolla+Sigur+R%C3%B3s'}
   ],
   chaos:[
-    {song:'Idioteque',artist:'Radiohead',reason:'Controlled collapse. Beautiful and frantic, like you.',spotify:'https://open.spotify.com/search/Idioteque%20Radiohead',youtube:'https://www.youtube.com/results?search_query=Idioteque+Radiohead'},
-    {song:'Running with the Wolves',artist:'Aurora',reason:'The electric sprint of feeling too much.',spotify:'https://open.spotify.com/search/Running%20with%20the%20Wolves%20Aurora',youtube:'https://www.youtube.com/results?search_query=Running+with+the+Wolves+Aurora'},
-    {song:'Violent Shaking',artist:'Arca',reason:'Chaos doesn\'t need to make sense. Neither does this.',spotify:'https://open.spotify.com/search/Arca',youtube:'https://www.youtube.com/results?search_query=Arca+Violent+Shaking'}
+    {song:'Exit Music (For a Film)',artist:'Radiohead',reason:'Catharsis first, then a handrail back to the body.',purpose:'release',intensity:'high',silence:'medium',spotify:'https://open.spotify.com/search/Exit%20Music%20%28For%20a%20Film%29%20Radiohead',youtube:'https://www.youtube.com/results?search_query=Exit+Music+%28For+a+Film%29+Radiohead'},
+    {song:'Drunk Walk Home',artist:'Mitski',reason:'Catharsis first, then a handrail back to the body.',purpose:'release',intensity:'high',silence:'low',spotify:'https://open.spotify.com/search/Drunk%20Walk%20Home%20Mitski',youtube:'https://www.youtube.com/results?search_query=Drunk+Walk+Home+Mitski'},
+    {song:'brutal',artist:'Olivia Rodrigo',reason:'Catharsis first, then a handrail back to the body.',purpose:'release',intensity:'high',silence:'low',spotify:'https://open.spotify.com/search/brutal%20Olivia%20Rodrigo',youtube:'https://www.youtube.com/results?search_query=brutal+Olivia+Rodrigo'},
+    {song:'Happier Than Ever',artist:'Billie Eilish',reason:'Catharsis first, then a handrail back to the body.',purpose:'release',intensity:'high',silence:'low',spotify:'https://open.spotify.com/search/Happier%20Than%20Ever%20Billie%20Eilish',youtube:'https://www.youtube.com/results?search_query=Happier+Than+Ever+Billie+Eilish'},
+    {song:'Where Is My Mind?',artist:'Pixies',reason:'Catharsis first, then a handrail back to the body.',purpose:'ground',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/Where%20Is%20My%20Mind%3F%20Pixies',youtube:'https://www.youtube.com/results?search_query=Where+Is+My+Mind%3F+Pixies'},
+    {song:'Seven Nation Army',artist:'The White Stripes',reason:'Catharsis first, then a handrail back to the body.',purpose:'release',intensity:'high',silence:'low',spotify:'https://open.spotify.com/search/Seven%20Nation%20Army%20The%20White%20Stripes',youtube:'https://www.youtube.com/results?search_query=Seven+Nation+Army+The+White+Stripes'},
+    {song:'Papercut',artist:'Linkin Park',reason:'Catharsis first, then a handrail back to the body.',purpose:'release',intensity:'high',silence:'low',spotify:'https://open.spotify.com/search/Papercut%20Linkin%20Park',youtube:'https://www.youtube.com/results?search_query=Papercut+Linkin+Park'},
+    {song:'Black Skinhead',artist:'Kanye West',reason:'Catharsis first, then a handrail back to the body.',purpose:'release',intensity:'high',silence:'low',spotify:'https://open.spotify.com/search/Black%20Skinhead%20Kanye%20West',youtube:'https://www.youtube.com/results?search_query=Black+Skinhead+Kanye+West'},
+    {song:'My Body Is a Cage',artist:'Arcade Fire',reason:'Catharsis first, then a handrail back to the body.',purpose:'hold',intensity:'high',silence:'high',spotify:'https://open.spotify.com/search/My%20Body%20Is%20a%20Cage%20Arcade%20Fire',youtube:'https://www.youtube.com/results?search_query=My+Body+Is+a+Cage+Arcade+Fire'},
+    {song:'Dog Days Are Over',artist:'Florence + The Machine',reason:'Catharsis first, then a handrail back to the body.',purpose:'lift',intensity:'high',silence:'low',spotify:'https://open.spotify.com/search/Dog%20Days%20Are%20Over%20Florence%20%2B%20The%20Machine',youtube:'https://www.youtube.com/results?search_query=Dog+Days+Are+Over+Florence+%2B+The+Machine'}
   ],
   reflective:[
-    {song:'Skinny Love',artist:'Bon Iver',reason:'The archaeology of self — digging through what was.',spotify:'https://open.spotify.com/search/Skinny%20Love%20Bon%20Iver',youtube:'https://www.youtube.com/results?search_query=Skinny+Love+Bon+Iver'},
-    {song:'Silhouette',artist:'Aquilo',reason:'Memory wearing a coat of blue light.',spotify:'https://open.spotify.com/search/Silhouette%20Aquilo',youtube:'https://www.youtube.com/results?search_query=Silhouette+Aquilo'},
-    {song:'Lua',artist:'Bright Eyes',reason:'Honest. A little broken. Deeply awake.',spotify:'https://open.spotify.com/search/Lua%20Bright%20Eyes',youtube:'https://www.youtube.com/results?search_query=Lua+Bright+Eyes'}
+    {song:'Moon Song',artist:'Phoebe Bridgers',reason:'Late-night texture for memory, longing, and quiet noticing.',purpose:'hold',intensity:'medium',silence:'high',spotify:'https://open.spotify.com/search/Moon%20Song%20Phoebe%20Bridgers',youtube:'https://www.youtube.com/results?search_query=Moon+Song+Phoebe+Bridgers'},
+    {song:'Myth',artist:'Beach House',reason:'Late-night texture for memory, longing, and quiet noticing.',purpose:'hold',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/Myth%20Beach%20House',youtube:'https://www.youtube.com/results?search_query=Myth+Beach+House'},
+    {song:'Pink Moon',artist:'Nick Drake',reason:'Late-night texture for memory, longing, and quiet noticing.',purpose:'breathe',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Pink%20Moon%20Nick%20Drake',youtube:'https://www.youtube.com/results?search_query=Pink+Moon+Nick+Drake'},
+    {song:'Between the Bars',artist:'Elliott Smith',reason:'Late-night texture for memory, longing, and quiet noticing.',purpose:'hold',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Between%20the%20Bars%20Elliott%20Smith',youtube:'https://www.youtube.com/results?search_query=Between+the+Bars+Elliott+Smith'},
+    {song:'No Surprises',artist:'Radiohead',reason:'Late-night texture for memory, longing, and quiet noticing.',purpose:'ground',intensity:'low',silence:'medium',spotify:'https://open.spotify.com/search/No%20Surprises%20Radiohead',youtube:'https://www.youtube.com/results?search_query=No+Surprises+Radiohead'},
+    {song:'K.',artist:'Cigarettes After Sex',reason:'Late-night texture for memory, longing, and quiet noticing.',purpose:'hold',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/K.%20Cigarettes%20After%20Sex',youtube:'https://www.youtube.com/results?search_query=K.+Cigarettes+After+Sex'},
+    {song:'Mystery of Love',artist:'Sufjan Stevens',reason:'Late-night texture for memory, longing, and quiet noticing.',purpose:'lift',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/Mystery%20of%20Love%20Sufjan%20Stevens',youtube:'https://www.youtube.com/results?search_query=Mystery+of+Love+Sufjan+Stevens'},
+    {song:'Roslyn',artist:'Bon Iver & St. Vincent',reason:'Late-night texture for memory, longing, and quiet noticing.',purpose:'hold',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Roslyn%20Bon%20Iver%20%26%20St.%20Vincent',youtube:'https://www.youtube.com/results?search_query=Roslyn+Bon+Iver+%26+St.+Vincent'},
+    {song:'Cherry-coloured Funk',artist:'Cocteau Twins',reason:'Late-night texture for memory, longing, and quiet noticing.',purpose:'breathe',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/Cherry-coloured%20Funk%20Cocteau%20Twins',youtube:'https://www.youtube.com/results?search_query=Cherry-coloured+Funk+Cocteau+Twins'},
+    {song:'Sparks',artist:'Coldplay',reason:'Late-night texture for memory, longing, and quiet noticing.',purpose:'hold',intensity:'low',silence:'medium',spotify:'https://open.spotify.com/search/Sparks%20Coldplay',youtube:'https://www.youtube.com/results?search_query=Sparks+Coldplay'}
   ],
   anxious:[
-    {song:'Portions for Foxes',artist:'Rilo Kiley',reason:'That restless frequency you can\'t name — this does.',spotify:'https://open.spotify.com/search/Portions%20for%20Foxes',youtube:'https://www.youtube.com/results?search_query=Portions+for+Foxes+Rilo+Kiley'},
-    {song:'An Eagle in Your Mind',artist:'Boards of Canada',reason:'Loops within loops. Worry as soundscape.',spotify:'https://open.spotify.com/search/Boards%20of%20Canada',youtube:'https://www.youtube.com/results?search_query=An+Eagle+in+Your+Mind+Boards+of+Canada'},
-    {song:'Dog Days Are Over',artist:'Florence + Machine',reason:'Panic and release held in the same breath.',spotify:'https://open.spotify.com/search/Dog%20Days%20Are%20Over',youtube:'https://www.youtube.com/results?search_query=Dog+Days+Are+Over+Florence+Machine'}
+    {song:'An Ending (Ascent)',artist:'Brian Eno',reason:'Steady pacing for grounding without demanding answers.',purpose:'ground',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/An%20Ending%20%28Ascent%29%20Brian%20Eno',youtube:'https://www.youtube.com/results?search_query=An+Ending+%28Ascent%29+Brian+Eno'},
+    {song:'Avril 14th',artist:'Aphex Twin',reason:'Steady pacing for grounding without demanding answers.',purpose:'ground',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Avril%2014th%20Aphex%20Twin',youtube:'https://www.youtube.com/results?search_query=Avril+14th+Aphex+Twin'},
+    {song:'Dayvan Cowboy',artist:'Boards of Canada',reason:'Steady pacing for grounding without demanding answers.',purpose:'breathe',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/Dayvan%20Cowboy%20Boards%20of%20Canada',youtube:'https://www.youtube.com/results?search_query=Dayvan+Cowboy+Boards+of+Canada'},
+    {song:'Experience',artist:'Ludovico Einaudi',reason:'Steady pacing for grounding without demanding answers.',purpose:'ground',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/Experience%20Ludovico%20Einaudi',youtube:'https://www.youtube.com/results?search_query=Experience+Ludovico+Einaudi'},
+    {song:'Intro',artist:'The xx',reason:'Steady pacing for grounding without demanding answers.',purpose:'ground',intensity:'low',silence:'medium',spotify:'https://open.spotify.com/search/Intro%20The%20xx',youtube:'https://www.youtube.com/results?search_query=Intro+The+xx'},
+    {song:'Space Song',artist:'Beach House',reason:'Steady pacing for grounding without demanding answers.',purpose:'hold',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/Space%20Song%20Beach%20House',youtube:'https://www.youtube.com/results?search_query=Space+Song+Beach+House'},
+    {song:'Svefn-g-englar',artist:'Sigur Rós',reason:'Steady pacing for grounding without demanding answers.',purpose:'breathe',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Svefn-g-englar%20Sigur%20R%C3%B3s',youtube:'https://www.youtube.com/results?search_query=Svefn-g-englar+Sigur+R%C3%B3s'},
+    {song:'Breathe Me',artist:'Sia',reason:'Steady pacing for grounding without demanding answers.',purpose:'hold',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/Breathe%20Me%20Sia',youtube:'https://www.youtube.com/results?search_query=Breathe+Me+Sia'},
+    {song:'Re: Stacks',artist:'Bon Iver',reason:'Steady pacing for grounding without demanding answers.',purpose:'ground',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Re%3A%20Stacks%20Bon%20Iver',youtube:'https://www.youtube.com/results?search_query=Re%3A+Stacks+Bon+Iver'},
+    {song:'Open',artist:'Rhye',reason:'Steady pacing for grounding without demanding answers.',purpose:'breathe',intensity:'low',silence:'medium',spotify:'https://open.spotify.com/search/Open%20Rhye',youtube:'https://www.youtube.com/results?search_query=Open+Rhye'}
   ],
   joyful:[
-    {song:'Dog Days Are Over',artist:'Florence + Machine',reason:'Joy that runs. Joy that doesn\'t apologize.',spotify:'https://open.spotify.com/search/Dog%20Days%20Are%20Over',youtube:'https://www.youtube.com/results?search_query=Dog+Days+Are+Over+Florence+Machine'},
-    {song:'Sprawl II',artist:'Arcade Fire',reason:'Ecstasy as architecture. You live here now.',spotify:'https://open.spotify.com/search/Sprawl%20II%20Arcade%20Fire',youtube:'https://www.youtube.com/results?search_query=Sprawl+II+Arcade+Fire'},
-    {song:"Can't Help Falling in Love",artist:'Kina Grannis',reason:'Gentle joy. The kind that stays.',spotify:'https://open.spotify.com/search/Kina%20Grannis%20Cant%20Help%20Falling',youtube:'https://www.youtube.com/results?search_query=Kina+Grannis+Cant+Help+Falling+in+Love'}
+    {song:'Sweet Disposition',artist:'The Temper Trap',reason:'Warm light for hope, romance, and soft lift.',purpose:'lift',intensity:'high',silence:'low',spotify:'https://open.spotify.com/search/Sweet%20Disposition%20The%20Temper%20Trap',youtube:'https://www.youtube.com/results?search_query=Sweet+Disposition+The+Temper+Trap'},
+    {song:'There She Goes',artist:"The La's",reason:'Warm light for hope, romance, and soft lift.',purpose:'lift',intensity:'medium',silence:'low',spotify:'https://open.spotify.com/search/There%20She%20Goes%20The%20La%27s',youtube:'https://www.youtube.com/results?search_query=There+She+Goes+The+La%27s'},
+    {song:'First Day of My Life',artist:'Bright Eyes',reason:'Warm light for hope, romance, and soft lift.',purpose:'hold',intensity:'low',silence:'medium',spotify:'https://open.spotify.com/search/First%20Day%20of%20My%20Life%20Bright%20Eyes',youtube:'https://www.youtube.com/results?search_query=First+Day+of+My+Life+Bright+Eyes'},
+    {song:'Bloom',artist:'The Paper Kites',reason:'Warm light for hope, romance, and soft lift.',purpose:'hold',intensity:'low',silence:'medium',spotify:'https://open.spotify.com/search/Bloom%20The%20Paper%20Kites',youtube:'https://www.youtube.com/results?search_query=Bloom+The+Paper+Kites'},
+    {song:'Golden Hour',artist:'JVKE',reason:'Warm light for hope, romance, and soft lift.',purpose:'lift',intensity:'medium',silence:'low',spotify:'https://open.spotify.com/search/Golden%20Hour%20JVKE',youtube:'https://www.youtube.com/results?search_query=Golden+Hour+JVKE'},
+    {song:'Sunflower',artist:'Rex Orange County',reason:'Warm light for hope, romance, and soft lift.',purpose:'lift',intensity:'medium',silence:'low',spotify:'https://open.spotify.com/search/Sunflower%20Rex%20Orange%20County',youtube:'https://www.youtube.com/results?search_query=Sunflower+Rex+Orange+County'},
+    {song:'Electric Love',artist:'BØRNS',reason:'Warm light for hope, romance, and soft lift.',purpose:'lift',intensity:'high',silence:'low',spotify:'https://open.spotify.com/search/Electric%20Love%20B%C3%98RNS',youtube:'https://www.youtube.com/results?search_query=Electric+Love+B%C3%98RNS'},
+    {song:'Good Days',artist:'SZA',reason:'Warm light for hope, romance, and soft lift.',purpose:'lift',intensity:'medium',silence:'medium',spotify:'https://open.spotify.com/search/Good%20Days%20SZA',youtube:'https://www.youtube.com/results?search_query=Good+Days+SZA'},
+    {song:'Sweet Nothing',artist:'Taylor Swift',reason:'Warm light for hope, romance, and soft lift.',purpose:'hold',intensity:'low',silence:'medium',spotify:'https://open.spotify.com/search/Sweet%20Nothing%20Taylor%20Swift',youtube:'https://www.youtube.com/results?search_query=Sweet+Nothing+Taylor+Swift'},
+    {song:'Here Comes The Sun',artist:'The Beatles',reason:'Warm light for hope, romance, and soft lift.',purpose:'lift',intensity:'medium',silence:'low',spotify:'https://open.spotify.com/search/Here%20Comes%20The%20Sun%20The%20Beatles',youtube:'https://www.youtube.com/results?search_query=Here+Comes+The+Sun+The+Beatles'}
   ],
   empty:[
-    {song:'Naked as We Came',artist:'Iron & Wine',reason:"Empty doesn't mean nothing. This song knows.",spotify:'https://open.spotify.com/search/Naked%20as%20We%20Came',youtube:'https://www.youtube.com/results?search_query=Naked+as+We+Came+Iron+Wine'},
-    {song:'Street Spirit',artist:'Radiohead',reason:'The beautiful weight of feeling gone quiet.',spotify:'https://open.spotify.com/search/Street%20Spirit%20Radiohead',youtube:'https://www.youtube.com/results?search_query=Street+Spirit+Radiohead'},
-    {song:'The Night Will Always Win',artist:'Manchester Orchestra',reason:'For when the hollow feeling has its own gravity.',spotify:'https://open.spotify.com/search/Manchester%20Orchestra',youtube:'https://www.youtube.com/results?search_query=The+Night+Will+Always+Win+Manchester+Orchestra'}
+    {song:'The Night We Met',artist:'Lord Huron',reason:'A holding track for the quiet without turning it into a spiral.',purpose:'hold',intensity:'medium',silence:'high',spotify:'https://open.spotify.com/search/The%20Night%20We%20Met%20Lord%20Huron',youtube:'https://www.youtube.com/results?search_query=The+Night+We+Met+Lord+Huron'},
+    {song:'Fourth of July',artist:'Sufjan Stevens',reason:'A holding track for the quiet without turning it into a spiral.',purpose:'cry',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Fourth%20of%20July%20Sufjan%20Stevens',youtube:'https://www.youtube.com/results?search_query=Fourth+of+July+Sufjan+Stevens'},
+    {song:'I Know The End',artist:'Phoebe Bridgers',reason:'A holding track for the quiet without turning it into a spiral.',purpose:'release',intensity:'high',silence:'medium',spotify:'https://open.spotify.com/search/I%20Know%20The%20End%20Phoebe%20Bridgers',youtube:'https://www.youtube.com/results?search_query=I+Know+The+End+Phoebe+Bridgers'},
+    {song:'Liability',artist:'Lorde',reason:'A holding track for the quiet without turning it into a spiral.',purpose:'hold',intensity:'medium',silence:'high',spotify:'https://open.spotify.com/search/Liability%20Lorde',youtube:'https://www.youtube.com/results?search_query=Liability+Lorde'},
+    {song:'White Ferrari',artist:'Frank Ocean',reason:'A holding track for the quiet without turning it into a spiral.',purpose:'hold',intensity:'medium',silence:'high',spotify:'https://open.spotify.com/search/White%20Ferrari%20Frank%20Ocean',youtube:'https://www.youtube.com/results?search_query=White+Ferrari+Frank+Ocean'},
+    {song:'Apocalypse',artist:'Cigarettes After Sex',reason:'A holding track for the quiet without turning it into a spiral.',purpose:'hold',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Apocalypse%20Cigarettes%20After%20Sex',youtube:'https://www.youtube.com/results?search_query=Apocalypse+Cigarettes+After+Sex'},
+    {song:'Another Love',artist:'Tom Odell',reason:'A holding track for the quiet without turning it into a spiral.',purpose:'cry',intensity:'high',silence:'medium',spotify:'https://open.spotify.com/search/Another%20Love%20Tom%20Odell',youtube:'https://www.youtube.com/results?search_query=Another+Love+Tom+Odell'},
+    {song:"when the party's over",artist:'Billie Eilish',reason:'A holding track for the quiet without turning it into a spiral.',purpose:'hold',intensity:'medium',silence:'high',spotify:'https://open.spotify.com/search/when%20the%20party%27s%20over%20Billie%20Eilish',youtube:'https://www.youtube.com/results?search_query=when+the+party%27s+over+Billie+Eilish'},
+    {song:'Je te laisserai des mots',artist:'Patrick Watson',reason:'A holding track for the quiet without turning it into a spiral.',purpose:'breathe',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Je%20te%20laisserai%20des%20mots%20Patrick%20Watson',youtube:'https://www.youtube.com/results?search_query=Je+te+laisserai+des+mots+Patrick+Watson'},
+    {song:'Asleep',artist:'The Smiths',reason:'A holding track for the quiet without turning it into a spiral.',purpose:'hold',intensity:'low',silence:'high',spotify:'https://open.spotify.com/search/Asleep%20The%20Smiths',youtube:'https://www.youtube.com/results?search_query=Asleep+The+Smiths'}
   ]
 };
+function getSoundprintForEcho(echo = {}, patterns = PatternEngine?.analyze?.(state?.echoes || []) || {}) {
+  const family = moodFamily(echo.mood || patterns.dominantMood || 'reflective');
+  const library = SOUNDPRINTS[family] || SOUNDPRINTS.reflective;
+  const intensityValue = Number(echo.intensity ?? patterns.averageIntensity ?? 5);
+  const silenceValue = Number(echo.silence ?? patterns.averageSilence ?? 5);
+  const intensityBand = intensityValue >= 7 ? 'high' : intensityValue <= 3 ? 'low' : 'medium';
+  const silenceBand = silenceValue >= 7 ? 'high' : silenceValue <= 3 ? 'low' : 'medium';
+  const priority = [];
+  if (family === 'empty') priority.push('hold', 'cry', ...(intensityBand === 'high' || silenceBand === 'high' ? ['ground','lift'] : []), 'breathe', 'release');
+  else if (family === 'anxious') priority.push('ground', 'breathe', 'hold', 'lift');
+  else if (family === 'chaos') priority.push('release', 'ground', 'breathe', 'hold');
+  else if (family === 'reflective') priority.push('hold', 'breathe', 'lift', 'ground');
+  else if (family === 'joyful') priority.push('lift', 'hold', 'breathe');
+  else priority.push('breathe', 'ground', 'hold', 'lift');
+  const scored = library.map((track, index) => {
+    let score = 0;
+    const p = priority.indexOf(track.purpose);
+    score += p === -1 ? 0 : (30 - p * 4);
+    if (track.intensity === intensityBand) score += 8;
+    if (track.silence === silenceBand) score += 6;
+    if (echo.void && ['hold','ground','breathe'].includes(track.purpose)) score += 7;
+    return { track, index, score };
+  });
+  const seed = String(echo.id || echo.date || state?.echoes?.length || Date.now()).split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  scored.sort((a,b) => (b.score - a.score) || ((a.index + seed) % library.length) - ((b.index + seed) % library.length));
+  const picked = scored.map(x => x.track);
+  const offset = library.length ? seed % Math.min(3, library.length) : 0;
+  return [...picked.slice(offset), ...picked.slice(0, offset)].slice(0, 5);
+}
 
 const PatternEngine = (() => {
   const WEATHER_MAP = { calm:'slow blue weather', chaos:'electric pressure', reflective:'moonlit drift', anxious:'restless wind', joyful:'soft bloom', empty:'quiet fog' };
@@ -95,17 +173,18 @@ const PatternEngine = (() => {
     if (!totalEchoes) return { totalEchoes:0, oneLineInsight:'No echoes yet. The universe is quiet — not empty.' };
     const moodCounts = {}; let intensitySum = 0; let silenceSum = 0; let voidCount = 0; let moodChanges = 0; let intDelta = 0;
     echoes.forEach((e, i) => {
-      moodCounts[e.mood] = (moodCounts[e.mood] || 0) + 1;
+      const family = moodFamily(e.mood);
+      moodCounts[family] = (moodCounts[family] || 0) + 1;
       intensitySum += Number(e.intensity || 0); silenceSum += Number(e.silence || 0); if (e.void) voidCount++;
-      if (i > 0) { if (echoes[i - 1].mood !== e.mood) moodChanges++; intDelta += Math.abs((echoes[i - 1].intensity || 0) - (e.intensity || 0)); }
+      if (i > 0) { if (moodFamily(echoes[i - 1].mood) !== family) moodChanges++; intDelta += Math.abs((echoes[i - 1].intensity || 0) - (e.intensity || 0)); }
     });
     const dominantMood = Object.entries(moodCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
     const moodPercentages = Object.fromEntries(Object.entries(moodCounts).map(([k,v]) => [k, Math.round((v / totalEchoes) * 100)]));
     const averageIntensity = +(intensitySum / totalEchoes).toFixed(1);
     const averageSilence = +(silenceSum / totalEchoes).toFixed(1);
     const voidPercentage = Math.round((voidCount / totalEchoes) * 100);
-    const mostRecentMood = echoes[0]?.mood || null;
-    const previousMood = echoes[1]?.mood || null;
+    const mostRecentMood = moodFamily(echoes[0]?.mood) || null;
+    const previousMood = moodFamily(echoes[1]?.mood) || null;
     const recentShift = previousMood && mostRecentMood !== previousMood ? `${previousMood} → ${mostRecentMood}` : 'steady';
     const volatilityScore = Math.round(Math.min(100, ((moodChanges / Math.max(1, totalEchoes - 1)) * 60 + (intDelta / Math.max(1, totalEchoes - 1)) * 4)));
     const trend = (field) => {
@@ -117,7 +196,7 @@ const PatternEngine = (() => {
     const intensityTrend = trend('intensity');
     const silenceTrend = trend('silence');
     let currentStreakMood = mostRecentMood; let currentStreakCount = 0;
-    for (const e of echoes) { if (e.mood === currentStreakMood) currentStreakCount++; else break; }
+    for (const e of echoes) { if (moodFamily(e.mood) === currentStreakMood) currentStreakCount++; else break; }
     const emotionalWeather = Object.keys(moodCounts).length >= 4 ? 'shifting sky' : (WEATHER_MAP[dominantMood] || 'shifting sky');
     let oneLineInsight = 'You kept returning. That counts.';
     if (silenceTrend === 'rising' && intensityTrend !== 'rising') oneLineInsight = 'Your echoes are getting quieter, but not weaker.';
@@ -278,7 +357,7 @@ const Auth = (() => {
   async function upsertProfile(profile){
     ProfileStore.write(profile);
     if(!client||!user) return {ok:true};
-    const payload={id:user.id,display_name:profile.display_name||null,username:profile.username||null,bio:profile.bio||null,location:profile.location||null,avatar_url:profile.avatar_url||null,emotional_archetype:profile.emotional_archetype||null,updated_at:new Date().toISOString()};
+    const payload={id:user.id,display_name:profile.display_name||null,username:profile.username||null,bio:profile.bio||null,location:profile.location||null,avatar_url:profile.avatar_url||null,emotional_archetype:profile.emotional_archetype||null,is_premium:profile.is_premium||false,premium_tier:profile.premium_tier||profile.access_tier||null,premium_code_used:profile.premium_code_used||null,premium_since:profile.premium_since||null,premium_expires_at:profile.premium_expires_at||null,updated_at:new Date().toISOString()};
     const {error}=await client.from('profiles').upsert(payload,{onConflict:'id'});
     if(error){Toast.show('Profile sync failed; kept local copy.'); return {ok:false,error:error.message};}
     return {ok:true};
@@ -293,12 +372,23 @@ const UserAccess = (() => {
   const TIERS = ['free', 'premium', 'founder', 'alpha'];
   const PREMIUM_TIERS = ['premium', 'founder', 'alpha'];
   const FREE_FEATURES = new Set([
-    'create_echo','timeline','universe','basic_profile','basic_receipt','export_vault','import_vault','basic_wrapped','local_mode','auth','basic_avatar','basic_materials','basic_rituals_preview'
+    'create_echo','timeline','universe','basic_profile','basic_receipt','export_vault','import_vault','basic_wrapped','local_mode','auth','inner_conflict','soundprint','old_rituals','basic_avatar','basic_materials','basic_rituals_preview'
   ]);
   const PREMIUM_FEATURES = new Set([
-    'emotional_museum_full','relic_crafting','crafting_table','vault_rooms','echo_avatar_progression','advanced_receipts','cinematic_export_cards','artifact_archive','echosociety','society_gate','society_districts','signal_courier','alam_chat','advanced_soundprint','premium_rituals','premium_weather_map','premium_artifact_frames','advanced_wrapped'
+    'emotional_museum_full','relic_crafting','crafting_table','vault_rooms','echo_avatar_progression','advanced_receipts','cinematic_export_cards','artifact_archive','echosociety','society_gate','society_districts','signal_courier','alam_chat','advanced_soundprint','premium_weather_map','advanced_world_features','premium_rituals','premium_artifact_frames','advanced_wrapped'
   ]);
   const FEATURE_ACCESS = [...FREE_FEATURES].reduce((map, key) => ({ ...map, [key]:'free' }), [...PREMIUM_FEATURES].reduce((map, key) => ({ ...map, [key]:'premium' }), {}));
+
+  const PremiumCodes = (() => {
+    const STARTER_CODES = {
+      'ECHO-FOUNDERS-2026': { tier:'founder', label:'founders code' },
+      'VAULT-ALPHA': { tier:'alpha', label:'alpha code' },
+      'NIGHT-ARCHIVIST': { tier:'premium', label:'night archivist code' }
+    };
+    function normalize(code) { return String(code || '').trim().toUpperCase(); }
+    function lookup(code) { return STARTER_CODES[normalize(code)] || null; }
+    return { STARTER_CODES, normalize, lookup };
+  })();
   let current = { tier:'free', source:'free', updated_at:new Date().toISOString() };
 
   function normalizeTier(tier) { return TIERS.includes(String(tier || '').toLowerCase()) ? String(tier).toLowerCase() : 'free'; }
@@ -326,7 +416,7 @@ const UserAccess = (() => {
   function profileAccess(profile = {}) {
     const rawTier = profile.access_tier || profile.premium_tier || profile.tier || (profile.is_alpha ? 'alpha' : profile.is_founder ? 'founder' : profile.is_premium ? 'premium' : 'free');
     const tier = normalizeTier(rawTier);
-    const until = profile.premium_until || profile.access_until || null;
+    const until = profile.premium_expires_at || profile.premium_until || profile.access_until || null;
     if (until && Date.parse(until) && Date.parse(until) < Date.now()) return null;
     return PREMIUM_TIERS.includes(tier) ? { tier, source:'supabase_profile', premium_until:until || null } : null;
   }
@@ -336,7 +426,7 @@ const UserAccess = (() => {
     return fromLocal ? { ...fromLocal, source:profile.access_source || 'local_code' } : null;
   }
   function refreshAccessState() {
-    const debug = load().debug_override === true || sessionStorage.getItem('echovault_debug_premium') === '1';
+    const debug = location.search.includes('debug=1') && (load().debug_override === true || sessionStorage.getItem('echovault_debug_premium') === '1');
     if (debug) current = { tier:'alpha', source:'debug_override', debug_override:true, updated_at:new Date().toISOString() };
     else {
       const supabase = Auth.user ? profileAccess(ProfileStore.read()) : null;
@@ -364,16 +454,16 @@ const UserAccess = (() => {
   }
   function getLockedCopy(featureKey) {
     const names = {
-      emotional_museum_full:'Emotional Museum Full', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'Vault Rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'Advanced Receipts', cinematic_export_cards:'Cinematic Export Cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.chat', advanced_soundprint:'Advanced Soundprint', premium_rituals:'Premium Rituals', premium_weather_map:'Premium Weather Map', premium_artifact_frames:'Premium Artifact Frames', advanced_wrapped:'Advanced Wrapped'
+      emotional_museum_full:'special museum rooms', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'deeper vault rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'cinematic receipt tools', cinematic_export_cards:'cinematic export cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.ai', advanced_soundprint:'advanced soundprint', premium_rituals:'deeper rituals', premium_weather_map:'deeper Weather Map', premium_artifact_frames:'artifact frames', advanced_wrapped:'Advanced Wrapped'
     };
-    const title = names[featureKey] || 'Premium Feature';
-    return { title, eyebrow:'Premium Access', body:`${title} is a premium worldbuilding layer. Your echoes, export/import, local mode, and basic vault always stay free.`, cta:'Redeem access code' };
+    const title = names[featureKey] || 'special room';
+    return { title, eyebrow:'Special Access', body:'Some parts of the vault open differently. Enter your special code to reveal deeper rooms.', cta:'Enter special code' };
   }
   function requirePremium(featureKey, options = {}) {
     if (canUse(featureKey)) return true;
     const copy = getLockedCopy(featureKey);
-    if (options.toast !== false) Toast.show(`${copy.title} is Premium. Your vault data remains yours.`, 3600);
-    if (options.openSettings) Settings.open();
+    if (options.toast !== false) Toast.show('Some parts of the vault open differently.', 3000);
+    if (options.openSettings !== false && typeof SpecialAccessPortal !== 'undefined') SpecialAccessPortal.open();
     return false;
   }
   function setLocalPremiumOverride(enabled) {
@@ -391,7 +481,7 @@ const UserAccess = (() => {
   }
   function applyPremiumState(payload = {}) {
     const next = save({ ...load(), ...payload, source:payload.source || 'local_code', updated_at:new Date().toISOString() });
-    ProfileStore.write({ access_tier:next.tier, access_source:next.source, premium_tier:next.tier, is_premium:PREMIUM_TIERS.includes(next.tier) });
+    ProfileStore.write({ access_tier:next.tier, access_source:next.source, premium_tier:next.tier, is_premium:PREMIUM_TIERS.includes(next.tier), premium_code_used:next.premium_code_used || next.code_label || null, premium_since:next.premium_since || next.redeemed_at || new Date().toISOString(), premium_expires_at:next.premium_expires_at || null });
     refreshAccessState();
     return next;
   }
@@ -401,35 +491,160 @@ const UserAccess = (() => {
     return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
   }
   async function redeemAccessCode(code) {
-    const clean = String(code || '').trim();
-    if (!clean) return { ok:false, error:'Enter an access code.' };
-    const config = window.ECHOVAULT_CONFIG || {};
-    const plainCodes = Array.isArray(config.ACCESS_CODES) ? config.ACCESS_CODES : [];
-    const direct = plainCodes.find((entry) => String(entry.code || '').trim().toUpperCase() === clean.toUpperCase());
-    let matched = direct;
-    if (!matched) {
-      const hashed = config.ACCESS_CODE_HASHES || {};
-      const hash = await hashCode(clean);
-      const value = hashed[hash];
-      if (value) matched = typeof value === 'string' ? { tier:value } : value;
+    const normalizedCode = PremiumCodes.normalize(code);
+    if (!normalizedCode) return { ok:false, error:'Enter your special code.' };
+    let matched = PremiumCodes.lookup(normalizedCode);
+    let source = 'local_code';
+    let cloudWarning = false;
+    if (Auth.user && Auth.client) {
+      try {
+        const { data, error } = await Auth.client.rpc('redeem_premium_code', { input_code: normalizedCode });
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row?.ok === false || row?.success === false || row === false) return { ok:false, error:'That code didn’t open this room.' };
+        const tierFromRpc = row?.premium_tier || row?.tier || row?.access_tier || (row === true || row?.ok === true || row?.success === true ? 'premium' : null);
+        if (tierFromRpc) { matched = { tier:tierFromRpc, label:'supabase rpc code' }; source = 'supabase_profile'; }
+        else if (!matched) return { ok:false, error:'That code didn’t open this room.' };
+      } catch (error) {
+        if (!matched) return { ok:false, error:'That code didn’t open this room.' };
+        cloudWarning = true;
+      }
     }
-    if (!matched) return { ok:false, error:'Access code not recognized.' };
+    if (!matched) return { ok:false, error:'That code didn’t open this room.' };
     const tier = normalizeTier(matched.tier || 'premium');
-    if (!PREMIUM_TIERS.includes(tier)) return { ok:false, error:'This code is not a Premium tier.' };
-    const state = applyPremiumState({ tier, source:'local_code', code_label:matched.label || 'manual access code', redeemed_at:new Date().toISOString() });
-    return { ok:true, state };
+    if (!PREMIUM_TIERS.includes(tier)) return { ok:false, error:'That code didn’t open this room.' };
+    const now = new Date().toISOString();
+    const state = applyPremiumState({ tier, source, code_label:matched.label || 'special code', premium_code_used:normalizedCode, premium_since:now, redeemed_at:now, is_premium:true });
+    if (Auth.user) {
+      const payload = { ...ProfileStore.read(), is_premium:true, premium_tier:tier, premium_code_used:normalizedCode, premium_since:now, premium_expires_at:null, access_tier:tier, access_source:source };
+      const synced = await Auth.upsertProfile(payload);
+      if (!synced?.ok) cloudWarning = true;
+    }
+    return { ok:true, state, cloudWarning };
   }
   function lockedHTML(featureKey) {
     const copy = getLockedCopy(featureKey);
-    return `<section class="premium-lock-card" data-premium-feature="${escapeHTML(featureKey)}"><div class="premium-lock-badge">✦ ${escapeHTML(copy.eyebrow)}</div><h4>${escapeHTML(copy.title)}</h4><p>${escapeHTML(copy.body)}</p><button class="receipt-action-btn premium-settings-btn" type="button">${escapeHTML(copy.cta)}</button><small>No checkout or subscription exists yet — codes are granted manually.</small></section>`;
+    return `<section class="special-access-card" data-special-feature="${escapeHTML(featureKey)}"><div class="special-kicker">✦ ${escapeHTML(copy.eyebrow)}</div><h4>${escapeHTML(copy.title)}</h4><p>${escapeHTML(copy.body)}</p><button class="receipt-action-btn special-access-open premium-settings-btn" type="button">${escapeHTML(copy.cta)}</button></section>`;
   }
   function updatePremiumUI() {
     const status = document.getElementById('premium-access-status');
-    if (status) status.innerHTML = `Current tier: <b>${escapeHTML(current.tier)}</b><br>Source: <b>${escapeHTML(current.source)}</b>`;
+    if (status) status.innerHTML = `Current access: <b>${escapeHTML(current.tier === 'free' ? 'Free' : current.tier === 'founder' ? 'Founder' : current.tier === 'alpha' ? 'Alpha' : 'Special')}</b>${location.search.includes('debug=1') ? `<br>Source: <b>${escapeHTML(current.source)}</b>` : ''}`;
     const chip = document.getElementById('premium-chip');
-    if (chip) chip.textContent = isPremium() ? `${current.tier} access` : 'free access';
+    if (chip) chip.textContent = isPremium() ? 'Special Access active' : 'Free Vault';
+    document.querySelectorAll('[data-feature]').forEach((el) => {
+      const feature = el.getAttribute('data-feature');
+      let visible = (FEATURE_ACCESS[feature] || 'premium') === 'free' || isPremium();
+      const ritualId = el.getAttribute('data-fun');
+      if (visible && ritualId && ritualId !== 'special-access') {
+        try { if (typeof Rituals !== 'undefined' && Rituals.hasBuilder && !Rituals.hasBuilder(ritualId)) visible = false; } catch {}
+      }
+      el.hidden = !visible;
+      el.classList.toggle('special-hidden', !visible);
+    });
+    document.querySelectorAll('.special-access-entry').forEach((el) => {
+      el.classList.toggle('is-active', isPremium());
+      const title = el.querySelector('.fun-card-title');
+      const desc = el.querySelector('.fun-card-desc');
+      if (title) title.textContent = isPremium() ? 'access unlocked' : 'Special Access';
+      if (desc) desc.textContent = isPremium() ? 'Special Access is open now.' : 'for the girls who fw alam';
+    });
+    document.querySelectorAll('#premium-debug-override').forEach((el) => {
+      const wrap = el.closest('label');
+      if (wrap) wrap.hidden = !location.search.includes('debug=1');
+    });
   }
-  return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, redeemAccessCode, lockedHTML, FEATURE_ACCESS, KEY };
+  return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, redeemAccessCode, lockedHTML, FEATURE_ACCESS, PremiumCodes, KEY };
+})();
+
+
+
+const SpecialAccessPortal = (() => {
+  function resolveName() {
+    const profile = ProfileStore.read();
+    const avatarName = readLocalJSON('echovault_echo_avatar_v1', {})?.avatar_name;
+    const emailPrefix = Auth.user?.email?.split('@')?.[0];
+    return profile.display_name || avatarName || emailPrefix || localStorage.getItem(USER_KEY) || 'Local Voyager';
+  }
+  function ensure() {
+    let modal = document.getElementById('special-access-modal');
+    if (!modal) {
+      document.body.insertAdjacentHTML('beforeend', `<div class="special-access-modal" id="special-access-modal" role="dialog" aria-modal="true" aria-label="Special Access" aria-hidden="true"><div class="special-access-panel"><button class="special-close" id="special-access-close" type="button" aria-label="Close">×</button><div class="special-kicker">Special Access</div><h3>Special Access</h3><p class="special-subtitle">for the girls who fw alam</p><p>Some parts of the vault open differently.</p><label class="settings-field-label" for="special-access-code-input">special code</label><div class="premium-code-row"><input class="settings-input" id="special-access-code-input" type="text" placeholder="ECHO-••••" autocomplete="off" spellcheck="false"><button class="settings-secondary-btn" id="special-access-unlock" type="button">Unlock</button></div><button class="settings-secondary-btn ghost" id="special-access-later" type="button">Maybe Later</button></div></div>`);
+      document.getElementById('special-access-close')?.addEventListener('click', close);
+      document.getElementById('special-access-later')?.addEventListener('click', close);
+      document.getElementById('special-access-modal')?.addEventListener('click', e => { if (e.target?.id === 'special-access-modal') close(); });
+      document.getElementById('special-access-unlock')?.addEventListener('click', redeemFromPortal);
+      document.getElementById('special-access-code-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') redeemFromPortal(); });
+    }
+    return modal;
+  }
+  function open() { const modal = ensure(); modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); setTimeout(() => document.getElementById('special-access-code-input')?.focus(), 60); }
+  function close() { const modal = document.getElementById('special-access-modal'); modal?.classList.remove('open'); modal?.setAttribute('aria-hidden','true'); }
+  async function redeemFromPortal() {
+    const input = document.getElementById('special-access-code-input') || document.getElementById('premium-access-code');
+    const result = await UserAccess.redeemAccessCode(input?.value || '');
+    if (!result.ok) return Toast.show(result.error || 'That code didn’t open this room.', 3400);
+    if (input) input.value = '';
+    close();
+    refreshEchoDependentUI();
+    UserChip.refresh();
+    Toast.show(result.cloudWarning ? 'Special access unlocked locally. Cloud sync can retry later.' : 'Special access unlocked.', 3600);
+    showWelcome();
+  }
+  function showWelcome() {
+    const name = resolveName();
+    let welcome = document.getElementById('special-access-welcome');
+    if (!welcome) {
+      document.body.insertAdjacentHTML('beforeend', `<div class="special-welcome" id="special-access-welcome" role="status"><div class="special-welcome-card"><div class="kawaii-cat" aria-label="original kawaii dancing cat mascot"><div class="cat-ear left"></div><div class="cat-ear right"></div><div class="cat-face"><span class="cat-eye left"></span><span class="cat-eye right"></span><span class="cat-mouth"></span><span class="cat-bow"></span></div><div class="cat-body"></div><span class="cat-spark s1">✦</span><span class="cat-spark s2">♡</span><span class="cat-spark s3">✧</span></div><h3 id="special-welcome-title"></h3><p>Special Access is open now.</p></div></div>`);
+      welcome = document.getElementById('special-access-welcome');
+    }
+    document.getElementById('special-welcome-title').textContent = `Welcome, ${name}.`;
+    welcome.classList.add('show');
+    setTimeout(() => welcome?.classList.remove('show'), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1800 : 4200);
+  }
+  return { open, close, showWelcome, redeemFromPortal };
+})();
+
+
+const WrappedCinematicLoader = (() => {
+  let loadPromise = null;
+  function debugWarn(...args) { if (location.search.includes('debug=1')) console.warn('[Wrapped cinematic]', ...args); }
+  function hasModule() { return Boolean(window.CinematicWrapped?.open); }
+  function ensureLoaded() {
+    if (hasModule()) return Promise.resolve(window.CinematicWrapped);
+    if (loadPromise) return loadPromise;
+    loadPromise = new Promise((resolve) => {
+      const existing = document.querySelector('script[src*="wrapped-cinematic-module.js"]');
+      const finish = () => resolve(hasModule() ? window.CinematicWrapped : null);
+      if (existing) {
+        existing.addEventListener('load', finish, { once:true });
+        existing.addEventListener('error', () => { debugWarn('module script failed to load'); resolve(null); }, { once:true });
+        setTimeout(finish, 700);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'wrapped-cinematic-module.js?v=' + encodeURIComponent(APP_VERSION);
+      script.defer = true;
+      script.onload = finish;
+      script.onerror = () => { debugWarn('module script failed to load'); resolve(null); };
+      document.head.appendChild(script);
+    });
+    return loadPromise;
+  }
+  async function openIfAvailable() {
+    try {
+      Wrapped.render();
+      if (!UserAccess.canUse('advanced_wrapped')) return false;
+      const mod = await ensureLoaded();
+      if (!mod?.open) { debugWarn('falling back to standard Wrapped'); Wrapped.render(); return false; }
+      mod.open();
+      return true;
+    } catch (error) {
+      debugWarn('cinematic open failed', error);
+      Wrapped.render();
+      return false;
+    }
+  }
+  return { ensureLoaded, openIfAvailable, hasModule };
 })();
 
 /* ── NAVIGATION ── */
@@ -442,9 +657,7 @@ const Nav = (() => {
     if (navBtns[v]) {
       navBtns[v].addEventListener('click', () => {
         show(v);
-        if (v === 'wrapped' && typeof CinematicWrapped !== 'undefined' && CinematicWrapped?.open && UserAccess.canUse('advanced_wrapped')) {
-          CinematicWrapped.open();
-        }
+        if (v === 'wrapped') WrappedCinematicLoader.openIfAvailable();
       });
     }
   });
@@ -534,16 +747,18 @@ const Settings = (() => {
     const localReactionCount = Object.values(reactions).flat().length;
     const synced = signals.filter((signal) => signal.synced).length;
     const cloud = SocietySync.isAvailable() ? 'logged in · cloud consent sync available' : 'not logged in · local preview';
-    status.innerHTML = `Society consent local status: <b>${SocietySignals.getConsent() ? 'joined' : 'not joined'}</b><br>Cloud consent status: <b>${cloud}</b><br>Local signal count: <b>${signals.length}</b> · uploaded/synced signal count: <b>${synced}</b><br>Local reactions count: <b>${localReactionCount}</b><br>Current mode: <b>${SocietySync.isAvailable() ? 'Live Society' : 'Local Preview'}</b><br>alam.chat mode: <b>${AlamAI.isRemoteAvailable() ? 'Remote endpoint if configured' : 'Local only'}</b>`;
+    status.innerHTML = `Society consent local status: <b>${SocietySignals.getConsent() ? 'joined' : 'not joined'}</b><br>Cloud consent status: <b>${cloud}</b><br>Local signal count: <b>${signals.length}</b> · uploaded/synced signal count: <b>${synced}</b><br>Local reactions count: <b>${localReactionCount}</b><br>Current mode: <b>${SocietySync.isAvailable() ? 'Live Society' : 'Local Preview'}</b><br>alam.ai mode: <b>${AlamAI.isRemoteAvailable() ? 'Remote endpoint if configured' : 'Local only'}</b>`;
     const latest = document.getElementById('alam-include-latest-setting');
     if (latest) latest.checked = AlamPrivacy.shouldIncludeLatestEcho();
   }
   function populatePremiumAccess() {
     UserAccess.refreshAccessState();
     const status = document.getElementById('premium-access-status');
-    if (status) status.innerHTML = `Current tier: <b>${escapeHTML(UserAccess.getTier())}</b><br>Source: <b>${escapeHTML(UserAccess.getSource())}</b>`;
+    if (status) status.innerHTML = `Current access: <b>${escapeHTML(UserAccess.getTier() === 'free' ? 'Free' : UserAccess.getTier() === 'founder' ? 'Founder' : UserAccess.getTier() === 'alpha' ? 'Alpha' : 'Special')}</b>${location.search.includes('debug=1') ? `<br>Source: <b>${escapeHTML(UserAccess.getSource())}</b>` : ''}`;
     const debug = document.getElementById('premium-debug-override');
     if (debug) debug.checked = UserAccess.getSource() === 'debug_override';
+    const clear = document.getElementById('premium-clear-local');
+    if (clear) clear.hidden = !location.search.includes('debug=1');
   }
   async function init() {
     const profile = ProfileStore.read();
@@ -600,7 +815,8 @@ const Settings = (() => {
     document.getElementById('society-clear-signals-btn')?.addEventListener('click', () => { if (!confirm('Clear local EchoSociety signals and reactions? Your echoes stay untouched.')) return; SocietySignals.clearLocalSignals(); populateSocietyPrivacy(); Toast.show('Local society signals cleared.'); });
     document.getElementById('society-export-signals-btn')?.addEventListener('click', () => SocietySignals.exportSignals());
     document.getElementById('alam-clear-chat-btn')?.addEventListener('click', () => { AlamAI.clearChat(); populateSocietyPrivacy(); });
-    document.getElementById('alam-include-latest-setting')?.addEventListener('change', (event) => { writeLocalJSON('echovault_alam_ai_settings_v1', { ...readLocalJSON('echovault_alam_ai_settings_v1', {}), includeLatestEcho:event.target.checked }); Toast.show(event.target.checked ? 'alam.chat can include latest echo summary when you ask.' : 'alam.chat latest echo sharing is off.'); });
+    document.getElementById('alam-include-latest-setting')?.addEventListener('change', (event) => { writeLocalJSON('echovault_alam_ai_settings_v1', { ...readLocalJSON('echovault_alam_ai_settings_v1', {}), includeLatestEcho:event.target.checked }); Toast.show(event.target.checked ? 'alam.ai can include latest echo summary when you ask.' : 'alam.ai latest echo sharing is off.'); });
+    document.querySelectorAll('.special-access-open').forEach(btn => btn.addEventListener('click', () => SpecialAccessPortal.open()));
     document.getElementById('premium-redeem-btn')?.addEventListener('click', async () => {
       const input = document.getElementById('premium-access-code');
       const result = await UserAccess.redeemAccessCode(input?.value || '');
@@ -609,15 +825,17 @@ const Settings = (() => {
       populatePremiumAccess();
       refreshEchoDependentUI();
       UserChip.refresh();
-      Toast.show(`${UserAccess.getTier()} access unlocked ✦`, 3200);
+      Toast.show(result.cloudWarning ? 'Special access unlocked locally. Cloud sync can retry later.' : 'Special access unlocked.', 3200);
+      SpecialAccessPortal.showWelcome();
     });
+    document.getElementById('premium-clear-local')?.addEventListener('click', () => { localStorage.removeItem(UserAccess.KEY); sessionStorage.removeItem('echovault_debug_premium'); UserAccess.refreshAccessState(); populatePremiumAccess(); refreshEchoDependentUI(); UserChip.refresh(); Toast.show('Local access state cleared.'); });
     document.getElementById('premium-debug-override')?.addEventListener('change', (event) => {
       if (event.target.checked) UserAccess.setLocalPremiumOverride(true);
       else UserAccess.clearLocalPremiumOverride();
       populatePremiumAccess();
       refreshEchoDependentUI();
       UserChip.refresh();
-      Toast.show(event.target.checked ? 'Debug premium override enabled.' : 'Debug premium override cleared.');
+      Toast.show(event.target.checked ? 'Debug special override enabled.' : 'Debug special override cleared.');
     });
 
 
@@ -642,6 +860,8 @@ const Login = (() => {
   const lsName   = document.getElementById('ls-name');
   const lsReturn = document.getElementById('ls-return');
   const stressOrb= document.getElementById('stress-orb');
+  const stressOrbWrap = document.getElementById('stress-orb-wrap');
+  const stressContinue = document.getElementById('stress-continue-btn');
   const nameInput= document.getElementById('name-input');
   const authEmail = document.getElementById('auth-email');
   const authOtp = document.getElementById('auth-otp');
@@ -729,17 +949,55 @@ const Login = (() => {
     await sendEmailOtp(email);
   }
 
+  function beginLoginIntro() {
+    if (screen?.dataset.introStarted === '1') return;
+    screen.dataset.introStarted = '1';
+    stressOrb?.classList.remove('pressed');
+    showStep(lsBreath);
+    BreathAnim.start();
+    setTimeout(() => {
+      showStep(lsName);
+      setAuthMode('otp');
+      setTimeout(() => authEmail?.focus(), 300);
+    }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 900 : 4200);
+  }
+
+  function setStressOrbPressed(isPressed) {
+    stressOrb?.classList.toggle('pressed', Boolean(isPressed));
+  }
+
+  function bindStressOrbStart() {
+    const targets = [stressOrbWrap, stressOrb, stressContinue].filter(Boolean);
+    if (!targets.length) return;
+    const start = (event) => {
+      if (event?.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
+      event?.preventDefault?.();
+      beginLoginIntro();
+    };
+    const press = (event) => {
+      if (event?.pointerType === 'mouse' && event.button !== 0) return;
+      setStressOrbPressed(true);
+    };
+    const release = () => setStressOrbPressed(false);
+    const releaseAndStart = (event) => { release(); start(event); };
+    targets.forEach((target) => {
+      target.addEventListener('click', start);
+      target.addEventListener('keydown', start);
+      target.addEventListener('pointerdown', press);
+      target.addEventListener('pointerup', releaseAndStart);
+      target.addEventListener('pointercancel', release);
+      target.addEventListener('pointerleave', release);
+      target.addEventListener('touchend', start, { passive:false });
+    });
+  }
+
   function init() {
     const savedUser = localStorage.getItem(USER_KEY);
     if (Auth.user) { UserChip.refresh(); enterApp(); return; }
     if (!Auth.hasSupabase && authModeNote) authModeNote.textContent = 'Supabase is not configured — local mode only.';
     if (savedUser && !Auth.hasSupabase) { document.getElementById('return-name').textContent = savedUser; showStep(lsReturn); document.getElementById('return-enter-btn').addEventListener('click', () => enterApp()); return; }
 
-    stressOrb.addEventListener('pointerdown', () => stressOrb.classList.add('pressed'));
-    ['pointerup','pointerleave'].forEach(ev => stressOrb.addEventListener(ev, () => stressOrb.classList.remove('pressed')));
-    let pressStart = 0;
-    stressOrb.addEventListener('pointerdown', () => { pressStart = Date.now(); });
-    stressOrb.addEventListener('pointerup', () => { if (Date.now() - pressStart > 80) { showStep(lsBreath); BreathAnim.start(); setTimeout(() => { showStep(lsName); setAuthMode('otp'); setTimeout(() => authEmail?.focus(), 300); }, 4200); } });
+    bindStressOrbStart();
 
     authLocal?.addEventListener('click', () => { const name = nameInput.value.trim() || localStorage.getItem(USER_KEY) || 'local voyager'; localStorage.setItem(USER_KEY, name); ProfileStore.write({ display_name: name }); UserChip.refresh(); enterApp(); });
     authTogglePassword?.addEventListener('click', () => setAuthMode(authUiMode === 'otp' ? 'password' : 'otp'));
@@ -2233,13 +2491,14 @@ const ShatterSoftly = (() => {
       const songEl = document.getElementById('shatter-song-here');
       if (songEl) {
         const mood = state.echoes[0]?.mood || 'reflective';
-        const tracks = SOUNDPRINTS[mood];
+        const family = moodFamily(mood);
+        const tracks = getSoundprintForEcho(state.echoes[0] || { mood:family, intensity:5, silence:5 }, PatternEngine.analyze(state.echoes));
         const track = tracks[Math.floor(Math.random() * tracks.length)];
-        const color = MOOD_COLORS[mood];
+        const color = MOOD_COLORS[mood] || MOOD_COLORS[family];
         songEl.innerHTML = `
           <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-bottom:14px;opacity:.8">✦ something to listen to</div>
           <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;align-items:stretch;max-width:380px;margin:0 auto">
-            <div style="width:64px;flex-shrink:0;background:linear-gradient(135deg,${color}55,${color}18);display:flex;align-items:center;justify-content:center;font-size:28px">${MOOD_COVER_EMOJI[mood]}</div>
+            <div style="width:64px;flex-shrink:0;background:linear-gradient(135deg,${color}55,${color}18);display:flex;align-items:center;justify-content:center;font-size:28px">${MOOD_COVER_EMOJI[mood] || MOOD_COVER_EMOJI[family]}</div>
             <div style="padding:14px 16px;flex:1;text-align:left">
               <div style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:2px">${track.song}</div>
               <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">${track.artist}</div>
@@ -2412,7 +2671,7 @@ const MaterialEngine = (() => {
   function generateForEcho(echo={}) {
     const out = [];
     const add = (name, qty=1) => out.push({ name, qty });
-    add(moodMaterials[echo.mood] || 'Moon Thread', echo.intensity >= 7 ? 2 : 1);
+    add(moodMaterials[moodFamily(echo.mood)] || 'Moon Thread', echo.intensity >= 7 ? 2 : 1);
     if ((echo.silence || 0) >= 7) add('Silence Glass', 1);
     if ((echo.intensity || 0) >= 8) add('Pressure Ember', 1);
     if (echo.void) add('Void Core', 1);
@@ -2717,7 +2976,7 @@ const SocietySignals = (() => {
   const SIGNALS_KEY = 'echovault_society_signals_v1';
   const REACTIONS_KEY = 'echovault_society_reactions_v1';
   const SIGNAL_TYPES = ['weather','lantern','storm','bloom','archive','delivery','alam'];
-  const DISTRICTS = { weather:'Weather Tower', lantern:'Lantern District', storm:'Storm Works', bloom:'Bloom Market', archive:'Moon Archive', delivery:'Signal Couriers’ Route', alam:'alam.chat Observatory' };
+  const DISTRICTS = { weather:'Weather Tower', lantern:'Lantern District', storm:'Storm Works', bloom:'Bloom Market', archive:'Moon Archive', delivery:'Signal Couriers’ Route', alam:'alam.ai Observatory' };
   const ANON_LABELS = ['Moon Signal','Lantern Wisp','Quiet Comet','Bloom Shade','Storm Mote','Archive Finch','Drift Spark','Soft Witness'];
   function ensureKeys(){ if (localStorage.getItem(CONSENT_KEY) === null) writeLocalJSON(CONSENT_KEY, { consent:false, updated_at:null, cloud_status:'unknown' }); if (localStorage.getItem(SIGNALS_KEY) === null) writeLocalJSON(SIGNALS_KEY, []); if (localStorage.getItem(REACTIONS_KEY) === null) writeLocalJSON(REACTIONS_KEY, {}); }
   function getConsent(){ ensureKeys(); return Boolean(readLocalJSON(CONSENT_KEY, {consent:false})?.consent); }
@@ -2855,9 +3114,9 @@ const SignalCourierRoute = (() => {
     {id:'bring_bloom_seed', label:'Bring bloom seed to Bloom Market', item:'bloom seed', to:'Bloom Market', reward:{name:'Bloom Seed', qty:1}},
     {id:'take_moon_letter', label:'Take moon letter to Moon Archive', item:'moon letter', to:'Moon Archive', reward:{name:'Moon Thread', qty:1}},
     {id:'deliver_weather_report', label:'Deliver weather report to Weather Tower', item:'weather report', to:'Weather Tower', reward:{name:'Compass Dust', qty:1}},
-    {id:'carry_alam_note', label:"Carry “alam's weird note” to the Observatory", item:'alam note', to:'alam.chat Observatory', reward:{name:'Oracle Static', qty:1}}
+    {id:'carry_alam_note', label:"Carry “alam's weird note” to the Observatory", item:'alam note', to:'alam.ai Observatory', reward:{name:'Oracle Static', qty:1}}
   ];
-  const nodes = {'Society Gate':[.50,.82], 'Lantern District':[.18,.32], 'Storm Works':[.44,.20], 'Bloom Market':[.74,.31], 'Moon Archive':[.26,.62], 'Weather Tower':[.61,.58], 'alam.chat Observatory':[.82,.68]};
+  const nodes = {'Society Gate':[.50,.82], 'Lantern District':[.18,.32], 'Storm Works':[.44,.20], 'Bloom Market':[.74,.31], 'Moon Archive':[.26,.62], 'Weather Tower':[.61,.58], 'alam.ai Observatory':[.82,.68]};
   let open=false, raf=0, avatar={x:.50,y:.82,tx:.50,ty:.82}, active=null;
   function renderModal(){ return `<div class="courier-modal" id="courier-modal" role="dialog" aria-label="Signal Courier Route"><div class="courier-panel"><button class="courier-close" id="courier-close-btn">Close</button><h3>Signal Courier Route</h3><p>A tiny peaceful delivery prototype. No combat, no competitive scoring — just gold paths between districts.</p><div class="courier-layout"><canvas id="courier-canvas" width="680" height="420"></canvas><div class="courier-side"><h4>Delivery missions</h4>${missions.map(m=>`<button class="receipt-action-btn courier-mission" data-mission="${m.id}">${escapeHTML(m.label)}</button>`).join('')}<div class="courier-controls"><button data-move="up">↑</button><button data-move="left">←</button><button data-move="down">↓</button><button data-move="right">→</button></div><small>Tap a destination node or use the arrows.</small></div></div></div></div>`; }
   function openRoute(){ if(!UserAccess.requirePremium('signal_courier', { openSettings:true })) return; if(!document.getElementById('courier-modal')) document.body.insertAdjacentHTML('beforeend', renderModal()); open=true; document.body.style.overflow='hidden'; bind(); drawLoop(); }
@@ -2912,7 +3171,7 @@ const AlamAI = (() => {
 is this coping mechanism
 asking for my iman`;
   function isRemoteAvailable(){ return Boolean(window.ECHOVAULT_CONFIG?.ALAM_AI_ENDPOINT); }
-  function currentMode(){ return isRemoteAvailable()?'connected oracle mode':'local oracle mode'; }
+  function currentMode(){ return isRemoteAvailable()?'endpoint available':'local'; }
   function buildSafeContext(options={}){ return AlamPrivacy.buildSafeContext(options); }
   function localReply(prompt='', context={}){
     const lower=String(prompt).toLowerCase();
@@ -2947,26 +3206,26 @@ asking for my iman`;
         const data=await res.json();
         appendMessage('alam', data.reply || data.text || localReply(clean, safeContext));
         return data;
-      } catch(err){ Toast.show('alam.chat stayed local.'); }
+      } catch(err){ Toast.show('alam.ai is ready.'); }
     }
     const reply=localReply(clean, safeContext);
     appendMessage('alam', reply);
     return { mode:'local', reply };
   }
-  function clearChat(){ localStorage.removeItem(CHAT_KEY); renderMessages(); Toast.show('alam.chat history cleared.'); }
+  function clearChat(){ localStorage.removeItem(CHAT_KEY); renderMessages(); Toast.show('alam.ai history cleared.'); }
   function renderMessages(){
     const list=document.getElementById('alam-message-list');
     if(!list) return;
     const arr=loadMessages();
-    list.innerHTML=arr.map(m=>`<div class="alam-msg ${escapeHTML(m.role)}"><b>${escapeHTML(m.role)}</b><p>${escapeHTML(m.text)}</p></div>`).join('') || '<p class="alam-empty">Ask alam something from your vault weather.</p>';
+    list.innerHTML=arr.map(m=>`<div class="alam-msg ${escapeHTML(m.role)}"><b>${escapeHTML(m.role)}</b><p>${escapeHTML(m.text)}</p></div>`).join('') || '<p class="alam-empty"></p>';
     list.scrollTo(0,list.scrollHeight);
   }
   function renderPortal(){
-    return `<section class="alam-portal" id="alam-portal"><div class="alam-orb"><span>alam</span></div><div><div class="echo-avatar-kicker">alam.chat Observatory</div><h4>alam.chat</h4><pre>${escapeHTML(bio)}</pre><p class="alam-status">${currentMode()}</p><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><button class="receipt-action-btn" id="alam-open-btn">Ask alam</button></div></section>`;
+    return `<section class="alam-portal" id="alam-portal"><div class="alam-orb"><span>alam</span></div><div><h4>alam.ai</h4><pre>${escapeHTML(bio)}</pre><button class="receipt-action-btn" id="alam-open-btn">Ask alam</button></div></section>`;
   }
   function openChat(){
     if(!UserAccess.requirePremium('alam_chat', { openSettings:true })) return;
-    if(!document.getElementById('alam-chat-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-chat-panel" id="alam-chat-panel" role="dialog" aria-modal="true" aria-label="alam.chat terminal"><div class="alam-chat-card"><header class="alam-chat-head"><div><span class="alam-chat-kicker">weird oracle-terminal</span><h3>alam.chat</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div class="alam-mode-row"><p class="alam-status" id="alam-mode-badge">${currentMode()}</p><button class="settings-secondary-btn" id="alam-local-btn" type="button">Keep it local</button></div><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><div id="alam-message-list" class="alam-message-list"></div><div class="alam-context-options"><label class="alam-toggle"><input type="checkbox" id="alam-include-latest"> Include latest echo summary</label><label class="alam-toggle"><input type="checkbox" id="alam-include-weather" checked> Include society weather label</label><label class="alam-toggle disabled"><input type="checkbox" disabled> Raw echoes — not available.</label></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask the weird little oracle…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
+    if(!document.getElementById('alam-ai-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-ai-panel" id="alam-ai-panel" role="dialog" aria-modal="true" aria-label="alam.ai"><div class="alam-ai-card"><header class="alam-ai-head"><div><h3>alam.ai</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div id="alam-message-list" class="alam-message-list"></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask alam…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
     document.body.style.overflow='hidden';
     const settings=readLocalJSON(settingsKey,{includeLatestEcho:false});
     const latest=document.getElementById('alam-include-latest');
@@ -2975,18 +3234,17 @@ asking for my iman`;
     renderMessages();
     setTimeout(()=>document.getElementById('alam-input')?.focus(), 40);
   }
-  function closeChat(){ document.getElementById('alam-chat-panel')?.remove(); document.body.style.overflow=''; }
+  function closeChat(){ document.getElementById('alam-ai-panel')?.remove(); document.body.style.overflow=''; }
   function bindChat(){
     document.getElementById('alam-close-btn')?.addEventListener('click', closeChat);
     document.getElementById('alam-bottom-close-btn')?.addEventListener('click', closeChat);
     document.getElementById('alam-clear-btn')?.addEventListener('click', clearChat);
-    document.getElementById('alam-local-btn')?.addEventListener('click',()=>Toast.show('alam.chat stayed local.'));
-    document.getElementById('alam-include-latest')?.addEventListener('change',(e)=>{ writeLocalJSON(settingsKey,{...readLocalJSON(settingsKey,{}), includeLatestEcho:e.target.checked}); });
-    const send=()=>sendMessage(document.getElementById('alam-input')?.value,{includeLatestEcho:document.getElementById('alam-include-latest')?.checked,includeSocietyWeather:document.getElementById('alam-include-weather')?.checked}).then(()=>{ const input=document.getElementById('alam-input'); if(input) input.value=''; });
+        document.getElementById('alam-include-latest')?.addEventListener('change',(e)=>{ writeLocalJSON(settingsKey,{...readLocalJSON(settingsKey,{}), includeLatestEcho:e.target.checked}); });
+    const send=()=>sendMessage(document.getElementById('alam-input')?.value,{includeLatestEcho:document.getElementById('alam-include-latest')?.checked,includeSocietyWeather:false}).then(()=>{ const input=document.getElementById('alam-input'); if(input) input.value=''; });
     document.getElementById('alam-send-btn')?.addEventListener('click',send);
     document.getElementById('alam-input')?.addEventListener('keydown',(e)=>{ if(e.key==='Enter') send(); });
   }
-  function bindShortcut(){ document.getElementById('alam-floating-portal')?.addEventListener('click', openChat); }
+  function bindShortcut(){ document.getElementById('alam-floating-portal')?.addEventListener('click', () => { if (UserAccess.requirePremium('alam_chat')) openChat(); }); }
   return { CHAT_KEY, isRemoteAvailable, buildSafeContext, localReply, sendMessage, renderPortal, openChat, closeChat, appendMessage, clearChat, loadMessages, saveMessages, bindShortcut };
 })();
 
@@ -2999,7 +3257,7 @@ function buildEchoSocietyGate() {
   const district = getSocietyDistrictSuggestion(avatar.role || '');
   const requirements = `<ul class="society-requirements"><li class="${hasAvatar?'met':'missing'}">Create Echo Avatar</li><li class="${state.echoes.length >= 5?'met':'missing'}">Create 5 private echoes</li><li class="${artifactCount >= 1?'met':'missing'}">Save 1 artifact</li></ul>`;
   const echoCircles = `<section class="echo-circles-placeholder"><h4>Echo Circles</h4><p>Small symbolic circles are coming later. No public diary feed. No follower system. No raw echoes.</p></section>`;
-  if (!UserAccess.canUse('society_gate')) return UserAccess.lockedHTML('society_gate') + `<section class="echo-society-room society-locked society-preview"><div class="echo-avatar-kicker">Society Gate</div><h4>Society Gate is still sealed.</h4><p>EchoSociety opens only after your private vault has enough shape to enter without giving away raw echoes.</p><p>Society role: ${escapeHTML(avatar.role || 'unformed')} · Recommended district: ${escapeHTML(district)}</p><b>Requirements:</b>${requirements}${AlamAI.renderPortal()}${echoCircles}</section>`;
+  if (!UserAccess.canUse('society_gate')) return '';
   const privacy = `<section class="society-privacy-panel" id="society-privacy-panel" ${consent ? 'hidden' : ''}><div class="echo-avatar-kicker">Privacy Rules</div><h4>Privacy Rules</h4><p>${escapeHTML(SocietyPrivacy.explainPrivacy())}</p><p>You choose when to contribute. You can revoke consent anytime.</p><div class="society-actions"><button class="receipt-action-btn" id="society-understand-btn">I Understand</button><button class="receipt-action-btn ghost" id="society-stay-private-btn">Stay Private</button></div></section>`;
   const intro = `<section class="echo-society-room"><div class="echo-avatar-kicker">Society Gate</div><h4>Welcome to EchoSociety.</h4><p>A shared city built from anonymous symbolic signals — not a public diary feed.</p><p class="society-recommendation">Society role: <b>${escapeHTML(avatar.role || 'Signal Courier')}</b> · Recommended district: <b>${escapeHTML(district)}</b></p><div class="society-actions"><button class="receipt-action-btn" id="society-enter-btn">Enter Society</button><button class="receipt-action-btn ghost" id="society-private-btn">Stay Private</button><button class="receipt-action-btn" id="society-privacy-btn">Privacy Rules</button></div><small>${consent ? 'Consent stored locally; cloud consent syncs when logged in.' : 'Entry waits for consent; local mode remains fully usable.'}</small></section>`;
   const districts = [
@@ -3009,7 +3267,7 @@ function buildEchoSocietyGate() {
     {title:'Moon Archive', description:'A moonlit shelf for optional symbolic witness marks, not raw diary sharing.', roles:['Moon Archivist','Archive Witness'], action:'Leave Anonymous Line', id:'society-archive-btn', icon:'🌙'},
     {title:'Weather Tower', description:'A high glass compass that turns anonymous signals into shared weather.', roles:['Weather Cartographer'], action:'Contribute Weather', id:'society-weather-btn', icon:'🧭'},
     {title:'Signal Couriers’ Route', description:'Gold paths for peaceful artifact deliveries between districts.', roles:['Signal Courier','Relic Runner'], action:'Start Delivery', id:'society-delivery-btn', icon:'✦'},
-    {title:'alam.chat Observatory', description:'A glitchy cosmic terminal that opens in local oracle mode first.', roles:['Signal Courier','Moon Archivist','Archive Witness'], action:'Open alam.chat', id:'society-alam-btn', icon:'🟣'}
+    {title:'alam.ai', description:'A private oracle room with a soft signal.', roles:['Signal Courier','Moon Archivist','Archive Witness'], action:'Open alam.ai', id:'society-alam-btn', icon:'🟣'}
   ].map(districtCard).join('');
   const archiveInput = `<div class="society-archive-note"><input class="society-archive-input" id="society-archive-line" maxlength="80" placeholder="optional line, local preview only…"><small>For now the line is not uploaded; only a symbolic archive marker is used.</small></div>`;
   const signals = SocietySignals.listLocalSignals().slice(0,8).map(signal => `<article class="society-signal" data-signal-id="${escapeHTML(signal.id)}"><span>${escapeHTML(signal.anonymous_label)}</span><b>${escapeHTML(signal.signal_type)} · ${escapeHTML(signal.mood)}</b><small>${escapeHTML(signal.district)} · ${escapeHTML(signal.intensity_band)} intensity · ${escapeHTML(signal.silence_band)} silence · ${escapeHTML(signal.archetype)}</small><div class="society-reactions">${Object.entries(SOCIETY_REACTIONS).map(([key,label])=>`<button data-reaction="${key}">${label}</button>`).join('')}</div></article>`).join('') || '<p class="society-empty">No local society signals yet. Contributions stay symbolic.</p>';
@@ -3146,22 +3404,32 @@ const Rituals = (() => {
     });
   }
 
+  function getBuilders() { return {museum:buildMuseum,lantern:buildLantern,stormjar:buildStormJar,receipt:buildReceipt, dna:buildDNA, crash:buildCrash, sound:buildSound, vsvs:buildConflict, shatter:buildShatter}; }
+  function hasBuilder(type) { return type === 'special-access' || type === 'alam' || Boolean(getBuilders()[type]); }
+  function unknownRitualHTML(type) { return `<div class="ritual-error-card"><h3>Unknown ritual</h3><p>${escapeHTML(type || 'This ritual')} is not available in this build.</p></div>`; }
+  function museumFallbackHTML(error) {
+    if (location.search.includes('debug=1')) console.warn('Emotional Museum failed to render', error);
+    const safeMessage = location.search.includes('debug=1') ? `<small>${escapeHTML(error?.message || error)}</small>` : '';
+    return `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p></header><div class="museum-room active"><h4>Museum room recovering</h4><p>Your vault is safe. The museum shell opened, but one room needs a refresh.</p>${safeMessage}</div></div>`;
+  }
+
   function open(type) {
-    if (type === 'alam') { AlamAI.openChat(); return; }
-    const premiumRitualMap = { lantern:'premium_rituals', stormjar:'premium_rituals', dna:'advanced_receipts', crash:'advanced_receipts', sound:'advanced_soundprint', vsvs:'premium_rituals', shatter:'premium_rituals' };
+    if (type === 'special-access') { SpecialAccessPortal.open(); return; }
+    if (type === 'alam') { if (UserAccess.requirePremium('alam_chat')) AlamAI.openChat(); return; }
+    const premiumRitualMap = { museum:'emotional_museum_full', lantern:'old_rituals', stormjar:'old_rituals', dna:'advanced_receipts', crash:'advanced_receipts', sound:'soundprint', vsvs:'inner_conflict', shatter:'premium_rituals' };
     if (premiumRitualMap[type] && !UserAccess.requirePremium(premiumRitualMap[type], { openSettings:true })) return;
-    const builders = {museum:buildMuseum,lantern:buildLantern,stormjar:buildStormJar,receipt:buildReceipt, dna:buildDNA, crash:buildCrash, sound:buildSound, vsvs:buildConflict, shatter:buildShatter};
+    const builders = getBuilders();
     const fn = builders[type];
-    if (!fn) return;
+    if (!fn) { content.innerHTML = unknownRitualHTML(type); modal.classList.add('open'); return; }
     const shown = getRitualOb();
     const doOpen = () => {
       try {
         content.innerHTML = fn();
       } catch (error) {
-        console.warn('Ritual failed to render', error);
-        content.innerHTML = type === 'receipt'
+        if (location.search.includes('debug=1')) console.warn('Ritual failed to render', type, error);
+        content.innerHTML = type === 'museum' ? museumFallbackHTML(error) : (type === 'receipt'
           ? '<div class="receipt-error-card"><h3>Receipt unavailable</h3><p>Your echoes are safe. Try refreshing the app cache or creating one new echo.</p></div>'
-          : '<div class="ritual-error-card"><h3>Ritual unavailable</h3><p>Your vault is safe. Try refreshing the app cache.</p></div>';
+          : unknownRitualHTML(type));
       }
       modal.classList.add('open');
       postBuild(type);
@@ -3514,9 +3782,10 @@ Insight: ${d.insight}`;
   function buildSound() {
     const recent = state.echoes[0];
     const mood   = recent?.mood || 'reflective';
-    const tracks = SOUNDPRINTS[mood] || SOUNDPRINTS.reflective;
-    const color  = MOOD_COLORS[mood];
-    const coverEmoji = MOOD_COVER_EMOJI[mood] || '🎵';
+    const family = moodFamily(mood);
+    const tracks = getSoundprintForEcho(recent || { mood:family, intensity:5, silence:5 }, PatternEngine.analyze(state.echoes));
+    const color  = MOOD_COLORS[mood] || MOOD_COLORS[family];
+    const coverEmoji = MOOD_COVER_EMOJI[mood] || MOOD_COVER_EMOJI[family] || '🎵';
 
     const relieverMessages = {
       calm:'You carried your stillness here. Stay a moment longer.',
@@ -3530,7 +3799,7 @@ Insight: ${d.insight}`;
 
     return `<div class="soundprint-card">
       <div class="soundprint-title">Echo Soundprint</div>
-      <div class="soundprint-sub">Resonating with your ${MOOD_EMOJIS[mood]} <strong style="color:var(--text);font-style:normal">${mood}</strong> frequency</div>
+      <div class="soundprint-sub">Resonating with your ${(MOOD_EMOJIS[mood] || MOOD_EMOJIS[family])} <strong style="color:var(--text);font-style:normal">${mood}</strong> frequency</div>
       <div class="track-list">${tracks.map((t,i)=>`
         <div class="track-item">
           <div class="track-cover" style="background:linear-gradient(135deg,${color}55,${color}1a)">
@@ -3553,10 +3822,10 @@ Insight: ${d.insight}`;
       </div>
       <div class="soundprint-reliever">
         <div class="reliever-label">✦ a moment for you</div>
-        <div class="reliever-text">${relieverMessages[mood] || relieverMessages.reflective}</div>
+        <div class="reliever-text">${relieverMessages[family] || relieverMessages.reflective}</div>
         <div class="reliever-breath" id="reliever-orb" role="button" aria-label="Breathing orb — tap and breathe">
           <div class="reliever-breath-ring"></div>
-          ${relieverEmojis[mood] || '◯'}
+          ${relieverEmojis[family] || '◯'}
         </div>
         <div class="reliever-breath-hint">tap · breathe · release</div>
       </div>
@@ -3620,7 +3889,7 @@ Insight: ${d.insight}`;
     const societyTeaser = buildEchoSocietyGate();
     const weather=WeatherMap.compute(echoes);
     const arch=ArchetypeEngine.compute(PatternEngine.analyze(echoes));
-    const tracks=SOUNDPRINTS[weather.mood]||SOUNDPRINTS.reflective;
+    const tracks=getSoundprintForEcho(echoes[0] || { mood:weather.mood, intensity:5, silence:5 }, PatternEngine.analyze(echoes));
     const relics=RelicEngine.fromEchoes(echoes);
     const relicVisual = (name) => {
       const key = name.toLowerCase();
@@ -3763,7 +4032,7 @@ Insight: ${d.insight}`;
   modal.addEventListener('click', e => { if(e.target===modal) close(); });
   content.addEventListener('click', e => { if(e.target.id==='crash-close') close(); });
 
-  return {open};
+  return {open, hasBuilder};
 })();
 
 /* ── HELPER FUNCTIONS ── */
@@ -3821,9 +4090,9 @@ const UserChip = (() => {
     chip?.classList.add('visible');
     document.getElementById('chip-name').textContent = name;
     document.getElementById('chip-display-name').textContent = name;
-    document.getElementById('chip-email').textContent = `${email} · ${tier} access`;
+    document.getElementById('chip-email').textContent = `${email} · ${UserAccess.isPremium() ? 'Special Access Active' : 'Free Vault'}${UserAccess.isPremium() ? ` · ${tier}` : ''}`;
     const syncLabel = document.getElementById('chip-sync-label');
-    if (syncLabel) syncLabel.textContent = UserAccess.isPremium() ? `${tier} access` : (Auth.user ? 'Profile Synced' : 'Local Vault');
+    if (syncLabel) syncLabel.textContent = UserAccess.isPremium() ? 'Special Access Active' : (Auth.user ? 'Profile Synced' : 'Local Vault');
     const avatarEl = document.getElementById('chip-avatar');
     const avatarUrl = profile.avatar_url || profile.avatar_data_url;
     if (avatarUrl && avatarEl) {
@@ -4043,7 +4312,9 @@ window.EchoVaultBridge = {
   MOOD_COLORS,
   ARCHETYPE_NAMES,
   ARCHETYPE_DESCS,
-  SOUNDPRINTS
+  SOUNDPRINTS,
+  getSoundprintForEcho,
+  moodFamily
 };
 
 /* ── INIT ── */
