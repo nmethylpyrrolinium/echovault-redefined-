@@ -398,14 +398,16 @@ const UserAccess = (() => {
       if (typeof payload === 'object') return { tier:payload.tier || payload.premium_tier || payload.access_tier || 'premium', label:payload.label || 'hashed local code', premium_expires_at:payload.premium_expires_at || payload.expires_at || null };
       return null;
     }
+    function hasLocalHashConfig() { return Object.keys(getHashes()).length > 0; }
     async function lookupLocalHash(code) {
       const normalized = normalize(code);
       if (!normalized) return null;
       const hashes = getHashes();
+      if (!Object.keys(hashes).length) return null;
       const digest = await hashCode(normalized);
       return normalizeHashPayload(hashes[digest] || hashes[digest.toUpperCase()]);
     }
-    return { normalize, lookupLocalHash };
+    return { normalize, hasLocalHashConfig, lookupLocalHash };
   })();
   let current = { tier:'free', source:'free', updated_at:new Date().toISOString() };
 
@@ -527,6 +529,7 @@ const UserAccess = (() => {
         return { ok:false, error:'That code didn’t open this room.' };
       }
     } else {
+      if (!PremiumCodes.hasLocalHashConfig()) return { ok:false, error:'Special codes are not configured for local unlock. Sign in to redeem through Supabase.' };
       matched = await PremiumCodes.lookupLocalHash(normalizedCode);
     }
     if (!matched) return { ok:false, error:'That code didn’t open this room.' };
