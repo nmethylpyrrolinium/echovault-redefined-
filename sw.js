@@ -1,5 +1,5 @@
-const APP_VERSION = 'phase-3-echo-society-foundation';
-const CACHE = 'echovault-v8-phase-3-echo-society';
+const APP_VERSION = 'special-access-v2-rituals-wrapped-alam-ai';
+const CACHE = 'echovault-v10-special-access-rituals-wrapped-alam-ai';
 
 const toScopeUrl = (path) => new URL(path, self.registration.scope).toString();
 const PRECACHE = ['./', 'index.html', 'styles.css', 'script.js', 'manifest.json', 'icons/icon.svg', 'wrapped-cinematic-module.js'];
