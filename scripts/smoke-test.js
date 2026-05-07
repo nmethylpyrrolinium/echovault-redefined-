@@ -1,4 +1,5 @@
 const fs = require('fs');
+const crypto = require('crypto');
 
 const failures = [];
 
@@ -416,6 +417,30 @@ if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].incl
   ['no payment copy exists', 'not a payment']
 ].forEach(([label, marker]) => { if (!script.includes(marker) && !index.includes(marker) && !readme.includes(marker)) failures.push(`Special Access check failed: ${label}`); });
 if (/\b(stripe|razorpay|paypal|checkout|pricing page|subscription)\b/i.test(script.replace(/No checkout/gi, '').replace(/no checkout/gi, ''))) failures.push('Forbidden payment implementation detected in script');
+
+
+// Special Access hashed-code redemption checks
+const starterCodes = [
+  ['ECHO-FOUNDERS-2026', 'founder'],
+  ['VAULT-ALPHA', 'alpha'],
+  ['NIGHT-ARCHIVIST', 'premium']
+];
+starterCodes.forEach(([code, tier]) => {
+  const digest = crypto.createHash('sha256').update(code.toUpperCase()).digest('hex');
+  if (!index.includes(digest)) failures.push(`ACCESS_CODE_HASHES missing ${tier} starter hash`);
+  if (!new RegExp(`"${digest}"\\s*:\\s*\\{[^}]*tier:\\s*"${tier}"`).test(index)) failures.push(`ACCESS_CODE_HASHES ${tier} hash missing tier payload`);
+  if (script.includes(code)) failures.push(`Plaintext starter code leaked into script.js: ${code}`);
+  if (index.includes(code)) failures.push(`Plaintext starter code leaked into index.html client config: ${code}`);
+});
+if (!/ACCESS_CODE_HASHES:\s*\{\s*"[a-f0-9]{64}"/.test(index)) failures.push('ACCESS_CODE_HASHES should not be empty');
+if (!/ACCESS_CODES:\s*\[\s*\]/.test(index)) failures.push('ACCESS_CODES should remain empty to avoid plaintext client codes');
+if (!userAccessSource.includes('async function lookupLocalHash(code)')) failures.push('PremiumCodes.lookupLocalHash missing');
+if (!userAccessSource.includes('hasLocalHashConfig')) failures.push('PremiumCodes should expose local hash configuration detection');
+if (!userAccessSource.includes('hashes[digest]') || !userAccessSource.includes('hashCode(normalized)')) failures.push('Local code unlock path should validate SHA-256 digest against ACCESS_CODE_HASHES');
+if (!userAccessSource.includes('Special codes are not configured for local unlock. Sign in to redeem through Supabase.')) failures.push('Missing empty local hash config guidance');
+if (!userAccessSource.includes('That code didn’t open this room.')) failures.push('Missing invalid special code copy');
+if (!/Auth\.user\s*&&\s*Auth\.client[\s\S]{0,220}\.rpc\('redeem_premium_code'/.test(userAccessSource)) failures.push('Logged-in Supabase RPC redemption path missing');
+if (/service_role|supabase_service|private[_-]?key|sb_secret_/i.test(script + index)) failures.push('Service role/private key marker detected');
 
 
 // UserAccess visibility regression checks for free Rituals after Special Access gating
