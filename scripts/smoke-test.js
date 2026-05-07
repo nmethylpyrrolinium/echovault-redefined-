@@ -22,6 +22,26 @@ const societySignalsStart = script.indexOf('const SocietySignals = (() => {');
 const societySignalsEnd = societySignalsStart >= 0 ? script.indexOf('const SocietySync = (() => {', societySignalsStart) : -1;
 const societySignalsSource = societySignalsStart >= 0 && societySignalsEnd > societySignalsStart ? script.slice(societySignalsStart, societySignalsEnd) : '';
 
+const userAccessStart = script.indexOf('const UserAccess = (() => {');
+const userAccessEnd = userAccessStart >= 0 ? script.indexOf('const WrappedCinematicLoader', userAccessStart) : -1;
+const userAccessSource = userAccessStart >= 0 && userAccessEnd > userAccessStart ? script.slice(userAccessStart, userAccessEnd) : '';
+function funCardSource(fun) {
+  const marker = `data-fun="${fun}"`;
+  const markerIndex = index.indexOf(marker);
+  if (markerIndex < 0) return '';
+  const start = index.lastIndexOf('<div class="fun-card', markerIndex);
+  const next = index.indexOf('<div class="fun-card', markerIndex + marker.length);
+  return index.slice(start >= 0 ? start : markerIndex, next >= 0 ? next : markerIndex + 800);
+}
+function assertFunCard(label, fun, checks) {
+  const card = funCardSource(fun);
+  if (!card) {
+    failures.push(`${label} card missing`);
+    return;
+  }
+  checks(card);
+}
+
 // Phase 1 — Supabase/Auth/Profile/PWA checks
 if (!index.includes('window.ECHOVAULT_CONFIG')) failures.push('index.html missing window.ECHOVAULT_CONFIG');
 if (!index.includes('https://phfwaxuyauuyskzruqbk.supabase.co')) failures.push('index.html missing Supabase project URL');
@@ -160,10 +180,6 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 const sw = fs.readFileSync('sw.js','utf8');
 if (!script.includes("special-access-v4-login-press-fix")) failures.push('APP_VERSION not updated to special-access-v4-login-press-fix');
 if (!script.includes('echovault-v12-login-press-fix') && !sw.includes('echovault-v12-login-press-fix')) failures.push('Special Access cache marker missing');
-if (!script.includes("special-access-v2-rituals-wrapped-alam-ai")) failures.push('APP_VERSION not updated to special-access-v2-rituals-wrapped-alam-ai');
-if (!script.includes('echovault-v10-special-access-rituals-wrapped-alam-ai') && !sw.includes('echovault-v10-special-access-rituals-wrapped-alam-ai')) failures.push('Special Access cache marker missing');
-if (!script.includes("special-access-v1")) failures.push('APP_VERSION not updated to special-access-v1');
-if (!script.includes('echovault-v9-special-access') && !sw.includes('echovault-v9-special-access')) failures.push('Special Access cache marker missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');
 ['EchoAvatar','echovault_avatar_v1','MaterialEngine','VaultInventory','echovault_inventory_v1','GentleQuests','echovault_quests_v1','Society Gate'].forEach((marker) => {
   if (!script.includes(marker) && !index.includes(marker)) failures.push(`Missing Phase 1 marker: ${marker}`);
@@ -286,17 +302,9 @@ if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].incl
 if (!/data-fun="alam"/.test(index) || !index.includes('alam.ai')) failures.push('alam.ai Rituals portal/card missing outside Emotional Museum');
 if (!index.includes('alam-floating-portal')) failures.push('alam.ai floating standalone portal missing');
 if (!script.includes('asking for my iman')) failures.push('alam.ai full bio missing');
-// alam.chat standalone oracle checks
-if (!/data-fun="alam"/.test(index) || !index.includes('a strange little oracle terminal for your vault')) failures.push('alam.chat Rituals portal/card missing outside Emotional Museum');
-if (!index.includes('alam-floating-portal')) failures.push('alam.chat floating standalone portal missing');
-if (!script.includes('alam.chat Observatory')) failures.push('alam.chat Observatory shortcut missing from Society Gate');
-if (!script.includes('alam.chat is listening.')) failures.push('alam.chat empty state copy missing');
-if (!script.includes('alam.chat uses a pattern summary by default. Raw echoes stay private.')) failures.push('alam.chat exact privacy note missing');
 if (!script.includes('Ask alam')) failures.push('Ask alam button copy missing');
 if (!script.includes('Clear chat')) failures.push('Clear chat button copy missing');
-if (script.includes('Keep it local')) failures.push('alam.chat panel should stay minimal without Keep it local button clutter');
-if (!script.includes('connected oracle mode') || !script.includes('local oracle mode')) failures.push('alam.chat mode labels missing');
-if (!script.includes('asking for my iman')) failures.push('alam.chat full bio missing');
+if (script.includes('Keep it local')) failures.push('alam.ai panel should stay minimal without Keep it local button clutter');
 if (!script.includes('const AlamPrivacy = (() => {')) failures.push('AlamPrivacy module missing');
 ['buildSafeContext','shouldIncludeLatestEcho','stripSensitiveContext','canUseRemote'].forEach((fn) => { if (!script.includes(fn)) failures.push(`AlamPrivacy missing ${fn}`); });
 ['isRemoteAvailable','sendMessage','localReply','openChat','closeChat','appendMessage','clearChat','loadMessages','saveMessages'].forEach((fn) => { if (!script.includes(fn)) failures.push(`AlamAI missing ${fn}`); });
@@ -322,7 +330,6 @@ if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|OPENROUTER_A
   ['Local Preview Weather exists', 'Local Preview Weather'],
   ['Signal Couriers’ Route exists', 'Signal Couriers’ Route'],
   ['alam.ai standalone portal exists', 'alam.ai'],
-  ['alam.chat standalone portal exists', 'alam.chat'],
   ['Signal Courier Route exists', 'Signal Courier Route'],
   ['delivery_completed event exists', 'delivery_completed'],
   ['EchoWorldRenderer exists', 'const EchoWorldRenderer = (() => {'],
@@ -409,6 +416,64 @@ if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].incl
   ['no payment copy exists', 'not a payment']
 ].forEach(([label, marker]) => { if (!script.includes(marker) && !index.includes(marker) && !readme.includes(marker)) failures.push(`Special Access check failed: ${label}`); });
 if (/\b(stripe|razorpay|paypal|checkout|pricing page|subscription)\b/i.test(script.replace(/No checkout/gi, '').replace(/no checkout/gi, ''))) failures.push('Forbidden payment implementation detected in script');
+
+
+// UserAccess visibility regression checks for free Rituals after Special Access gating
+['old_rituals','inner_conflict','soundprint','basic_receipt','basic_wrapped','basic_profile','create_echo','timeline','universe','local_mode','export_vault','import_vault'].forEach((feature) => {
+  if (!userAccessSource.includes(`'${feature}'`)) failures.push(`Free feature list missing ${feature}`);
+});
+['emotional_museum_full','alam_chat','alam_ai','echosociety','society_gate','society_districts','signal_courier','relic_crafting','crafting_table','vault_rooms','advanced_receipts','cinematic_export_cards','artifact_archive','premium_weather_map','advanced_world_features'].forEach((feature) => {
+  if (!userAccessSource.includes(`'${feature}'`)) failures.push(`Special-only feature list missing ${feature}`);
+});
+if (!script.includes('function applyFeatureVisibility()')) failures.push('UserAccess.applyFeatureVisibility missing');
+if (!script.includes('applyFeatureVisibility();')) failures.push('refresh/update flow should apply feature visibility');
+if (!script.includes('applyFeatureVisibility, redeemAccessCode')) failures.push('UserAccess.applyFeatureVisibility should be exported');
+if (!script.includes("getFeatureAccess(feature) === 'free' || specialUnlocked")) failures.push('Feature visibility should show free features and reveal special features only after unlock');
+if (!script.includes("if (!featureKey) return 'free'")) failures.push('Cards without data-feature should default to visible');
+if (!script.includes("return 'free';") || !script.includes('const PremiumCodes')) failures.push('Unknown data-feature keys should default visible unless explicitly special-only');
+if (!script.includes('const state = applyPremiumState') || !script.includes('refreshAccessState();')) failures.push('Special Access unlock should refresh access state without reload');
+assertFunCard('Mood Receipt', 'receipt', (card) => {
+  if (!card.includes('data-feature="basic_receipt"')) failures.push('Mood Receipt card is not marked as a free basic_receipt feature');
+  if (/premium|special/i.test(card)) failures.push('Mood Receipt card should not contain visible premium/special clutter');
+});
+assertFunCard('Soundprint', 'sound', (card) => {
+  if (!card.includes('data-feature="soundprint"')) failures.push('Soundprint card should remain a free soundprint feature');
+  if (/hidden|premium_rituals|advanced_soundprint/i.test(card)) failures.push('Soundprint card is hidden or gated for free users');
+});
+assertFunCard('Inner Conflict', 'vsvs', (card) => {
+  if (!card.includes('data-feature="inner_conflict"')) failures.push('Inner Conflict card should remain a free inner_conflict feature');
+  if (/hidden|premium_rituals/i.test(card)) failures.push('Inner Conflict card is hidden or gated for free users');
+});
+assertFunCard('Shatter Softly', 'shatter', (card) => {
+  if (!card.includes('data-feature="old_rituals"')) failures.push('Shatter Softly card should remain visible as an old/free ritual');
+  if (/hidden|premium_rituals/i.test(card)) failures.push('Shatter Softly card is hidden or gated for free users');
+});
+['lantern','stormjar'].forEach((fun) => assertFunCard(fun, fun, (card) => {
+  if (!card.includes('data-feature="old_rituals"')) failures.push(`${fun} should remain visible as an old/free ritual`);
+  if (/hidden|premium_rituals/i.test(card)) failures.push(`${fun} is hidden or gated for free users`);
+}));
+assertFunCard('Emotion DNA', 'dna', (card) => {
+  if (!card.includes('data-feature="old_rituals"')) failures.push('Emotion DNA card should remain visible as an old/free ritual');
+});
+assertFunCard('Crash Report', 'crash', (card) => {
+  if (!card.includes('data-feature="old_rituals"')) failures.push('Crash Report card should remain visible as an old/free ritual');
+});
+assertFunCard('Emotional Museum full', 'museum', (card) => {
+  if (!card.includes('data-feature="emotional_museum_full"')) failures.push('Emotional Museum full should be special-only for non-special users');
+});
+assertFunCard('alam.ai', 'alam', (card) => {
+  if (!card.includes('data-feature="alam_chat"')) failures.push('alam.ai should be special-only for non-special users');
+});
+if (!index.includes('data-feature="echosociety"') && !script.includes("UserAccess.canUse('society_gate')")) failures.push('EchoSociety should be hidden/gated for non-special users');
+if (!script.includes("requirePremium('signal_courier")) failures.push('Signal Courier should be hidden/gated for non-special users');
+assertFunCard('Special Access portal', 'special-access', (card) => {
+  if (!card.includes('Special Access')) failures.push('Special Access portal should remain visible');
+  if (card.includes('data-feature=')) failures.push('Special Access portal should not be hidden by feature gating');
+});
+const funGridStart = index.indexOf('<div class="fun-grid">');
+const funGridEnd = funGridStart >= 0 ? index.indexOf('</section>', funGridStart) : -1;
+const funGridSource = funGridStart >= 0 && funGridEnd > funGridStart ? index.slice(funGridStart, funGridEnd) : '';
+if (/Premium/.test(funGridSource)) failures.push('Visible Premium clutter added to Ritual cards');
 
 // Runtime reliability checks for rituals, Wrapped, and Soundprints
 if (!/function buildMuseum\s*\(/.test(script) || !script.includes('museum:buildMuseum')) failures.push('Emotional Museum builder missing or not mapped from data-fun="museum"');
