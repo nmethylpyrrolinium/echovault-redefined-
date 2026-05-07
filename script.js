@@ -372,12 +372,18 @@ const UserAccess = (() => {
   const TIERS = ['free', 'premium', 'founder', 'alpha'];
   const PREMIUM_TIERS = ['premium', 'founder', 'alpha'];
   const FREE_FEATURES = new Set([
-    'create_echo','timeline','universe','basic_profile','basic_receipt','export_vault','import_vault','basic_wrapped','local_mode','auth','inner_conflict','soundprint','old_rituals','basic_avatar','basic_materials','basic_rituals_preview'
+    'old_rituals','inner_conflict','soundprint','basic_receipt','basic_wrapped','basic_profile','create_echo','timeline','universe','local_mode','export_vault','import_vault','auth','basic_avatar','basic_materials','basic_rituals_preview'
   ]);
   const PREMIUM_FEATURES = new Set([
-    'emotional_museum_full','relic_crafting','crafting_table','vault_rooms','echo_avatar_progression','advanced_receipts','cinematic_export_cards','artifact_archive','echosociety','society_gate','society_districts','signal_courier','alam_chat','advanced_soundprint','premium_weather_map','advanced_world_features','premium_rituals','premium_artifact_frames','advanced_wrapped'
+    'emotional_museum_full','alam_chat','alam_ai','echosociety','society_gate','society_districts','signal_courier','relic_crafting','crafting_table','vault_rooms','echo_avatar_progression','advanced_receipts','cinematic_export_cards','artifact_archive','advanced_soundprint','premium_weather_map','advanced_world_features','premium_rituals','premium_artifact_frames','advanced_wrapped'
   ]);
   const FEATURE_ACCESS = [...FREE_FEATURES].reduce((map, key) => ({ ...map, [key]:'free' }), [...PREMIUM_FEATURES].reduce((map, key) => ({ ...map, [key]:'premium' }), {}));
+  function getFeatureAccess(featureKey) {
+    if (!featureKey) return 'free';
+    if (FREE_FEATURES.has(featureKey)) return 'free';
+    if (PREMIUM_FEATURES.has(featureKey)) return 'premium';
+    return 'free';
+  }
 
   const PremiumCodes = (() => {
     function normalize(code) { return String(code || '').trim().toUpperCase(); }
@@ -459,14 +465,14 @@ const UserAccess = (() => {
   function getTier() { refreshAccessState(); return current.tier; }
   function getSource() { refreshAccessState(); return current.source; }
   function canUse(featureKey) {
-    const required = FEATURE_ACCESS[featureKey] || 'premium';
+    const required = getFeatureAccess(featureKey);
     if (required === 'free') return true;
     refreshAccessState();
     return isPremium();
   }
   function getLockedCopy(featureKey) {
     const names = {
-      emotional_museum_full:'special museum rooms', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'deeper vault rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'cinematic receipt tools', cinematic_export_cards:'cinematic export cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.chat', advanced_soundprint:'advanced soundprint', premium_rituals:'deeper rituals', premium_weather_map:'deeper Weather Map', premium_artifact_frames:'artifact frames', advanced_wrapped:'Advanced Wrapped'
+      emotional_museum_full:'special museum rooms', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'deeper vault rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'cinematic receipt tools', cinematic_export_cards:'cinematic export cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.ai', alam_ai:'alam.ai', advanced_soundprint:'advanced soundprint', premium_rituals:'deeper rituals', premium_weather_map:'deeper Weather Map', premium_artifact_frames:'artifact frames', advanced_wrapped:'Advanced Wrapped'
     };
     const title = names[featureKey] || 'special room';
     return { title, eyebrow:'Special Access', body:'Some parts of the vault open differently. Enter your special code to reveal deeper rooms.', cta:'Enter special code' };
@@ -540,14 +546,11 @@ const UserAccess = (() => {
     const copy = getLockedCopy(featureKey);
     return `<section class="special-access-card" data-special-feature="${escapeHTML(featureKey)}"><div class="special-kicker">✦ ${escapeHTML(copy.eyebrow)}</div><h4>${escapeHTML(copy.title)}</h4><p>${escapeHTML(copy.body)}</p><button class="receipt-action-btn special-access-open premium-settings-btn" type="button">${escapeHTML(copy.cta)}</button></section>`;
   }
-  function updatePremiumUI() {
-    const status = document.getElementById('premium-access-status');
-    if (status) status.innerHTML = `Current access: <b>${escapeHTML(current.tier === 'free' ? 'Free' : current.tier === 'founder' ? 'Founder' : current.tier === 'alpha' ? 'Alpha' : 'Special')}</b>${location.search.includes('debug=1') ? `<br>Source: <b>${escapeHTML(current.source)}</b>` : ''}`;
-    const chip = document.getElementById('premium-chip');
-    if (chip) chip.textContent = isPremium() ? 'Special Access active' : 'Free Vault';
+  function applyFeatureVisibility() {
+    const specialUnlocked = isPremium();
     document.querySelectorAll('[data-feature]').forEach((el) => {
       const feature = el.getAttribute('data-feature');
-      let visible = (FEATURE_ACCESS[feature] || 'premium') === 'free' || isPremium();
+      let visible = getFeatureAccess(feature) === 'free' || specialUnlocked;
       const ritualId = el.getAttribute('data-fun');
       if (visible && ritualId && ritualId !== 'special-access') {
         try { if (typeof Rituals !== 'undefined' && Rituals.hasBuilder && !Rituals.hasBuilder(ritualId)) visible = false; } catch {}
@@ -555,6 +558,13 @@ const UserAccess = (() => {
       el.hidden = !visible;
       el.classList.toggle('special-hidden', !visible);
     });
+  }
+  function updatePremiumUI() {
+    const status = document.getElementById('premium-access-status');
+    if (status) status.innerHTML = `Current access: <b>${escapeHTML(current.tier === 'free' ? 'Free' : current.tier === 'founder' ? 'Founder' : current.tier === 'alpha' ? 'Alpha' : 'Special')}</b>${location.search.includes('debug=1') ? `<br>Source: <b>${escapeHTML(current.source)}</b>` : ''}`;
+    const chip = document.getElementById('premium-chip');
+    if (chip) chip.textContent = isPremium() ? 'Special Access active' : 'Free Vault';
+    applyFeatureVisibility();
     document.querySelectorAll('.special-access-entry').forEach((el) => {
       el.classList.toggle('is-active', isPremium());
       const title = el.querySelector('.fun-card-title');
@@ -567,7 +577,7 @@ const UserAccess = (() => {
       if (wrap) wrap.hidden = !location.search.includes('debug=1');
     });
   }
-  return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, redeemAccessCode, lockedHTML, FEATURE_ACCESS, PremiumCodes, KEY };
+  return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, applyFeatureVisibility, redeemAccessCode, lockedHTML, FEATURE_ACCESS, PremiumCodes, KEY };
 })();
 
 
@@ -832,7 +842,6 @@ const Settings = (() => {
     document.getElementById('society-export-signals-btn')?.addEventListener('click', () => SocietySignals.exportSignals());
     document.getElementById('alam-clear-chat-btn')?.addEventListener('click', () => { AlamAI.clearChat(); populateSocietyPrivacy(); });
     document.getElementById('alam-include-latest-setting')?.addEventListener('change', (event) => { writeLocalJSON('echovault_alam_ai_settings_v1', { ...readLocalJSON('echovault_alam_ai_settings_v1', {}), includeLatestEcho:event.target.checked }); Toast.show(event.target.checked ? 'alam.ai can include latest echo summary when you ask.' : 'alam.ai latest echo sharing is off.'); });
-    document.getElementById('alam-include-latest-setting')?.addEventListener('change', (event) => { writeLocalJSON('echovault_alam_ai_settings_v1', { ...readLocalJSON('echovault_alam_ai_settings_v1', {}), includeLatestEcho:event.target.checked }); Toast.show(event.target.checked ? 'alam.chat can include latest echo summary when you ask.' : 'alam.chat latest echo sharing is off.'); });
     document.querySelectorAll('.special-access-open').forEach(btn => btn.addEventListener('click', () => SpecialAccessPortal.open()));
     document.getElementById('premium-redeem-btn')?.addEventListener('click', async () => {
       const input = document.getElementById('premium-access-code');
@@ -3242,27 +3251,7 @@ asking for my iman`;
   function openChat(){
     if(!UserAccess.requirePremium('alam_chat', { openSettings:true })) return;
     if(!document.getElementById('alam-ai-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-ai-panel" id="alam-ai-panel" role="dialog" aria-modal="true" aria-label="alam.ai"><div class="alam-ai-card"><header class="alam-ai-head"><div><h3>alam.ai</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div id="alam-message-list" class="alam-message-list"></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask alam…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
-    list.scrollTo(0,list.scrollHeight);
-  }
-  function renderPortal(){
-    return `<section class="alam-portal" id="alam-portal"><div class="alam-orb"><span>alam</span></div><div><h4>alam.ai</h4><pre>${escapeHTML(bio)}</pre><button class="receipt-action-btn" id="alam-open-btn">Ask alam</button></div></section>`;
-  }
-  function openChat(){
-    if(!UserAccess.requirePremium('alam_chat', { openSettings:true })) return;
-    if(!document.getElementById('alam-ai-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-ai-panel" id="alam-ai-panel" role="dialog" aria-modal="true" aria-label="alam.ai"><div class="alam-ai-card"><header class="alam-ai-head"><div><h3>alam.ai</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div id="alam-message-list" class="alam-message-list"></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask alam…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
-    list.innerHTML=arr.map(m=>`<div class="alam-msg ${escapeHTML(m.role)}"><b>${escapeHTML(m.role)}</b><p>${escapeHTML(m.text)}</p></div>`).join('') || '<p class="alam-empty">alam.chat is listening.</p>';
-    list.scrollTo(0,list.scrollHeight);
-  }
-  function renderPortal(){
-    return `<section class="alam-portal" id="alam-portal"><div class="alam-orb"><span>alam</span></div><div><h4>alam.chat</h4><pre>${escapeHTML(bio)}</pre><p class="alam-status">${currentMode()}</p><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><button class="receipt-action-btn" id="alam-open-btn">Ask alam</button></div></section>`;
-  }
-  function openChat(){
-    if(!UserAccess.requirePremium('alam_chat', { openSettings:true })) return;
-    if(!document.getElementById('alam-chat-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-chat-panel" id="alam-chat-panel" role="dialog" aria-modal="true" aria-label="alam.chat"><div class="alam-chat-card"><header class="alam-chat-head"><div><h3>alam.chat</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div class="alam-mode-row"><p class="alam-status" id="alam-mode-badge">${currentMode()}</p></div><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><div id="alam-message-list" class="alam-message-list"></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask alam…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
     document.body.style.overflow='hidden';
-    const settings=readLocalJSON(settingsKey,{includeLatestEcho:false});
-    const latest=document.getElementById('alam-include-latest');
-    if(latest) latest.checked=Boolean(settings.includeLatestEcho);
     bindChat();
     renderMessages();
     setTimeout(()=>document.getElementById('alam-input')?.focus(), 40);
@@ -3449,7 +3438,7 @@ const Rituals = (() => {
   function open(type) {
     if (type === 'special-access') { SpecialAccessPortal.open(); return; }
     if (type === 'alam') { if (UserAccess.requirePremium('alam_chat')) AlamAI.openChat(); return; }
-    const premiumRitualMap = { museum:'emotional_museum_full', lantern:'old_rituals', stormjar:'old_rituals', dna:'advanced_receipts', crash:'advanced_receipts', sound:'soundprint', vsvs:'inner_conflict', shatter:'premium_rituals' };
+    const premiumRitualMap = { museum:'emotional_museum_full', lantern:'old_rituals', stormjar:'old_rituals', receipt:'basic_receipt', dna:'old_rituals', crash:'old_rituals', sound:'soundprint', vsvs:'inner_conflict', shatter:'old_rituals' };
     if (premiumRitualMap[type] && !UserAccess.requirePremium(premiumRitualMap[type], { openSettings:true })) return;
     const builders = getBuilders();
     const fn = builders[type];
