@@ -154,6 +154,8 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 
 // Phase 1 game/community foundation checks
 const sw = fs.readFileSync('sw.js','utf8');
+if (!script.includes("special-access-v2-rituals-wrapped-alam-ai")) failures.push('APP_VERSION not updated to special-access-v2-rituals-wrapped-alam-ai');
+if (!script.includes('echovault-v10-special-access-rituals-wrapped-alam-ai') && !sw.includes('echovault-v10-special-access-rituals-wrapped-alam-ai')) failures.push('Special Access cache marker missing');
 if (!script.includes("special-access-v1")) failures.push('APP_VERSION not updated to special-access-v1');
 if (!script.includes('echovault-v9-special-access') && !sw.includes('echovault-v9-special-access')) failures.push('Special Access cache marker missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');
@@ -274,6 +276,10 @@ if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].incl
 
 
 
+// alam.ai standalone oracle checks
+if (!/data-fun="alam"/.test(index) || !index.includes('alam.ai')) failures.push('alam.ai Rituals portal/card missing outside Emotional Museum');
+if (!index.includes('alam-floating-portal')) failures.push('alam.ai floating standalone portal missing');
+if (!script.includes('asking for my iman')) failures.push('alam.ai full bio missing');
 // alam.chat standalone oracle checks
 if (!/data-fun="alam"/.test(index) || !index.includes('a strange little oracle terminal for your vault')) failures.push('alam.chat Rituals portal/card missing outside Emotional Museum');
 if (!index.includes('alam-floating-portal')) failures.push('alam.chat floating standalone portal missing');
@@ -288,13 +294,15 @@ if (!script.includes('asking for my iman')) failures.push('alam.chat full bio mi
 if (!script.includes('const AlamPrivacy = (() => {')) failures.push('AlamPrivacy module missing');
 ['buildSafeContext','shouldIncludeLatestEcho','stripSensitiveContext','canUseRemote'].forEach((fn) => { if (!script.includes(fn)) failures.push(`AlamPrivacy missing ${fn}`); });
 ['isRemoteAvailable','sendMessage','localReply','openChat','closeChat','appendMessage','clearChat','loadMessages','saveMessages'].forEach((fn) => { if (!script.includes(fn)) failures.push(`AlamAI missing ${fn}`); });
-if ((index + readme).includes('Alam AI')) failures.push('User-facing Alam AI text should be alam.chat');
-if (script.includes('Include raw echoes') && !script.includes('Raw echoes — not available.')) failures.push('Raw echoes toggle is enabled or not disabled');
+if (!index.includes('alam.ai') || !script.includes('alam.ai')) failures.push('alam.ai visible branding missing');
+if ((index + script + style).includes('alam.chat')) failures.push('alam.chat visible branding should be removed');
+if ((index + script).includes('local oracle mode') || (index + script).includes('connected oracle mode')) failures.push('oracle mode labels should not be visible');
+if ((index + script).includes('alam.ai is listening')) failures.push('alam.ai empty-state clutter should not be visible');
 if (!script.includes('includeLatestEcho:false')) failures.push('latest echo summary should default OFF');
-if (!script.includes('ALAM_AI_ENDPOINT')) failures.push('ALAM_AI_ENDPOINT config marker missing');
+if (!script.includes('ALAM_AI_ENDPOINT') || !index.includes('ALAM_AI_ENDPOINT')) failures.push('ALAM_AI_ENDPOINT config marker missing');
 if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|OPENROUTER_API_KEY|GEMINI_API_KEY|OPENAI_API_KEY|HUGGINGFACE_API_KEY/.test(script + index + readme)) failures.push('Hardcoded AI API key or secret marker detected');
 
-// EchoSociety World Expansion + alam.chat portal checks
+// EchoSociety World Expansion + alam.ai portal checks
 [
   ['SocietySync exists', 'const SocietySync = (() => {'],
   ['SocietyPrivacy exists', 'const SocietyPrivacy = (() => {'],
@@ -307,6 +315,7 @@ if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|OPENROUTER_A
   ['Live Society Weather exists', 'Live Society Weather'],
   ['Local Preview Weather exists', 'Local Preview Weather'],
   ['Signal Couriers’ Route exists', 'Signal Couriers’ Route'],
+  ['alam.ai standalone portal exists', 'alam.ai'],
   ['alam.chat standalone portal exists', 'alam.chat'],
   ['Signal Courier Route exists', 'Signal Courier Route'],
   ['delivery_completed event exists', 'delivery_completed'],
@@ -314,12 +323,12 @@ if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|OPENROUTER_A
   ['Canvas 2D fallback exists', 'canvas2dFallback'],
   ['WebGL optional path is guarded', 'hasWebGL'],
   ['AlamAI exists', 'const AlamAI = (() => {'],
-  ['alam.chat text exists', 'alam.chat'],
+  ['alam.ai text exists', 'alam.ai'],
   ['Alam bio exists', 'what in the fiqh'],
   ['ALAM_AI_ENDPOINT exists', 'ALAM_AI_ENDPOINT'],
   ['Alam chat key exists', 'echovault_alam_ai_chat_v1'],
   ['localReply exists', 'localReply'],
-  ['alam.chat local fallback exists', 'alam.chat stayed local.'],
+  ['alam.ai fallback toast exists', 'alam.ai is ready.'],
   ['Echo Circles placeholder exists', 'Echo Circles'],
   ['auth-local-btn still exists', 'auth-local-btn'],
   ['echovault_echoes_v2 still exists', 'echovault_echoes_v2'],
@@ -349,7 +358,7 @@ if (!(script.includes('SocietySync.fetchDailyWeather()') || script.includes('Soc
   if (!re.test(script)) failures.push(`${fn} missing explicit SocietySignals.getConsent guard`);
 });
 if (!script.includes('society-stay-private-btn') || !(script.includes('city.hidden=true') || script.includes('updateSocietyConsentUI({ privateState:true })'))) failures.push('society-stay-private-btn handler does not immediately hide/disable society-city');
-['Ask alam','local oracle mode','connected oracle mode'].forEach((marker) => { if (!script.includes(marker) && !index.includes(marker)) failures.push(`alam.chat UI marker missing: ${marker}`); });
+['Ask alam','alam.ai'].forEach((marker) => { if (!script.includes(marker) && !index.includes(marker)) failures.push(`alam.ai UI marker missing: ${marker}`); });
 
 if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}/.test(script + index)) failures.push('Hardcoded AI API key detected');
 ['bro this is not a crisis arc','your silence is doing pushups','you’re not empty, you’re buffering','put the thought down like a heavy bag'].forEach((sample) => { if ((index + readme).includes(sample)) failures.push(`Canned local reply example should not be present in README/index static text: ${sample}`); });
@@ -390,6 +399,29 @@ if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte'].incl
   ['Inner Conflict remains free', 'inner_conflict'],
   ['Soundprint remains free', 'soundprint'],
   ['old Rituals remain free', 'old_rituals'],
+  ['alam.ai gated for non-special users', "requirePremium('alam_chat"],
+  ['no payment copy exists', 'not a payment']
+].forEach(([label, marker]) => { if (!script.includes(marker) && !index.includes(marker) && !readme.includes(marker)) failures.push(`Special Access check failed: ${label}`); });
+if (/\b(stripe|razorpay|paypal|checkout|pricing page|subscription)\b/i.test(script.replace(/No checkout/gi, '').replace(/no checkout/gi, ''))) failures.push('Forbidden payment implementation detected in script');
+
+// Runtime reliability checks for rituals, Wrapped, and Soundprints
+if (!/function buildMuseum\s*\(/.test(script) || !script.includes('museum:buildMuseum')) failures.push('Emotional Museum builder missing or not mapped from data-fun="museum"');
+if (!script.includes('museumFallbackHTML') || script.includes('<h3>Ritual unavailable</h3>')) failures.push('Museum should not use generic Ritual unavailable fallback');
+if (!script.includes('hasBuilder(type)') || !script.includes('Rituals.hasBuilder')) failures.push('Ritual card gating should verify builders exist');
+if (!script.includes('WrappedCinematicLoader') || !script.includes('ensureLoaded') || !script.includes('openIfAvailable')) failures.push('Wrapped cinematic loader/guard missing');
+if (!script.includes('Wrapped.render();') || !script.includes('falling back to standard Wrapped')) failures.push('Wrapped fallback render missing');
+if (!index.includes('nav-wrapped')) failures.push('nav-wrapped missing');
+if (!script.includes('getSoundprintForEcho')) failures.push('getSoundprintForEcho missing');
+const soundBlock = script.slice(script.indexOf('const SOUNDPRINTS = {'), script.indexOf('function getSoundprintForEcho'));
+['calm','chaos','reflective','anxious','joyful','empty'].forEach((family, idx, arr) => {
+  const start = soundBlock.indexOf(`${family}:[`);
+  const nextFamily = arr[idx + 1];
+  const end = nextFamily ? soundBlock.indexOf(`${nextFamily}:[`, start + family.length) : soundBlock.length;
+  const familySource = start >= 0 && end > start ? soundBlock.slice(start, end) : '';
+  const count = (familySource.match(/song:/g) || []).length;
+  if (count < 10) failures.push(`SOUNDPRINTS.${family} should include at least 10 songs`);
+});
+['purpose:', 'intensity:', 'silence:'].forEach((marker) => { if (!soundBlock.includes(marker)) failures.push(`Soundprint song objects missing ${marker}`); });
   ['alam.chat gated for non-special users', "requirePremium('alam_chat"],
   ['no payment copy exists', 'not a payment']
 ].forEach(([label, marker]) => { if (!script.includes(marker) && !index.includes(marker) && !readme.includes(marker)) failures.push(`Special Access check failed: ${label}`); });
@@ -401,6 +433,7 @@ newMoods.forEach((mood) => {
 });
 if (!script.includes('MOOD_FAMILIES') || !script.includes('function moodFamily')) failures.push('mood family mapping exists check failed');
 if (/hello\s*kitty|sanrio/i.test(script + index + style)) failures.push('Copyrighted Hello Kitty/Sanrio asset reference detected');
+if (/\b(stripe|razorpay|paypal|payment dependency|checkout|pricing page|subscription)\b/i.test(JSON.stringify(deps))) failures.push('Forbidden payment dependency detected');
 if (/stripe|razorpay|paypal|payment dependency|checkout|pricing page|subscription/i.test(JSON.stringify(deps))) failures.push('Forbidden payment dependency detected');
 if (Object.keys(deps).some((d) => ['react','vue','angular','next','svelte','tailwindcss','three'].includes(d))) failures.push('Heavy framework dependency added unexpectedly');
 
