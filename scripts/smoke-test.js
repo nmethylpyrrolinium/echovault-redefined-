@@ -444,11 +444,17 @@ if (/service_role|supabase_service|private[_-]?key|sb_secret_/i.test(script + in
 
 
 // UserAccess visibility regression checks for free Rituals after Special Access gating
-['old_rituals','inner_conflict','soundprint','basic_receipt','basic_wrapped','basic_profile','create_echo','timeline','universe','local_mode','export_vault','import_vault'].forEach((feature) => {
+['old_rituals','inner_conflict','soundprint','basic_receipt','basic_wrapped','emotion_dna','crash_report','shatter_softly','basic_profile','create_echo','timeline','universe','local_mode','export_vault','import_vault'].forEach((feature) => {
   if (!userAccessSource.includes(`'${feature}'`)) failures.push(`Free feature list missing ${feature}`);
 });
-['emotional_museum_full','alam_chat','alam_ai','echosociety','society_gate','society_districts','signal_courier','relic_crafting','crafting_table','vault_rooms','advanced_receipts','cinematic_export_cards','artifact_archive','premium_weather_map','advanced_world_features'].forEach((feature) => {
+['emotional_museum_full','alam_chat','alam_ai','echosociety','society_gate','society_districts','signal_courier','relic_crafting','crafting_table','vault_rooms','advanced_receipts','cinematic_export_cards','artifact_archive','premium_weather_map','advanced_world_features','premium_rituals','void_lantern','storm_jar'].forEach((feature) => {
   if (!userAccessSource.includes(`'${feature}'`)) failures.push(`Special-only feature list missing ${feature}`);
+});
+const freeFeatureBlock = userAccessSource.slice(userAccessSource.indexOf('const FREE_FEATURES'), userAccessSource.indexOf('const PREMIUM_FEATURES'));
+const premiumFeatureBlock = userAccessSource.slice(userAccessSource.indexOf('const PREMIUM_FEATURES'), userAccessSource.indexOf('const FEATURE_ACCESS'));
+['void_lantern','storm_jar'].forEach((feature) => {
+  if (freeFeatureBlock.includes(`'${feature}'`)) failures.push(`${feature} must not be in free features`);
+  if (!premiumFeatureBlock.includes(`'${feature}'`)) failures.push(`${feature} must be in Special Access features`);
 });
 if (!script.includes('function applyFeatureVisibility()')) failures.push('UserAccess.applyFeatureVisibility missing');
 if (!script.includes('applyFeatureVisibility();')) failures.push('refresh/update flow should apply feature visibility');
@@ -457,6 +463,7 @@ if (!script.includes("getFeatureAccess(feature) === 'free' || specialUnlocked"))
 if (!script.includes("if (!featureKey) return 'free'")) failures.push('Cards without data-feature should default to visible');
 if (!script.includes("return 'free';") || !script.includes('const PremiumCodes')) failures.push('Unknown data-feature keys should default visible unless explicitly special-only');
 if (!script.includes('const state = applyPremiumState') || !script.includes('refreshAccessState();')) failures.push('Special Access unlock should refresh access state without reload');
+if (!script.includes("lantern:'void_lantern'") || !script.includes("stormjar:'storm_jar'")) failures.push('Void Lantern and Storm Jar builders should be gated behind Special Access feature keys');
 assertFunCard('Mood Receipt', 'receipt', (card) => {
   if (!card.includes('data-feature="basic_receipt"')) failures.push('Mood Receipt card is not marked as a free basic_receipt feature');
   if (/premium|special/i.test(card)) failures.push('Mood Receipt card should not contain visible premium/special clutter');
@@ -470,18 +477,26 @@ assertFunCard('Inner Conflict', 'vsvs', (card) => {
   if (/hidden|premium_rituals/i.test(card)) failures.push('Inner Conflict card is hidden or gated for free users');
 });
 assertFunCard('Shatter Softly', 'shatter', (card) => {
-  if (!card.includes('data-feature="old_rituals"')) failures.push('Shatter Softly card should remain visible as an old/free ritual');
-  if (/hidden|premium_rituals/i.test(card)) failures.push('Shatter Softly card is hidden or gated for free users');
+  if (!card.includes('data-feature="shatter_softly"')) failures.push('Shatter Softly card should remain visible as a free shatter_softly feature');
+  if (/hidden|premium_rituals|void_lantern|storm_jar/i.test(card)) failures.push('Shatter Softly card is hidden or gated for free users');
 });
-['lantern','stormjar'].forEach((fun) => assertFunCard(fun, fun, (card) => {
-  if (!card.includes('data-feature="old_rituals"')) failures.push(`${fun} should remain visible as an old/free ritual`);
-  if (/hidden|premium_rituals/i.test(card)) failures.push(`${fun} is hidden or gated for free users`);
-}));
+assertFunCard('Void Lantern', 'lantern', (card) => {
+  if (!card.includes('data-feature="void_lantern"')) failures.push('Void Lantern should be gated by the void_lantern Special Access feature');
+  if (card.includes('data-feature="old_rituals"')) failures.push('Void Lantern must not be free/old_rituals');
+  if (!card.includes('hidden')) failures.push('Void Lantern should be hidden from free users by default');
+  if (/premium badge|locked premium|special badge/i.test(card)) failures.push('Void Lantern card should be hidden, not decorated with locked premium clutter');
+});
+assertFunCard('Storm Jar', 'stormjar', (card) => {
+  if (!card.includes('data-feature="storm_jar"')) failures.push('Storm Jar should be gated by the storm_jar Special Access feature');
+  if (card.includes('data-feature="old_rituals"')) failures.push('Storm Jar must not be free/old_rituals');
+  if (!card.includes('hidden')) failures.push('Storm Jar should be hidden from free users by default');
+  if (/premium badge|locked premium|special badge/i.test(card)) failures.push('Storm Jar card should be hidden, not decorated with locked premium clutter');
+});
 assertFunCard('Emotion DNA', 'dna', (card) => {
-  if (!card.includes('data-feature="old_rituals"')) failures.push('Emotion DNA card should remain visible as an old/free ritual');
+  if (!card.includes('data-feature="emotion_dna"')) failures.push('Emotion DNA card should remain visible as a free emotion_dna feature');
 });
 assertFunCard('Crash Report', 'crash', (card) => {
-  if (!card.includes('data-feature="old_rituals"')) failures.push('Crash Report card should remain visible as an old/free ritual');
+  if (!card.includes('data-feature="crash_report"')) failures.push('Crash Report card should remain visible as a free crash_report feature');
 });
 assertFunCard('Emotional Museum full', 'museum', (card) => {
   if (!card.includes('data-feature="emotional_museum_full"')) failures.push('Emotional Museum full should be special-only for non-special users');

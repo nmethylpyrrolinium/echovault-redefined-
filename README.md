@@ -54,6 +54,6 @@ Notes:
 
 ## Special Access codes
 
-EchoVault includes a local-first Special Access system. This is not a payment, subscription, pricing, or public purchase flow. Core vault ownership stays free: existing echoes, echo creation, local mode, auth, export, import, basic profile, timeline/universe, free rituals, Inner Conflict, Soundprint, and basic receipts are never gated.
+EchoVault includes a local-first Special Access system. This is not a payment, subscription, pricing, or public purchase flow. Core vault ownership stays free: existing echoes, echo creation, local mode, auth, export, import, basic profile, timeline/universe, Mood Receipt, Echo Soundprint, Inner Conflict, Crash Report, Emotion DNA, Shatter Softly, and Basic Wrapped are never gated. Void Lantern and Storm Jar are Special Access rituals.
 
 Access state is stored under `echovault_access_v1` and can be unlocked with manually granted codes. Production code redemption uses the Supabase `redeem_premium_code` RPC when a user is logged in, while local mode validates starter codes without exposing them in the UI.

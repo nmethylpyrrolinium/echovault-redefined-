@@ -372,10 +372,10 @@ const UserAccess = (() => {
   const TIERS = ['free', 'premium', 'founder', 'alpha'];
   const PREMIUM_TIERS = ['premium', 'founder', 'alpha'];
   const FREE_FEATURES = new Set([
-    'old_rituals','inner_conflict','soundprint','basic_receipt','basic_wrapped','basic_profile','create_echo','timeline','universe','local_mode','export_vault','import_vault','auth','basic_avatar','basic_materials','basic_rituals_preview'
+    'old_rituals','inner_conflict','soundprint','basic_receipt','basic_wrapped','emotion_dna','crash_report','shatter_softly','basic_profile','create_echo','timeline','universe','local_mode','export_vault','import_vault','auth','basic_avatar','basic_materials','basic_rituals_preview'
   ]);
   const PREMIUM_FEATURES = new Set([
-    'emotional_museum_full','alam_chat','alam_ai','echosociety','society_gate','society_districts','signal_courier','relic_crafting','crafting_table','vault_rooms','echo_avatar_progression','advanced_receipts','cinematic_export_cards','artifact_archive','advanced_soundprint','premium_weather_map','advanced_world_features','premium_rituals','premium_artifact_frames','advanced_wrapped'
+    'emotional_museum_full','alam_chat','alam_ai','echosociety','society_gate','society_districts','signal_courier','relic_crafting','crafting_table','vault_rooms','echo_avatar_progression','advanced_receipts','cinematic_export_cards','artifact_archive','advanced_soundprint','premium_weather_map','advanced_world_features','premium_rituals','void_lantern','storm_jar','premium_artifact_frames','advanced_wrapped'
   ]);
   const FEATURE_ACCESS = [...FREE_FEATURES].reduce((map, key) => ({ ...map, [key]:'free' }), [...PREMIUM_FEATURES].reduce((map, key) => ({ ...map, [key]:'premium' }), {}));
   function getFeatureAccess(featureKey) {
@@ -474,7 +474,7 @@ const UserAccess = (() => {
   }
   function getLockedCopy(featureKey) {
     const names = {
-      emotional_museum_full:'special museum rooms', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'deeper vault rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'cinematic receipt tools', cinematic_export_cards:'cinematic export cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.ai', alam_ai:'alam.ai', advanced_soundprint:'advanced soundprint', premium_rituals:'deeper rituals', premium_weather_map:'deeper Weather Map', premium_artifact_frames:'artifact frames', advanced_wrapped:'Advanced Wrapped'
+      emotional_museum_full:'special museum rooms', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'deeper vault rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'cinematic receipt tools', cinematic_export_cards:'cinematic export cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.ai', alam_ai:'alam.ai', advanced_soundprint:'advanced soundprint', premium_rituals:'deeper rituals', premium_weather_map:'deeper Weather Map', premium_artifact_frames:'artifact frames', advanced_wrapped:'Advanced Wrapped', void_lantern:'Void Lantern', storm_jar:'Storm Jar'
     };
     const title = names[featureKey] || 'special room';
     return { title, eyebrow:'Special Access', body:'Some parts of the vault open differently. Enter your special code to reveal deeper rooms.', cta:'Enter special code' };
@@ -3441,7 +3441,7 @@ const Rituals = (() => {
   function open(type) {
     if (type === 'special-access') { SpecialAccessPortal.open(); return; }
     if (type === 'alam') { if (UserAccess.requirePremium('alam_chat')) AlamAI.openChat(); return; }
-    const premiumRitualMap = { museum:'emotional_museum_full', lantern:'old_rituals', stormjar:'old_rituals', receipt:'basic_receipt', dna:'old_rituals', crash:'old_rituals', sound:'soundprint', vsvs:'inner_conflict', shatter:'old_rituals' };
+    const premiumRitualMap = { museum:'emotional_museum_full', lantern:'void_lantern', stormjar:'storm_jar', receipt:'basic_receipt', dna:'emotion_dna', crash:'crash_report', sound:'soundprint', vsvs:'inner_conflict', shatter:'shatter_softly' };
     if (premiumRitualMap[type] && !UserAccess.requirePremium(premiumRitualMap[type], { openSettings:true })) return;
     const builders = getBuilders();
     const fn = builders[type];
