@@ -3,10 +3,6 @@
 
 const APP_VERSION = 'special-access-v4-login-press-fix';
 const SW_CACHE_VERSION = 'echovault-v12-login-press-fix';
-const APP_VERSION = 'special-access-v2-rituals-wrapped-alam-ai';
-const SW_CACHE_VERSION = 'echovault-v10-special-access-rituals-wrapped-alam-ai';
-const APP_VERSION = 'special-access-v1';
-const SW_CACHE_VERSION = 'echovault-v9-special-access';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
@@ -384,14 +380,26 @@ const UserAccess = (() => {
   const FEATURE_ACCESS = [...FREE_FEATURES].reduce((map, key) => ({ ...map, [key]:'free' }), [...PREMIUM_FEATURES].reduce((map, key) => ({ ...map, [key]:'premium' }), {}));
 
   const PremiumCodes = (() => {
-    const STARTER_CODES = {
-      'ECHO-FOUNDERS-2026': { tier:'founder', label:'founders code' },
-      'VAULT-ALPHA': { tier:'alpha', label:'alpha code' },
-      'NIGHT-ARCHIVIST': { tier:'premium', label:'night archivist code' }
-    };
     function normalize(code) { return String(code || '').trim().toUpperCase(); }
-    function lookup(code) { return STARTER_CODES[normalize(code)] || null; }
-    return { STARTER_CODES, normalize, lookup };
+    function getHashes() {
+      const hashes = window.ECHOVAULT_CONFIG?.ACCESS_CODE_HASHES || {};
+      return hashes && typeof hashes === 'object' && !Array.isArray(hashes) ? hashes : {};
+    }
+    function normalizeHashPayload(payload) {
+      if (!payload) return null;
+      if (typeof payload === 'string') return { tier:payload, label:'hashed local code' };
+      if (payload === true) return { tier:'premium', label:'hashed local code' };
+      if (typeof payload === 'object') return { tier:payload.tier || payload.premium_tier || payload.access_tier || 'premium', label:payload.label || 'hashed local code', premium_expires_at:payload.premium_expires_at || payload.expires_at || null };
+      return null;
+    }
+    async function lookupLocalHash(code) {
+      const normalized = normalize(code);
+      if (!normalized) return null;
+      const hashes = getHashes();
+      const digest = await hashCode(normalized);
+      return normalizeHashPayload(hashes[digest] || hashes[digest.toUpperCase()]);
+    }
+    return { normalize, lookupLocalHash };
   })();
   let current = { tier:'free', source:'free', updated_at:new Date().toISOString() };
 
@@ -458,7 +466,6 @@ const UserAccess = (() => {
   }
   function getLockedCopy(featureKey) {
     const names = {
-      emotional_museum_full:'special museum rooms', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'deeper vault rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'cinematic receipt tools', cinematic_export_cards:'cinematic export cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.ai', advanced_soundprint:'advanced soundprint', premium_rituals:'deeper rituals', premium_weather_map:'deeper Weather Map', premium_artifact_frames:'artifact frames', advanced_wrapped:'Advanced Wrapped'
       emotional_museum_full:'special museum rooms', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'deeper vault rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'cinematic receipt tools', cinematic_export_cards:'cinematic export cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.chat', advanced_soundprint:'advanced soundprint', premium_rituals:'deeper rituals', premium_weather_map:'deeper Weather Map', premium_artifact_frames:'artifact frames', advanced_wrapped:'Advanced Wrapped'
     };
     const title = names[featureKey] || 'special room';
@@ -498,7 +505,7 @@ const UserAccess = (() => {
   async function redeemAccessCode(code) {
     const normalizedCode = PremiumCodes.normalize(code);
     if (!normalizedCode) return { ok:false, error:'Enter your special code.' };
-    let matched = PremiumCodes.lookup(normalizedCode);
+    let matched = null;
     let source = 'local_code';
     let cloudWarning = false;
     if (Auth.user && Auth.client) {
@@ -511,17 +518,19 @@ const UserAccess = (() => {
         if (tierFromRpc) { matched = { tier:tierFromRpc, label:'supabase rpc code' }; source = 'supabase_profile'; }
         else if (!matched) return { ok:false, error:'That code didn’t open this room.' };
       } catch (error) {
-        if (!matched) return { ok:false, error:'That code didn’t open this room.' };
-        cloudWarning = true;
+        return { ok:false, error:'That code didn’t open this room.' };
       }
+    } else {
+      matched = await PremiumCodes.lookupLocalHash(normalizedCode);
     }
     if (!matched) return { ok:false, error:'That code didn’t open this room.' };
     const tier = normalizeTier(matched.tier || 'premium');
     if (!PREMIUM_TIERS.includes(tier)) return { ok:false, error:'That code didn’t open this room.' };
     const now = new Date().toISOString();
-    const state = applyPremiumState({ tier, source, code_label:matched.label || 'special code', premium_code_used:normalizedCode, premium_since:now, redeemed_at:now, is_premium:true });
+    const codeLabel = matched.label || 'special code';
+    const state = applyPremiumState({ tier, source, code_label:codeLabel, premium_code_used:codeLabel, premium_since:now, redeemed_at:now, is_premium:true });
     if (Auth.user) {
-      const payload = { ...ProfileStore.read(), is_premium:true, premium_tier:tier, premium_code_used:normalizedCode, premium_since:now, premium_expires_at:null, access_tier:tier, access_source:source };
+      const payload = { ...ProfileStore.read(), is_premium:true, premium_tier:tier, premium_code_used:codeLabel, premium_since:now, premium_expires_at:null, access_tier:tier, access_source:source };
       const synced = await Auth.upsertProfile(payload);
       if (!synced?.ok) cloudWarning = true;
     }
@@ -543,7 +552,6 @@ const UserAccess = (() => {
       if (visible && ritualId && ritualId !== 'special-access') {
         try { if (typeof Rituals !== 'undefined' && Rituals.hasBuilder && !Rituals.hasBuilder(ritualId)) visible = false; } catch {}
       }
-      const visible = (FEATURE_ACCESS[feature] || 'premium') === 'free' || isPremium();
       el.hidden = !visible;
       el.classList.toggle('special-hidden', !visible);
     });
@@ -562,66 +570,6 @@ const UserAccess = (() => {
   return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, redeemAccessCode, lockedHTML, FEATURE_ACCESS, PremiumCodes, KEY };
 })();
 
-
-
-const SpecialAccessPortal = (() => {
-  function resolveName() {
-    const profile = ProfileStore.read();
-    const avatarName = readLocalJSON('echovault_echo_avatar_v1', {})?.avatar_name;
-    const emailPrefix = Auth.user?.email?.split('@')?.[0];
-    return profile.display_name || avatarName || emailPrefix || localStorage.getItem(USER_KEY) || 'Local Voyager';
-  }
-  }
-  return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, redeemAccessCode, lockedHTML, FEATURE_ACCESS, PremiumCodes, KEY };
-})();
-
-
-
-const SpecialAccessPortal = (() => {
-  function resolveName() {
-    const profile = ProfileStore.read();
-    const avatarName = readLocalJSON('echovault_echo_avatar_v1', {})?.avatar_name;
-    const emailPrefix = Auth.user?.email?.split('@')?.[0];
-    return profile.display_name || avatarName || emailPrefix || localStorage.getItem(USER_KEY) || 'Local Voyager';
-  }
-  function ensure() {
-    let modal = document.getElementById('special-access-modal');
-    if (!modal) {
-      document.body.insertAdjacentHTML('beforeend', `<div class="special-access-modal" id="special-access-modal" role="dialog" aria-modal="true" aria-label="Special Access" aria-hidden="true"><div class="special-access-panel"><button class="special-close" id="special-access-close" type="button" aria-label="Close">×</button><div class="special-kicker">Special Access</div><h3>Special Access</h3><p class="special-subtitle">for the girls who fw alam</p><p>Some parts of the vault open differently.</p><label class="settings-field-label" for="special-access-code-input">special code</label><div class="premium-code-row"><input class="settings-input" id="special-access-code-input" type="text" placeholder="ECHO-••••" autocomplete="off" spellcheck="false"><button class="settings-secondary-btn" id="special-access-unlock" type="button">Unlock</button></div><button class="settings-secondary-btn ghost" id="special-access-later" type="button">Maybe Later</button></div></div>`);
-      document.getElementById('special-access-close')?.addEventListener('click', close);
-      document.getElementById('special-access-later')?.addEventListener('click', close);
-      document.getElementById('special-access-modal')?.addEventListener('click', e => { if (e.target?.id === 'special-access-modal') close(); });
-      document.getElementById('special-access-unlock')?.addEventListener('click', redeemFromPortal);
-      document.getElementById('special-access-code-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') redeemFromPortal(); });
-    }
-    return modal;
-  }
-  function open() { const modal = ensure(); modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); setTimeout(() => document.getElementById('special-access-code-input')?.focus(), 60); }
-  function close() { const modal = document.getElementById('special-access-modal'); modal?.classList.remove('open'); modal?.setAttribute('aria-hidden','true'); }
-  async function redeemFromPortal() {
-    const input = document.getElementById('special-access-code-input') || document.getElementById('premium-access-code');
-    const result = await UserAccess.redeemAccessCode(input?.value || '');
-    if (!result.ok) return Toast.show(result.error || 'That code didn’t open this room.', 3400);
-    if (input) input.value = '';
-    close();
-    refreshEchoDependentUI();
-    UserChip.refresh();
-    Toast.show(result.cloudWarning ? 'Special access unlocked locally. Cloud sync can retry later.' : 'Special access unlocked.', 3600);
-    showWelcome();
-  }
-  function showWelcome() {
-    const name = resolveName();
-    let welcome = document.getElementById('special-access-welcome');
-    if (!welcome) {
-      document.body.insertAdjacentHTML('beforeend', `<div class="special-welcome" id="special-access-welcome" role="status"><div class="special-welcome-card"><div class="kawaii-cat" aria-label="original kawaii dancing cat mascot"><div class="cat-ear left"></div><div class="cat-ear right"></div><div class="cat-face"><span class="cat-eye left"></span><span class="cat-eye right"></span><span class="cat-mouth"></span><span class="cat-bow"></span></div><div class="cat-body"></div><span class="cat-spark s1">✦</span><span class="cat-spark s2">♡</span><span class="cat-spark s3">✧</span></div><h3 id="special-welcome-title"></h3><p>Special Access is open now.</p></div></div>`);
-      welcome = document.getElementById('special-access-welcome');
-    }
-    document.getElementById('special-welcome-title').textContent = `Welcome, ${name}.`;
-    welcome.classList.add('show');
-    setTimeout(() => welcome?.classList.remove('show'), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1800 : 4200);
-  }
-  return { open, close, showWelcome, redeemFromPortal };
-})();
 
 
 const WrappedCinematicLoader = (() => {
@@ -664,8 +612,6 @@ const WrappedCinematicLoader = (() => {
     }
   }
   return { ensureLoaded, openIfAvailable, hasModule };
-  }
-  return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, redeemAccessCode, lockedHTML, FEATURE_ACCESS, PremiumCodes, KEY };
 })();
 
 
@@ -686,10 +632,11 @@ const SpecialAccessPortal = (() => {
       document.getElementById('special-access-modal')?.addEventListener('click', e => { if (e.target?.id === 'special-access-modal') close(); });
       document.getElementById('special-access-unlock')?.addEventListener('click', redeemFromPortal);
       document.getElementById('special-access-code-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') redeemFromPortal(); });
+      modal = document.getElementById('special-access-modal');
     }
     return modal;
   }
-  function open() { const modal = ensure(); modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); setTimeout(() => document.getElementById('special-access-code-input')?.focus(), 60); }
+  function open() { const modal = ensure(); if (!modal) return; modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); setTimeout(() => document.getElementById('special-access-code-input')?.focus(), 60); }
   function close() { const modal = document.getElementById('special-access-modal'); modal?.classList.remove('open'); modal?.setAttribute('aria-hidden','true'); }
   async function redeemFromPortal() {
     const input = document.getElementById('special-access-code-input') || document.getElementById('premium-access-code');
@@ -1063,11 +1010,10 @@ const Login = (() => {
 
   function init() {
     const savedUser = localStorage.getItem(USER_KEY);
+    bindStressOrbStart();
     if (Auth.user) { UserChip.refresh(); enterApp(); return; }
     if (!Auth.hasSupabase && authModeNote) authModeNote.textContent = 'Supabase is not configured — local mode only.';
     if (savedUser && !Auth.hasSupabase) { document.getElementById('return-name').textContent = savedUser; showStep(lsReturn); document.getElementById('return-enter-btn').addEventListener('click', () => enterApp()); return; }
-
-    bindStressOrbStart();
 
     authLocal?.addEventListener('click', () => { const name = nameInput.value.trim() || localStorage.getItem(USER_KEY) || 'local voyager'; localStorage.setItem(USER_KEY, name); ProfileStore.write({ display_name: name }); UserChip.refresh(); enterApp(); });
     authTogglePassword?.addEventListener('click', () => setAuthMode(authUiMode === 'otp' ? 'password' : 'otp'));
@@ -4402,7 +4348,6 @@ window.EchoVaultBridge = {
   SOUNDPRINTS,
   getSoundprintForEcho,
   moodFamily
-  getSoundprintForEcho
 };
 
 /* ── INIT ── */

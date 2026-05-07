@@ -430,10 +430,6 @@ const soundBlock = script.slice(script.indexOf('const SOUNDPRINTS = {'), script.
   if (count < 10) failures.push(`SOUNDPRINTS.${family} should include at least 10 songs`);
 });
 ['purpose:', 'intensity:', 'silence:'].forEach((marker) => { if (!soundBlock.includes(marker)) failures.push(`Soundprint song objects missing ${marker}`); });
-  ['alam.chat gated for non-special users', "requirePremium('alam_chat"],
-  ['no payment copy exists', 'not a payment']
-].forEach(([label, marker]) => { if (!script.includes(marker) && !index.includes(marker) && !readme.includes(marker)) failures.push(`Special Access check failed: ${label}`); });
-if (/stripe|razorpay|paypal|checkout|pricing page|subscription/i.test(script.replace(/No checkout/gi, '').replace(/no checkout/gi, ''))) failures.push('Forbidden payment implementation detected in script');
 
 const newMoods = ['numb','overwhelmed','lonely','hopeful','angry','guilty','restless','soft','detached','confused','burnt out','grieving','romantic','content','ashamed','longing','pressured','safe','irritated','dreamy'];
 newMoods.forEach((mood) => {
