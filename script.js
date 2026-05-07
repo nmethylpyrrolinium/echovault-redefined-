@@ -1,8 +1,8 @@
 (function EchoVault() {
 'use strict';
 
-const APP_VERSION = 'phase-3-echo-society-foundation';
-const SW_CACHE_VERSION = 'echovault-v8-phase-3-echo-society';
+const APP_VERSION = 'special-access-v1';
+const SW_CACHE_VERSION = 'echovault-v9-special-access';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
@@ -32,16 +32,23 @@ function escapeHTML(value) {
   }[char]));
 }
 
+const MOOD_FAMILIES = {
+  calm:'calm', chaos:'chaos', reflective:'reflective', anxious:'anxious', joyful:'joyful', empty:'empty',
+  numb:'empty', overwhelmed:'chaos', lonely:'reflective', hopeful:'joyful', angry:'chaos', guilty:'anxious', restless:'anxious', soft:'calm', detached:'empty', confused:'anxious', 'burnt out':'empty', grieving:'reflective', romantic:'joyful', content:'calm', ashamed:'anxious', longing:'reflective', pressured:'chaos', safe:'calm', irritated:'chaos', dreamy:'reflective'
+};
+function moodFamily(mood) { return MOOD_FAMILIES[String(mood || '').toLowerCase()] || 'reflective'; }
 const MOOD_COLORS = {
   calm:'#5b8fa8', chaos:'#c44b4b', reflective:'#7c6fa0',
-  anxious:'#c47a3a', joyful:'#7aab6e', empty:'#4a4a5a'
+  anxious:'#c47a3a', joyful:'#7aab6e', empty:'#4a4a5a',
+  numb:'#4a4a5a', overwhelmed:'#c44b4b', lonely:'#7c6fa0', hopeful:'#7aab6e', angry:'#c44b4b', guilty:'#c47a3a', restless:'#c47a3a', soft:'#5b8fa8', detached:'#4a4a5a', confused:'#c47a3a', 'burnt out':'#4a4a5a', grieving:'#7c6fa0', romantic:'#7aab6e', content:'#5b8fa8', ashamed:'#c47a3a', longing:'#7c6fa0', pressured:'#c44b4b', safe:'#5b8fa8', irritated:'#c44b4b', dreamy:'#7c6fa0'
 };
 const MOOD_EMOJIS = {
-  calm:'🌊', chaos:'⚡', reflective:'🌙',
-  anxious:'🌀', joyful:'🌸', empty:'🪨'
+  calm:'🌊', chaos:'⚡', reflective:'🌙', anxious:'🌀', joyful:'🌸', empty:'🪨',
+  numb:'🫥', overwhelmed:'🌪️', lonely:'🌧️', hopeful:'🌱', angry:'🔥', guilty:'🫧', restless:'🕯️', soft:'🪽', detached:'🪐', confused:'🧭', 'burnt out':'🕳️', grieving:'🕯️', romantic:'💗', content:'☁️', ashamed:'🌫️', longing:'🌌', pressured:'⏳', safe:'🛋️', irritated:'🧨', dreamy:'✨'
 };
 const MOOD_COVER_EMOJI = {
-  calm:'🌊', chaos:'⚡', reflective:'🌙', anxious:'🌀', joyful:'🌸', empty:'🌑'
+  calm:'🌊', chaos:'⚡', reflective:'🌙', anxious:'🌀', joyful:'🌸', empty:'🌑',
+  numb:'🫥', overwhelmed:'🌪️', lonely:'🌧️', hopeful:'🌱', angry:'🔥', guilty:'🫧', restless:'🕯️', soft:'🪽', detached:'🪐', confused:'🧭', 'burnt out':'🕳️', grieving:'🕯️', romantic:'💗', content:'☁️', ashamed:'🌫️', longing:'🌌', pressured:'⏳', safe:'🛋️', irritated:'🧨', dreamy:'✨'
 };
 const ARCHETYPE_NAMES = {
   calm:'The Still Lake', chaos:'The Electric Storm', reflective:'The Night Wanderer',
@@ -95,17 +102,18 @@ const PatternEngine = (() => {
     if (!totalEchoes) return { totalEchoes:0, oneLineInsight:'No echoes yet. The universe is quiet — not empty.' };
     const moodCounts = {}; let intensitySum = 0; let silenceSum = 0; let voidCount = 0; let moodChanges = 0; let intDelta = 0;
     echoes.forEach((e, i) => {
-      moodCounts[e.mood] = (moodCounts[e.mood] || 0) + 1;
+      const family = moodFamily(e.mood);
+      moodCounts[family] = (moodCounts[family] || 0) + 1;
       intensitySum += Number(e.intensity || 0); silenceSum += Number(e.silence || 0); if (e.void) voidCount++;
-      if (i > 0) { if (echoes[i - 1].mood !== e.mood) moodChanges++; intDelta += Math.abs((echoes[i - 1].intensity || 0) - (e.intensity || 0)); }
+      if (i > 0) { if (moodFamily(echoes[i - 1].mood) !== family) moodChanges++; intDelta += Math.abs((echoes[i - 1].intensity || 0) - (e.intensity || 0)); }
     });
     const dominantMood = Object.entries(moodCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
     const moodPercentages = Object.fromEntries(Object.entries(moodCounts).map(([k,v]) => [k, Math.round((v / totalEchoes) * 100)]));
     const averageIntensity = +(intensitySum / totalEchoes).toFixed(1);
     const averageSilence = +(silenceSum / totalEchoes).toFixed(1);
     const voidPercentage = Math.round((voidCount / totalEchoes) * 100);
-    const mostRecentMood = echoes[0]?.mood || null;
-    const previousMood = echoes[1]?.mood || null;
+    const mostRecentMood = moodFamily(echoes[0]?.mood) || null;
+    const previousMood = moodFamily(echoes[1]?.mood) || null;
     const recentShift = previousMood && mostRecentMood !== previousMood ? `${previousMood} → ${mostRecentMood}` : 'steady';
     const volatilityScore = Math.round(Math.min(100, ((moodChanges / Math.max(1, totalEchoes - 1)) * 60 + (intDelta / Math.max(1, totalEchoes - 1)) * 4)));
     const trend = (field) => {
@@ -117,7 +125,7 @@ const PatternEngine = (() => {
     const intensityTrend = trend('intensity');
     const silenceTrend = trend('silence');
     let currentStreakMood = mostRecentMood; let currentStreakCount = 0;
-    for (const e of echoes) { if (e.mood === currentStreakMood) currentStreakCount++; else break; }
+    for (const e of echoes) { if (moodFamily(e.mood) === currentStreakMood) currentStreakCount++; else break; }
     const emotionalWeather = Object.keys(moodCounts).length >= 4 ? 'shifting sky' : (WEATHER_MAP[dominantMood] || 'shifting sky');
     let oneLineInsight = 'You kept returning. That counts.';
     if (silenceTrend === 'rising' && intensityTrend !== 'rising') oneLineInsight = 'Your echoes are getting quieter, but not weaker.';
@@ -278,7 +286,7 @@ const Auth = (() => {
   async function upsertProfile(profile){
     ProfileStore.write(profile);
     if(!client||!user) return {ok:true};
-    const payload={id:user.id,display_name:profile.display_name||null,username:profile.username||null,bio:profile.bio||null,location:profile.location||null,avatar_url:profile.avatar_url||null,emotional_archetype:profile.emotional_archetype||null,updated_at:new Date().toISOString()};
+    const payload={id:user.id,display_name:profile.display_name||null,username:profile.username||null,bio:profile.bio||null,location:profile.location||null,avatar_url:profile.avatar_url||null,emotional_archetype:profile.emotional_archetype||null,is_premium:profile.is_premium||false,premium_tier:profile.premium_tier||profile.access_tier||null,premium_code_used:profile.premium_code_used||null,premium_since:profile.premium_since||null,premium_expires_at:profile.premium_expires_at||null,updated_at:new Date().toISOString()};
     const {error}=await client.from('profiles').upsert(payload,{onConflict:'id'});
     if(error){Toast.show('Profile sync failed; kept local copy.'); return {ok:false,error:error.message};}
     return {ok:true};
@@ -293,12 +301,23 @@ const UserAccess = (() => {
   const TIERS = ['free', 'premium', 'founder', 'alpha'];
   const PREMIUM_TIERS = ['premium', 'founder', 'alpha'];
   const FREE_FEATURES = new Set([
-    'create_echo','timeline','universe','basic_profile','basic_receipt','export_vault','import_vault','basic_wrapped','local_mode','auth','basic_avatar','basic_materials','basic_rituals_preview'
+    'create_echo','timeline','universe','basic_profile','basic_receipt','export_vault','import_vault','basic_wrapped','local_mode','auth','inner_conflict','soundprint','old_rituals','basic_avatar','basic_materials','basic_rituals_preview'
   ]);
   const PREMIUM_FEATURES = new Set([
-    'emotional_museum_full','relic_crafting','crafting_table','vault_rooms','echo_avatar_progression','advanced_receipts','cinematic_export_cards','artifact_archive','echosociety','society_gate','society_districts','signal_courier','alam_chat','advanced_soundprint','premium_rituals','premium_weather_map','premium_artifact_frames','advanced_wrapped'
+    'emotional_museum_full','relic_crafting','crafting_table','vault_rooms','echo_avatar_progression','advanced_receipts','cinematic_export_cards','artifact_archive','echosociety','society_gate','society_districts','signal_courier','alam_chat','advanced_soundprint','premium_weather_map','advanced_world_features','premium_rituals','premium_artifact_frames','advanced_wrapped'
   ]);
   const FEATURE_ACCESS = [...FREE_FEATURES].reduce((map, key) => ({ ...map, [key]:'free' }), [...PREMIUM_FEATURES].reduce((map, key) => ({ ...map, [key]:'premium' }), {}));
+
+  const PremiumCodes = (() => {
+    const STARTER_CODES = {
+      'ECHO-FOUNDERS-2026': { tier:'founder', label:'founders code' },
+      'VAULT-ALPHA': { tier:'alpha', label:'alpha code' },
+      'NIGHT-ARCHIVIST': { tier:'premium', label:'night archivist code' }
+    };
+    function normalize(code) { return String(code || '').trim().toUpperCase(); }
+    function lookup(code) { return STARTER_CODES[normalize(code)] || null; }
+    return { STARTER_CODES, normalize, lookup };
+  })();
   let current = { tier:'free', source:'free', updated_at:new Date().toISOString() };
 
   function normalizeTier(tier) { return TIERS.includes(String(tier || '').toLowerCase()) ? String(tier).toLowerCase() : 'free'; }
@@ -326,7 +345,7 @@ const UserAccess = (() => {
   function profileAccess(profile = {}) {
     const rawTier = profile.access_tier || profile.premium_tier || profile.tier || (profile.is_alpha ? 'alpha' : profile.is_founder ? 'founder' : profile.is_premium ? 'premium' : 'free');
     const tier = normalizeTier(rawTier);
-    const until = profile.premium_until || profile.access_until || null;
+    const until = profile.premium_expires_at || profile.premium_until || profile.access_until || null;
     if (until && Date.parse(until) && Date.parse(until) < Date.now()) return null;
     return PREMIUM_TIERS.includes(tier) ? { tier, source:'supabase_profile', premium_until:until || null } : null;
   }
@@ -336,7 +355,7 @@ const UserAccess = (() => {
     return fromLocal ? { ...fromLocal, source:profile.access_source || 'local_code' } : null;
   }
   function refreshAccessState() {
-    const debug = load().debug_override === true || sessionStorage.getItem('echovault_debug_premium') === '1';
+    const debug = location.search.includes('debug=1') && (load().debug_override === true || sessionStorage.getItem('echovault_debug_premium') === '1');
     if (debug) current = { tier:'alpha', source:'debug_override', debug_override:true, updated_at:new Date().toISOString() };
     else {
       const supabase = Auth.user ? profileAccess(ProfileStore.read()) : null;
@@ -364,16 +383,16 @@ const UserAccess = (() => {
   }
   function getLockedCopy(featureKey) {
     const names = {
-      emotional_museum_full:'Emotional Museum Full', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'Vault Rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'Advanced Receipts', cinematic_export_cards:'Cinematic Export Cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.chat', advanced_soundprint:'Advanced Soundprint', premium_rituals:'Premium Rituals', premium_weather_map:'Premium Weather Map', premium_artifact_frames:'Premium Artifact Frames', advanced_wrapped:'Advanced Wrapped'
+      emotional_museum_full:'special museum rooms', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'deeper vault rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'cinematic receipt tools', cinematic_export_cards:'cinematic export cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.chat', advanced_soundprint:'advanced soundprint', premium_rituals:'deeper rituals', premium_weather_map:'deeper Weather Map', premium_artifact_frames:'artifact frames', advanced_wrapped:'Advanced Wrapped'
     };
-    const title = names[featureKey] || 'Premium Feature';
-    return { title, eyebrow:'Premium Access', body:`${title} is a premium worldbuilding layer. Your echoes, export/import, local mode, and basic vault always stay free.`, cta:'Redeem access code' };
+    const title = names[featureKey] || 'special room';
+    return { title, eyebrow:'Special Access', body:'Some parts of the vault open differently. Enter your special code to reveal deeper rooms.', cta:'Enter special code' };
   }
   function requirePremium(featureKey, options = {}) {
     if (canUse(featureKey)) return true;
     const copy = getLockedCopy(featureKey);
-    if (options.toast !== false) Toast.show(`${copy.title} is Premium. Your vault data remains yours.`, 3600);
-    if (options.openSettings) Settings.open();
+    if (options.toast !== false) Toast.show('Some parts of the vault open differently.', 3000);
+    if (options.openSettings !== false && typeof SpecialAccessPortal !== 'undefined') SpecialAccessPortal.open();
     return false;
   }
   function setLocalPremiumOverride(enabled) {
@@ -391,7 +410,7 @@ const UserAccess = (() => {
   }
   function applyPremiumState(payload = {}) {
     const next = save({ ...load(), ...payload, source:payload.source || 'local_code', updated_at:new Date().toISOString() });
-    ProfileStore.write({ access_tier:next.tier, access_source:next.source, premium_tier:next.tier, is_premium:PREMIUM_TIERS.includes(next.tier) });
+    ProfileStore.write({ access_tier:next.tier, access_source:next.source, premium_tier:next.tier, is_premium:PREMIUM_TIERS.includes(next.tier), premium_code_used:next.premium_code_used || next.code_label || null, premium_since:next.premium_since || next.redeemed_at || new Date().toISOString(), premium_expires_at:next.premium_expires_at || null });
     refreshAccessState();
     return next;
   }
@@ -401,35 +420,113 @@ const UserAccess = (() => {
     return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
   }
   async function redeemAccessCode(code) {
-    const clean = String(code || '').trim();
-    if (!clean) return { ok:false, error:'Enter an access code.' };
-    const config = window.ECHOVAULT_CONFIG || {};
-    const plainCodes = Array.isArray(config.ACCESS_CODES) ? config.ACCESS_CODES : [];
-    const direct = plainCodes.find((entry) => String(entry.code || '').trim().toUpperCase() === clean.toUpperCase());
-    let matched = direct;
-    if (!matched) {
-      const hashed = config.ACCESS_CODE_HASHES || {};
-      const hash = await hashCode(clean);
-      const value = hashed[hash];
-      if (value) matched = typeof value === 'string' ? { tier:value } : value;
+    const normalizedCode = PremiumCodes.normalize(code);
+    if (!normalizedCode) return { ok:false, error:'Enter your special code.' };
+    let matched = PremiumCodes.lookup(normalizedCode);
+    let source = 'local_code';
+    let cloudWarning = false;
+    if (Auth.user && Auth.client) {
+      try {
+        const { data, error } = await Auth.client.rpc('redeem_premium_code', { input_code: normalizedCode });
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row?.ok === false || row?.success === false || row === false) return { ok:false, error:'That code didn’t open this room.' };
+        const tierFromRpc = row?.premium_tier || row?.tier || row?.access_tier || (row === true || row?.ok === true || row?.success === true ? 'premium' : null);
+        if (tierFromRpc) { matched = { tier:tierFromRpc, label:'supabase rpc code' }; source = 'supabase_profile'; }
+        else if (!matched) return { ok:false, error:'That code didn’t open this room.' };
+      } catch (error) {
+        if (!matched) return { ok:false, error:'That code didn’t open this room.' };
+        cloudWarning = true;
+      }
     }
-    if (!matched) return { ok:false, error:'Access code not recognized.' };
+    if (!matched) return { ok:false, error:'That code didn’t open this room.' };
     const tier = normalizeTier(matched.tier || 'premium');
-    if (!PREMIUM_TIERS.includes(tier)) return { ok:false, error:'This code is not a Premium tier.' };
-    const state = applyPremiumState({ tier, source:'local_code', code_label:matched.label || 'manual access code', redeemed_at:new Date().toISOString() });
-    return { ok:true, state };
+    if (!PREMIUM_TIERS.includes(tier)) return { ok:false, error:'That code didn’t open this room.' };
+    const now = new Date().toISOString();
+    const state = applyPremiumState({ tier, source, code_label:matched.label || 'special code', premium_code_used:normalizedCode, premium_since:now, redeemed_at:now, is_premium:true });
+    if (Auth.user) {
+      const payload = { ...ProfileStore.read(), is_premium:true, premium_tier:tier, premium_code_used:normalizedCode, premium_since:now, premium_expires_at:null, access_tier:tier, access_source:source };
+      const synced = await Auth.upsertProfile(payload);
+      if (!synced?.ok) cloudWarning = true;
+    }
+    return { ok:true, state, cloudWarning };
   }
   function lockedHTML(featureKey) {
     const copy = getLockedCopy(featureKey);
-    return `<section class="premium-lock-card" data-premium-feature="${escapeHTML(featureKey)}"><div class="premium-lock-badge">✦ ${escapeHTML(copy.eyebrow)}</div><h4>${escapeHTML(copy.title)}</h4><p>${escapeHTML(copy.body)}</p><button class="receipt-action-btn premium-settings-btn" type="button">${escapeHTML(copy.cta)}</button><small>No checkout or subscription exists yet — codes are granted manually.</small></section>`;
+    return `<section class="special-access-card" data-special-feature="${escapeHTML(featureKey)}"><div class="special-kicker">✦ ${escapeHTML(copy.eyebrow)}</div><h4>${escapeHTML(copy.title)}</h4><p>${escapeHTML(copy.body)}</p><button class="receipt-action-btn special-access-open premium-settings-btn" type="button">${escapeHTML(copy.cta)}</button></section>`;
   }
   function updatePremiumUI() {
     const status = document.getElementById('premium-access-status');
-    if (status) status.innerHTML = `Current tier: <b>${escapeHTML(current.tier)}</b><br>Source: <b>${escapeHTML(current.source)}</b>`;
+    if (status) status.innerHTML = `Current access: <b>${escapeHTML(current.tier === 'free' ? 'Free' : current.tier === 'founder' ? 'Founder' : current.tier === 'alpha' ? 'Alpha' : 'Special')}</b>${location.search.includes('debug=1') ? `<br>Source: <b>${escapeHTML(current.source)}</b>` : ''}`;
     const chip = document.getElementById('premium-chip');
-    if (chip) chip.textContent = isPremium() ? `${current.tier} access` : 'free access';
+    if (chip) chip.textContent = isPremium() ? 'Special Access active' : 'Free Vault';
+    document.querySelectorAll('[data-feature]').forEach((el) => {
+      const feature = el.getAttribute('data-feature');
+      const visible = (FEATURE_ACCESS[feature] || 'premium') === 'free' || isPremium();
+      el.hidden = !visible;
+      el.classList.toggle('special-hidden', !visible);
+    });
+    document.querySelectorAll('.special-access-entry').forEach((el) => {
+      el.classList.toggle('is-active', isPremium());
+      const title = el.querySelector('.fun-card-title');
+      const desc = el.querySelector('.fun-card-desc');
+      if (title) title.textContent = isPremium() ? 'access unlocked' : 'Special Access';
+      if (desc) desc.textContent = isPremium() ? 'Special Access is open now.' : 'for the girls who fw alam';
+    });
+    document.querySelectorAll('#premium-debug-override').forEach((el) => {
+      const wrap = el.closest('label');
+      if (wrap) wrap.hidden = !location.search.includes('debug=1');
+    });
   }
-  return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, redeemAccessCode, lockedHTML, FEATURE_ACCESS, KEY };
+  return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, redeemAccessCode, lockedHTML, FEATURE_ACCESS, PremiumCodes, KEY };
+})();
+
+
+
+const SpecialAccessPortal = (() => {
+  function resolveName() {
+    const profile = ProfileStore.read();
+    const avatarName = readLocalJSON('echovault_echo_avatar_v1', {})?.avatar_name;
+    const emailPrefix = Auth.user?.email?.split('@')?.[0];
+    return profile.display_name || avatarName || emailPrefix || localStorage.getItem(USER_KEY) || 'Local Voyager';
+  }
+  function ensure() {
+    let modal = document.getElementById('special-access-modal');
+    if (!modal) {
+      document.body.insertAdjacentHTML('beforeend', `<div class="special-access-modal" id="special-access-modal" role="dialog" aria-modal="true" aria-label="Special Access" aria-hidden="true"><div class="special-access-panel"><button class="special-close" id="special-access-close" type="button" aria-label="Close">×</button><div class="special-kicker">Special Access</div><h3>Special Access</h3><p class="special-subtitle">for the girls who fw alam</p><p>Some parts of the vault open differently.</p><label class="settings-field-label" for="special-access-code-input">special code</label><div class="premium-code-row"><input class="settings-input" id="special-access-code-input" type="text" placeholder="ECHO-••••" autocomplete="off" spellcheck="false"><button class="settings-secondary-btn" id="special-access-unlock" type="button">Unlock</button></div><button class="settings-secondary-btn ghost" id="special-access-later" type="button">Maybe Later</button></div></div>`);
+      document.getElementById('special-access-close')?.addEventListener('click', close);
+      document.getElementById('special-access-later')?.addEventListener('click', close);
+      document.getElementById('special-access-modal')?.addEventListener('click', e => { if (e.target?.id === 'special-access-modal') close(); });
+      document.getElementById('special-access-unlock')?.addEventListener('click', redeemFromPortal);
+      document.getElementById('special-access-code-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') redeemFromPortal(); });
+    }
+    return modal;
+  }
+  function open() { const modal = ensure(); modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); setTimeout(() => document.getElementById('special-access-code-input')?.focus(), 60); }
+  function close() { const modal = document.getElementById('special-access-modal'); modal?.classList.remove('open'); modal?.setAttribute('aria-hidden','true'); }
+  async function redeemFromPortal() {
+    const input = document.getElementById('special-access-code-input') || document.getElementById('premium-access-code');
+    const result = await UserAccess.redeemAccessCode(input?.value || '');
+    if (!result.ok) return Toast.show(result.error || 'That code didn’t open this room.', 3400);
+    if (input) input.value = '';
+    close();
+    refreshEchoDependentUI();
+    UserChip.refresh();
+    Toast.show(result.cloudWarning ? 'Special access unlocked locally. Cloud sync can retry later.' : 'Special access unlocked.', 3600);
+    showWelcome();
+  }
+  function showWelcome() {
+    const name = resolveName();
+    let welcome = document.getElementById('special-access-welcome');
+    if (!welcome) {
+      document.body.insertAdjacentHTML('beforeend', `<div class="special-welcome" id="special-access-welcome" role="status"><div class="special-welcome-card"><div class="kawaii-cat" aria-label="original kawaii dancing cat mascot"><div class="cat-ear left"></div><div class="cat-ear right"></div><div class="cat-face"><span class="cat-eye left"></span><span class="cat-eye right"></span><span class="cat-mouth"></span><span class="cat-bow"></span></div><div class="cat-body"></div><span class="cat-spark s1">✦</span><span class="cat-spark s2">♡</span><span class="cat-spark s3">✧</span></div><h3 id="special-welcome-title"></h3><p>Special Access is open now.</p></div></div>`);
+      welcome = document.getElementById('special-access-welcome');
+    }
+    document.getElementById('special-welcome-title').textContent = `Welcome, ${name}.`;
+    welcome.classList.add('show');
+    setTimeout(() => welcome?.classList.remove('show'), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1800 : 4200);
+  }
+  return { open, close, showWelcome, redeemFromPortal };
 })();
 
 /* ── NAVIGATION ── */
@@ -541,9 +638,11 @@ const Settings = (() => {
   function populatePremiumAccess() {
     UserAccess.refreshAccessState();
     const status = document.getElementById('premium-access-status');
-    if (status) status.innerHTML = `Current tier: <b>${escapeHTML(UserAccess.getTier())}</b><br>Source: <b>${escapeHTML(UserAccess.getSource())}</b>`;
+    if (status) status.innerHTML = `Current access: <b>${escapeHTML(UserAccess.getTier() === 'free' ? 'Free' : UserAccess.getTier() === 'founder' ? 'Founder' : UserAccess.getTier() === 'alpha' ? 'Alpha' : 'Special')}</b>${location.search.includes('debug=1') ? `<br>Source: <b>${escapeHTML(UserAccess.getSource())}</b>` : ''}`;
     const debug = document.getElementById('premium-debug-override');
     if (debug) debug.checked = UserAccess.getSource() === 'debug_override';
+    const clear = document.getElementById('premium-clear-local');
+    if (clear) clear.hidden = !location.search.includes('debug=1');
   }
   async function init() {
     const profile = ProfileStore.read();
@@ -601,6 +700,7 @@ const Settings = (() => {
     document.getElementById('society-export-signals-btn')?.addEventListener('click', () => SocietySignals.exportSignals());
     document.getElementById('alam-clear-chat-btn')?.addEventListener('click', () => { AlamAI.clearChat(); populateSocietyPrivacy(); });
     document.getElementById('alam-include-latest-setting')?.addEventListener('change', (event) => { writeLocalJSON('echovault_alam_ai_settings_v1', { ...readLocalJSON('echovault_alam_ai_settings_v1', {}), includeLatestEcho:event.target.checked }); Toast.show(event.target.checked ? 'alam.chat can include latest echo summary when you ask.' : 'alam.chat latest echo sharing is off.'); });
+    document.querySelectorAll('.special-access-open').forEach(btn => btn.addEventListener('click', () => SpecialAccessPortal.open()));
     document.getElementById('premium-redeem-btn')?.addEventListener('click', async () => {
       const input = document.getElementById('premium-access-code');
       const result = await UserAccess.redeemAccessCode(input?.value || '');
@@ -609,15 +709,17 @@ const Settings = (() => {
       populatePremiumAccess();
       refreshEchoDependentUI();
       UserChip.refresh();
-      Toast.show(`${UserAccess.getTier()} access unlocked ✦`, 3200);
+      Toast.show(result.cloudWarning ? 'Special access unlocked locally. Cloud sync can retry later.' : 'Special access unlocked.', 3200);
+      SpecialAccessPortal.showWelcome();
     });
+    document.getElementById('premium-clear-local')?.addEventListener('click', () => { localStorage.removeItem(UserAccess.KEY); sessionStorage.removeItem('echovault_debug_premium'); UserAccess.refreshAccessState(); populatePremiumAccess(); refreshEchoDependentUI(); UserChip.refresh(); Toast.show('Local access state cleared.'); });
     document.getElementById('premium-debug-override')?.addEventListener('change', (event) => {
       if (event.target.checked) UserAccess.setLocalPremiumOverride(true);
       else UserAccess.clearLocalPremiumOverride();
       populatePremiumAccess();
       refreshEchoDependentUI();
       UserChip.refresh();
-      Toast.show(event.target.checked ? 'Debug premium override enabled.' : 'Debug premium override cleared.');
+      Toast.show(event.target.checked ? 'Debug special override enabled.' : 'Debug special override cleared.');
     });
 
 
@@ -2412,7 +2514,7 @@ const MaterialEngine = (() => {
   function generateForEcho(echo={}) {
     const out = [];
     const add = (name, qty=1) => out.push({ name, qty });
-    add(moodMaterials[echo.mood] || 'Moon Thread', echo.intensity >= 7 ? 2 : 1);
+    add(moodMaterials[moodFamily(echo.mood)] || 'Moon Thread', echo.intensity >= 7 ? 2 : 1);
     if ((echo.silence || 0) >= 7) add('Silence Glass', 1);
     if ((echo.intensity || 0) >= 8) add('Pressure Ember', 1);
     if (echo.void) add('Void Core', 1);
@@ -2958,15 +3060,15 @@ asking for my iman`;
     const list=document.getElementById('alam-message-list');
     if(!list) return;
     const arr=loadMessages();
-    list.innerHTML=arr.map(m=>`<div class="alam-msg ${escapeHTML(m.role)}"><b>${escapeHTML(m.role)}</b><p>${escapeHTML(m.text)}</p></div>`).join('') || '<p class="alam-empty">Ask alam something from your vault weather.</p>';
+    list.innerHTML=arr.map(m=>`<div class="alam-msg ${escapeHTML(m.role)}"><b>${escapeHTML(m.role)}</b><p>${escapeHTML(m.text)}</p></div>`).join('') || '<p class="alam-empty">alam.chat is listening.</p>';
     list.scrollTo(0,list.scrollHeight);
   }
   function renderPortal(){
-    return `<section class="alam-portal" id="alam-portal"><div class="alam-orb"><span>alam</span></div><div><div class="echo-avatar-kicker">alam.chat Observatory</div><h4>alam.chat</h4><pre>${escapeHTML(bio)}</pre><p class="alam-status">${currentMode()}</p><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><button class="receipt-action-btn" id="alam-open-btn">Ask alam</button></div></section>`;
+    return `<section class="alam-portal" id="alam-portal"><div class="alam-orb"><span>alam</span></div><div><h4>alam.chat</h4><pre>${escapeHTML(bio)}</pre><p class="alam-status">${currentMode()}</p><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><button class="receipt-action-btn" id="alam-open-btn">Ask alam</button></div></section>`;
   }
   function openChat(){
     if(!UserAccess.requirePremium('alam_chat', { openSettings:true })) return;
-    if(!document.getElementById('alam-chat-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-chat-panel" id="alam-chat-panel" role="dialog" aria-modal="true" aria-label="alam.chat terminal"><div class="alam-chat-card"><header class="alam-chat-head"><div><span class="alam-chat-kicker">weird oracle-terminal</span><h3>alam.chat</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div class="alam-mode-row"><p class="alam-status" id="alam-mode-badge">${currentMode()}</p><button class="settings-secondary-btn" id="alam-local-btn" type="button">Keep it local</button></div><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><div id="alam-message-list" class="alam-message-list"></div><div class="alam-context-options"><label class="alam-toggle"><input type="checkbox" id="alam-include-latest"> Include latest echo summary</label><label class="alam-toggle"><input type="checkbox" id="alam-include-weather" checked> Include society weather label</label><label class="alam-toggle disabled"><input type="checkbox" disabled> Raw echoes — not available.</label></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask the weird little oracle…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
+    if(!document.getElementById('alam-chat-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-chat-panel" id="alam-chat-panel" role="dialog" aria-modal="true" aria-label="alam.chat"><div class="alam-chat-card"><header class="alam-chat-head"><div><h3>alam.chat</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div class="alam-mode-row"><p class="alam-status" id="alam-mode-badge">${currentMode()}</p></div><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><div id="alam-message-list" class="alam-message-list"></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask alam…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
     document.body.style.overflow='hidden';
     const settings=readLocalJSON(settingsKey,{includeLatestEcho:false});
     const latest=document.getElementById('alam-include-latest');
@@ -2986,7 +3088,7 @@ asking for my iman`;
     document.getElementById('alam-send-btn')?.addEventListener('click',send);
     document.getElementById('alam-input')?.addEventListener('keydown',(e)=>{ if(e.key==='Enter') send(); });
   }
-  function bindShortcut(){ document.getElementById('alam-floating-portal')?.addEventListener('click', openChat); }
+  function bindShortcut(){ document.getElementById('alam-floating-portal')?.addEventListener('click', () => { if (UserAccess.requirePremium('alam_chat')) openChat(); }); }
   return { CHAT_KEY, isRemoteAvailable, buildSafeContext, localReply, sendMessage, renderPortal, openChat, closeChat, appendMessage, clearChat, loadMessages, saveMessages, bindShortcut };
 })();
 
@@ -3147,8 +3249,9 @@ const Rituals = (() => {
   }
 
   function open(type) {
-    if (type === 'alam') { AlamAI.openChat(); return; }
-    const premiumRitualMap = { lantern:'premium_rituals', stormjar:'premium_rituals', dna:'advanced_receipts', crash:'advanced_receipts', sound:'advanced_soundprint', vsvs:'premium_rituals', shatter:'premium_rituals' };
+    if (type === 'special-access') { SpecialAccessPortal.open(); return; }
+    if (type === 'alam') { if (UserAccess.requirePremium('alam_chat')) AlamAI.openChat(); return; }
+    const premiumRitualMap = { museum:'emotional_museum_full', lantern:'old_rituals', stormjar:'old_rituals', dna:'advanced_receipts', crash:'advanced_receipts', sound:'soundprint', vsvs:'inner_conflict', shatter:'premium_rituals' };
     if (premiumRitualMap[type] && !UserAccess.requirePremium(premiumRitualMap[type], { openSettings:true })) return;
     const builders = {museum:buildMuseum,lantern:buildLantern,stormjar:buildStormJar,receipt:buildReceipt, dna:buildDNA, crash:buildCrash, sound:buildSound, vsvs:buildConflict, shatter:buildShatter};
     const fn = builders[type];
@@ -3821,9 +3924,9 @@ const UserChip = (() => {
     chip?.classList.add('visible');
     document.getElementById('chip-name').textContent = name;
     document.getElementById('chip-display-name').textContent = name;
-    document.getElementById('chip-email').textContent = `${email} · ${tier} access`;
+    document.getElementById('chip-email').textContent = `${email} · ${UserAccess.isPremium() ? 'Special Access Active' : 'Free Vault'}${UserAccess.isPremium() ? ` · ${tier}` : ''}`;
     const syncLabel = document.getElementById('chip-sync-label');
-    if (syncLabel) syncLabel.textContent = UserAccess.isPremium() ? `${tier} access` : (Auth.user ? 'Profile Synced' : 'Local Vault');
+    if (syncLabel) syncLabel.textContent = UserAccess.isPremium() ? 'Special Access Active' : (Auth.user ? 'Profile Synced' : 'Local Vault');
     const avatarEl = document.getElementById('chip-avatar');
     const avatarUrl = profile.avatar_url || profile.avatar_data_url;
     if (avatarUrl && avatarEl) {
