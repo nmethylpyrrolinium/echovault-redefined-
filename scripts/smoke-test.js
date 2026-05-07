@@ -9,6 +9,7 @@ const failures = [];
 const index = fs.readFileSync('index.html','utf8');
 const script = fs.readFileSync('script.js','utf8');
 const style = fs.readFileSync('styles.css','utf8');
+const wrappedCinematic = fs.readFileSync('wrapped-cinematic-module.js','utf8');
 const readme = fs.readFileSync('README.md','utf8');
 const pkg = fs.existsSync('package.json')
   ? JSON.parse(fs.readFileSync('package.json','utf8'))
@@ -37,6 +38,9 @@ if (!script.includes('signInWithOtp')) failures.push('script.js missing signInWi
 if (!script.includes('verifyOtp')) failures.push('script.js missing verifyOtp');
 if (!script.includes('emailRedirectTo')) failures.push('script.js missing emailRedirectTo');
 if (!script.includes('auth-local-btn')) failures.push('script.js missing auth-local-btn for Continue Locally');
+if (!index.includes('stress-orb-wrap') || !index.includes('stress-continue-btn')) failures.push('login press/tap fallback controls missing');
+if (!script.includes('function beginLoginIntro') || !script.includes('bindStressOrbStart') || !script.includes("target.addEventListener('click', start)") || !script.includes("target.addEventListener('keydown', start)") || !script.includes("target.addEventListener('pointerup', releaseAndStart)") || !script.includes("target.addEventListener('touchend', start")) failures.push('login orb start should support click, keyboard, pointer, and touch');
+if (!style.includes('touch-action:manipulation') || !style.includes('.stress-continue-btn')) failures.push('login press controls missing mobile-friendly CSS');
 if (!script.includes('getAuthRedirectUrl')) failures.push('script.js missing getAuthRedirectUrl helper');
 if (!script.includes('https://nmethylpyrrolinium.github.io/echovault.com/')) {
   failures.push('script.js missing production auth redirect URL');
@@ -154,6 +158,8 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 
 // Phase 1 game/community foundation checks
 const sw = fs.readFileSync('sw.js','utf8');
+if (!script.includes("special-access-v4-login-press-fix")) failures.push('APP_VERSION not updated to special-access-v4-login-press-fix');
+if (!script.includes('echovault-v12-login-press-fix') && !sw.includes('echovault-v12-login-press-fix')) failures.push('Special Access cache marker missing');
 if (!script.includes("special-access-v2-rituals-wrapped-alam-ai")) failures.push('APP_VERSION not updated to special-access-v2-rituals-wrapped-alam-ai');
 if (!script.includes('echovault-v10-special-access-rituals-wrapped-alam-ai') && !sw.includes('echovault-v10-special-access-rituals-wrapped-alam-ai')) failures.push('Special Access cache marker missing');
 if (!script.includes("special-access-v1")) failures.push('APP_VERSION not updated to special-access-v1');
@@ -410,6 +416,8 @@ if (!script.includes('museumFallbackHTML') || script.includes('<h3>Ritual unavai
 if (!script.includes('hasBuilder(type)') || !script.includes('Rituals.hasBuilder')) failures.push('Ritual card gating should verify builders exist');
 if (!script.includes('WrappedCinematicLoader') || !script.includes('ensureLoaded') || !script.includes('openIfAvailable')) failures.push('Wrapped cinematic loader/guard missing');
 if (!script.includes('Wrapped.render();') || !script.includes('falling back to standard Wrapped')) failures.push('Wrapped fallback render missing');
+if (!script.includes('moodFamily') || !wrappedCinematic.includes('moodFamily(e.mood)') || !wrappedCinematic.includes('moodColor(mood)')) failures.push('Wrapped cinematic should normalize expanded moods before rendering colors');
+if (!wrappedCinematic.includes('getSoundprintForEcho') || !wrappedCinematic.includes('escapeHTML(t.song)')) failures.push('Wrapped cinematic should use guarded soundprint selection and escaped track markup');
 if (!index.includes('nav-wrapped')) failures.push('nav-wrapped missing');
 if (!script.includes('getSoundprintForEcho')) failures.push('getSoundprintForEcho missing');
 const soundBlock = script.slice(script.indexOf('const SOUNDPRINTS = {'), script.indexOf('function getSoundprintForEcho'));

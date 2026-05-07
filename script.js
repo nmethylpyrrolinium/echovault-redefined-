@@ -1,6 +1,8 @@
 (function EchoVault() {
 'use strict';
 
+const APP_VERSION = 'special-access-v4-login-press-fix';
+const SW_CACHE_VERSION = 'echovault-v12-login-press-fix';
 const APP_VERSION = 'special-access-v2-rituals-wrapped-alam-ai';
 const SW_CACHE_VERSION = 'echovault-v10-special-access-rituals-wrapped-alam-ai';
 const APP_VERSION = 'special-access-v1';
@@ -569,6 +571,19 @@ const SpecialAccessPortal = (() => {
     const emailPrefix = Auth.user?.email?.split('@')?.[0];
     return profile.display_name || avatarName || emailPrefix || localStorage.getItem(USER_KEY) || 'Local Voyager';
   }
+  }
+  return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, redeemAccessCode, lockedHTML, FEATURE_ACCESS, PremiumCodes, KEY };
+})();
+
+
+
+const SpecialAccessPortal = (() => {
+  function resolveName() {
+    const profile = ProfileStore.read();
+    const avatarName = readLocalJSON('echovault_echo_avatar_v1', {})?.avatar_name;
+    const emailPrefix = Auth.user?.email?.split('@')?.[0];
+    return profile.display_name || avatarName || emailPrefix || localStorage.getItem(USER_KEY) || 'Local Voyager';
+  }
   function ensure() {
     let modal = document.getElementById('special-access-modal');
     if (!modal) {
@@ -915,6 +930,8 @@ const Login = (() => {
   const lsName   = document.getElementById('ls-name');
   const lsReturn = document.getElementById('ls-return');
   const stressOrb= document.getElementById('stress-orb');
+  const stressOrbWrap = document.getElementById('stress-orb-wrap');
+  const stressContinue = document.getElementById('stress-continue-btn');
   const nameInput= document.getElementById('name-input');
   const authEmail = document.getElementById('auth-email');
   const authOtp = document.getElementById('auth-otp');
@@ -1002,17 +1019,55 @@ const Login = (() => {
     await sendEmailOtp(email);
   }
 
+  function beginLoginIntro() {
+    if (screen?.dataset.introStarted === '1') return;
+    screen.dataset.introStarted = '1';
+    stressOrb?.classList.remove('pressed');
+    showStep(lsBreath);
+    BreathAnim.start();
+    setTimeout(() => {
+      showStep(lsName);
+      setAuthMode('otp');
+      setTimeout(() => authEmail?.focus(), 300);
+    }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 900 : 4200);
+  }
+
+  function setStressOrbPressed(isPressed) {
+    stressOrb?.classList.toggle('pressed', Boolean(isPressed));
+  }
+
+  function bindStressOrbStart() {
+    const targets = [stressOrbWrap, stressOrb, stressContinue].filter(Boolean);
+    if (!targets.length) return;
+    const start = (event) => {
+      if (event?.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
+      event?.preventDefault?.();
+      beginLoginIntro();
+    };
+    const press = (event) => {
+      if (event?.pointerType === 'mouse' && event.button !== 0) return;
+      setStressOrbPressed(true);
+    };
+    const release = () => setStressOrbPressed(false);
+    const releaseAndStart = (event) => { release(); start(event); };
+    targets.forEach((target) => {
+      target.addEventListener('click', start);
+      target.addEventListener('keydown', start);
+      target.addEventListener('pointerdown', press);
+      target.addEventListener('pointerup', releaseAndStart);
+      target.addEventListener('pointercancel', release);
+      target.addEventListener('pointerleave', release);
+      target.addEventListener('touchend', start, { passive:false });
+    });
+  }
+
   function init() {
     const savedUser = localStorage.getItem(USER_KEY);
     if (Auth.user) { UserChip.refresh(); enterApp(); return; }
     if (!Auth.hasSupabase && authModeNote) authModeNote.textContent = 'Supabase is not configured — local mode only.';
     if (savedUser && !Auth.hasSupabase) { document.getElementById('return-name').textContent = savedUser; showStep(lsReturn); document.getElementById('return-enter-btn').addEventListener('click', () => enterApp()); return; }
 
-    stressOrb.addEventListener('pointerdown', () => stressOrb.classList.add('pressed'));
-    ['pointerup','pointerleave'].forEach(ev => stressOrb.addEventListener(ev, () => stressOrb.classList.remove('pressed')));
-    let pressStart = 0;
-    stressOrb.addEventListener('pointerdown', () => { pressStart = Date.now(); });
-    stressOrb.addEventListener('pointerup', () => { if (Date.now() - pressStart > 80) { showStep(lsBreath); BreathAnim.start(); setTimeout(() => { showStep(lsName); setAuthMode('otp'); setTimeout(() => authEmail?.focus(), 300); }, 4200); } });
+    bindStressOrbStart();
 
     authLocal?.addEventListener('click', () => { const name = nameInput.value.trim() || localStorage.getItem(USER_KEY) || 'local voyager'; localStorage.setItem(USER_KEY, name); ProfileStore.write({ display_name: name }); UserChip.refresh(); enterApp(); });
     authTogglePassword?.addEventListener('click', () => setAuthMode(authUiMode === 'otp' ? 'password' : 'otp'));
@@ -3241,6 +3296,14 @@ asking for my iman`;
   function openChat(){
     if(!UserAccess.requirePremium('alam_chat', { openSettings:true })) return;
     if(!document.getElementById('alam-ai-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-ai-panel" id="alam-ai-panel" role="dialog" aria-modal="true" aria-label="alam.ai"><div class="alam-ai-card"><header class="alam-ai-head"><div><h3>alam.ai</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div id="alam-message-list" class="alam-message-list"></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask alam…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
+    list.scrollTo(0,list.scrollHeight);
+  }
+  function renderPortal(){
+    return `<section class="alam-portal" id="alam-portal"><div class="alam-orb"><span>alam</span></div><div><h4>alam.ai</h4><pre>${escapeHTML(bio)}</pre><button class="receipt-action-btn" id="alam-open-btn">Ask alam</button></div></section>`;
+  }
+  function openChat(){
+    if(!UserAccess.requirePremium('alam_chat', { openSettings:true })) return;
+    if(!document.getElementById('alam-ai-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-ai-panel" id="alam-ai-panel" role="dialog" aria-modal="true" aria-label="alam.ai"><div class="alam-ai-card"><header class="alam-ai-head"><div><h3>alam.ai</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div id="alam-message-list" class="alam-message-list"></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask alam…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
     list.innerHTML=arr.map(m=>`<div class="alam-msg ${escapeHTML(m.role)}"><b>${escapeHTML(m.role)}</b><p>${escapeHTML(m.text)}</p></div>`).join('') || '<p class="alam-empty">alam.chat is listening.</p>';
     list.scrollTo(0,list.scrollHeight);
   }
@@ -4337,6 +4400,8 @@ window.EchoVaultBridge = {
   ARCHETYPE_NAMES,
   ARCHETYPE_DESCS,
   SOUNDPRINTS,
+  getSoundprintForEcho,
+  moodFamily
   getSoundprintForEcho
 };
 

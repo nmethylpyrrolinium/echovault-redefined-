@@ -1,3 +1,5 @@
+const APP_VERSION = 'special-access-v4-login-press-fix';
+const CACHE = 'echovault-v12-login-press-fix';
 const APP_VERSION = 'special-access-v2-rituals-wrapped-alam-ai';
 const CACHE = 'echovault-v10-special-access-rituals-wrapped-alam-ai';
 const APP_VERSION = 'special-access-v1';
