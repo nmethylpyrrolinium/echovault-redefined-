@@ -3,6 +3,8 @@
 
 const APP_VERSION = 'special-access-v2-rituals-wrapped-alam-ai';
 const SW_CACHE_VERSION = 'echovault-v10-special-access-rituals-wrapped-alam-ai';
+const APP_VERSION = 'special-access-v1';
+const SW_CACHE_VERSION = 'echovault-v9-special-access';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
@@ -455,6 +457,7 @@ const UserAccess = (() => {
   function getLockedCopy(featureKey) {
     const names = {
       emotional_museum_full:'special museum rooms', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'deeper vault rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'cinematic receipt tools', cinematic_export_cards:'cinematic export cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.ai', advanced_soundprint:'advanced soundprint', premium_rituals:'deeper rituals', premium_weather_map:'deeper Weather Map', premium_artifact_frames:'artifact frames', advanced_wrapped:'Advanced Wrapped'
+      emotional_museum_full:'special museum rooms', relic_crafting:'Relic Crafting', crafting_table:'Crafting Table', vault_rooms:'deeper vault rooms', echo_avatar_progression:'Echo Avatar Progression', advanced_receipts:'cinematic receipt tools', cinematic_export_cards:'cinematic export cards', artifact_archive:'Artifact Archive', echosociety:'EchoSociety', society_gate:'Society Gate', society_districts:'Society Districts', signal_courier:'Signal Courier', alam_chat:'alam.chat', advanced_soundprint:'advanced soundprint', premium_rituals:'deeper rituals', premium_weather_map:'deeper Weather Map', premium_artifact_frames:'artifact frames', advanced_wrapped:'Advanced Wrapped'
     };
     const title = names[featureKey] || 'special room';
     return { title, eyebrow:'Special Access', body:'Some parts of the vault open differently. Enter your special code to reveal deeper rooms.', cta:'Enter special code' };
@@ -538,6 +541,7 @@ const UserAccess = (() => {
       if (visible && ritualId && ritualId !== 'special-access') {
         try { if (typeof Rituals !== 'undefined' && Rituals.hasBuilder && !Rituals.hasBuilder(ritualId)) visible = false; } catch {}
       }
+      const visible = (FEATURE_ACCESS[feature] || 'premium') === 'free' || isPremium();
       el.hidden = !visible;
       el.classList.toggle('special-hidden', !visible);
     });
@@ -645,6 +649,56 @@ const WrappedCinematicLoader = (() => {
     }
   }
   return { ensureLoaded, openIfAvailable, hasModule };
+  }
+  return { load, save, refreshAccessState, isPremium, getTier, getSource, canUse, requirePremium, getLockedCopy, setLocalPremiumOverride, clearLocalPremiumOverride, applyPremiumState, redeemAccessCode, lockedHTML, FEATURE_ACCESS, PremiumCodes, KEY };
+})();
+
+
+
+const SpecialAccessPortal = (() => {
+  function resolveName() {
+    const profile = ProfileStore.read();
+    const avatarName = readLocalJSON('echovault_echo_avatar_v1', {})?.avatar_name;
+    const emailPrefix = Auth.user?.email?.split('@')?.[0];
+    return profile.display_name || avatarName || emailPrefix || localStorage.getItem(USER_KEY) || 'Local Voyager';
+  }
+  function ensure() {
+    let modal = document.getElementById('special-access-modal');
+    if (!modal) {
+      document.body.insertAdjacentHTML('beforeend', `<div class="special-access-modal" id="special-access-modal" role="dialog" aria-modal="true" aria-label="Special Access" aria-hidden="true"><div class="special-access-panel"><button class="special-close" id="special-access-close" type="button" aria-label="Close">×</button><div class="special-kicker">Special Access</div><h3>Special Access</h3><p class="special-subtitle">for the girls who fw alam</p><p>Some parts of the vault open differently.</p><label class="settings-field-label" for="special-access-code-input">special code</label><div class="premium-code-row"><input class="settings-input" id="special-access-code-input" type="text" placeholder="ECHO-••••" autocomplete="off" spellcheck="false"><button class="settings-secondary-btn" id="special-access-unlock" type="button">Unlock</button></div><button class="settings-secondary-btn ghost" id="special-access-later" type="button">Maybe Later</button></div></div>`);
+      document.getElementById('special-access-close')?.addEventListener('click', close);
+      document.getElementById('special-access-later')?.addEventListener('click', close);
+      document.getElementById('special-access-modal')?.addEventListener('click', e => { if (e.target?.id === 'special-access-modal') close(); });
+      document.getElementById('special-access-unlock')?.addEventListener('click', redeemFromPortal);
+      document.getElementById('special-access-code-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') redeemFromPortal(); });
+    }
+    return modal;
+  }
+  function open() { const modal = ensure(); modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); setTimeout(() => document.getElementById('special-access-code-input')?.focus(), 60); }
+  function close() { const modal = document.getElementById('special-access-modal'); modal?.classList.remove('open'); modal?.setAttribute('aria-hidden','true'); }
+  async function redeemFromPortal() {
+    const input = document.getElementById('special-access-code-input') || document.getElementById('premium-access-code');
+    const result = await UserAccess.redeemAccessCode(input?.value || '');
+    if (!result.ok) return Toast.show(result.error || 'That code didn’t open this room.', 3400);
+    if (input) input.value = '';
+    close();
+    refreshEchoDependentUI();
+    UserChip.refresh();
+    Toast.show(result.cloudWarning ? 'Special access unlocked locally. Cloud sync can retry later.' : 'Special access unlocked.', 3600);
+    showWelcome();
+  }
+  function showWelcome() {
+    const name = resolveName();
+    let welcome = document.getElementById('special-access-welcome');
+    if (!welcome) {
+      document.body.insertAdjacentHTML('beforeend', `<div class="special-welcome" id="special-access-welcome" role="status"><div class="special-welcome-card"><div class="kawaii-cat" aria-label="original kawaii dancing cat mascot"><div class="cat-ear left"></div><div class="cat-ear right"></div><div class="cat-face"><span class="cat-eye left"></span><span class="cat-eye right"></span><span class="cat-mouth"></span><span class="cat-bow"></span></div><div class="cat-body"></div><span class="cat-spark s1">✦</span><span class="cat-spark s2">♡</span><span class="cat-spark s3">✧</span></div><h3 id="special-welcome-title"></h3><p>Special Access is open now.</p></div></div>`);
+      welcome = document.getElementById('special-access-welcome');
+    }
+    document.getElementById('special-welcome-title').textContent = `Welcome, ${name}.`;
+    welcome.classList.add('show');
+    setTimeout(() => welcome?.classList.remove('show'), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1800 : 4200);
+  }
+  return { open, close, showWelcome, redeemFromPortal };
 })();
 
 /* ── NAVIGATION ── */
@@ -816,6 +870,7 @@ const Settings = (() => {
     document.getElementById('society-export-signals-btn')?.addEventListener('click', () => SocietySignals.exportSignals());
     document.getElementById('alam-clear-chat-btn')?.addEventListener('click', () => { AlamAI.clearChat(); populateSocietyPrivacy(); });
     document.getElementById('alam-include-latest-setting')?.addEventListener('change', (event) => { writeLocalJSON('echovault_alam_ai_settings_v1', { ...readLocalJSON('echovault_alam_ai_settings_v1', {}), includeLatestEcho:event.target.checked }); Toast.show(event.target.checked ? 'alam.ai can include latest echo summary when you ask.' : 'alam.ai latest echo sharing is off.'); });
+    document.getElementById('alam-include-latest-setting')?.addEventListener('change', (event) => { writeLocalJSON('echovault_alam_ai_settings_v1', { ...readLocalJSON('echovault_alam_ai_settings_v1', {}), includeLatestEcho:event.target.checked }); Toast.show(event.target.checked ? 'alam.chat can include latest echo summary when you ask.' : 'alam.chat latest echo sharing is off.'); });
     document.querySelectorAll('.special-access-open').forEach(btn => btn.addEventListener('click', () => SpecialAccessPortal.open()));
     document.getElementById('premium-redeem-btn')?.addEventListener('click', async () => {
       const input = document.getElementById('premium-access-code');
@@ -3186,6 +3241,15 @@ asking for my iman`;
   function openChat(){
     if(!UserAccess.requirePremium('alam_chat', { openSettings:true })) return;
     if(!document.getElementById('alam-ai-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-ai-panel" id="alam-ai-panel" role="dialog" aria-modal="true" aria-label="alam.ai"><div class="alam-ai-card"><header class="alam-ai-head"><div><h3>alam.ai</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div id="alam-message-list" class="alam-message-list"></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask alam…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
+    list.innerHTML=arr.map(m=>`<div class="alam-msg ${escapeHTML(m.role)}"><b>${escapeHTML(m.role)}</b><p>${escapeHTML(m.text)}</p></div>`).join('') || '<p class="alam-empty">alam.chat is listening.</p>';
+    list.scrollTo(0,list.scrollHeight);
+  }
+  function renderPortal(){
+    return `<section class="alam-portal" id="alam-portal"><div class="alam-orb"><span>alam</span></div><div><h4>alam.chat</h4><pre>${escapeHTML(bio)}</pre><p class="alam-status">${currentMode()}</p><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><button class="receipt-action-btn" id="alam-open-btn">Ask alam</button></div></section>`;
+  }
+  function openChat(){
+    if(!UserAccess.requirePremium('alam_chat', { openSettings:true })) return;
+    if(!document.getElementById('alam-chat-panel')) document.body.insertAdjacentHTML('beforeend', `<div class="alam-chat-panel" id="alam-chat-panel" role="dialog" aria-modal="true" aria-label="alam.chat"><div class="alam-chat-card"><header class="alam-chat-head"><div><h3>alam.chat</h3></div><button class="courier-close" id="alam-close-btn">Close</button></header><pre>${escapeHTML(bio)}</pre><div class="alam-mode-row"><p class="alam-status" id="alam-mode-badge">${currentMode()}</p></div><p class="alam-privacy-note">alam.chat uses a pattern summary by default. Raw echoes stay private.</p><div id="alam-message-list" class="alam-message-list"></div><div class="alam-input-row"><input id="alam-input" maxlength="500" placeholder="ask alam…"><button class="receipt-action-btn" id="alam-send-btn">Ask alam</button></div><div class="alam-panel-actions"><button class="settings-secondary-btn" id="alam-clear-btn">Clear chat</button><button class="settings-secondary-btn" id="alam-bottom-close-btn">Close</button></div></div></div>`);
     document.body.style.overflow='hidden';
     const settings=readLocalJSON(settingsKey,{includeLatestEcho:false});
     const latest=document.getElementById('alam-include-latest');
