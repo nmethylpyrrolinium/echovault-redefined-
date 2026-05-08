@@ -3432,10 +3432,18 @@ const Rituals = (() => {
   function getBuilders() { return {museum:buildMuseum,lantern:buildLantern,stormjar:buildStormJar,receipt:buildReceipt, dna:buildDNA, crash:buildCrash, sound:buildSound, vsvs:buildConflict, shatter:buildShatter}; }
   function hasBuilder(type) { return type === 'special-access' || type === 'alam' || Boolean(getBuilders()[type]); }
   function unknownRitualHTML(type) { return `<div class="ritual-error-card"><h3>Unknown ritual</h3><p>${escapeHTML(type || 'This ritual')} is not available in this build.</p></div>`; }
+  function museumDebugEnabled() {
+    return typeof location !== 'undefined' && location.search.includes('debug=1');
+  }
+
+  function museumDebugLog(message) {
+    if (museumDebugEnabled()) console.warn(message);
+  }
+
   function museumFallbackHTML(error) {
-    if (location.search.includes('debug=1')) console.warn('Emotional Museum failed to render', error);
-    const safeMessage = location.search.includes('debug=1') ? `<small>${escapeHTML(error?.message || error)}</small>` : '';
-    return `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p></header><div class="museum-room active"><h4>Museum room recovering</h4><p>Your vault is safe. The museum shell opened, but one room needs a refresh.</p>${safeMessage}</div></div>`;
+    museumDebugLog(`[Museum] shell fallback -> ${error?.message || error || 'unknown error'}`);
+    const safeMessage = museumDebugEnabled() ? `<small>${escapeHTML(error?.message || error)}</small>` : '';
+    return `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p></header><div class="museum-room active"><h4>This room is still forming.</h4><p>Create more echoes to fill this wing.</p>${safeMessage}</div></div>`;
   }
 
   function open(type) {
@@ -3895,63 +3903,95 @@ Insight: ${d.insight}`;
   }
   function buildMuseum(){
     VaultRooms.evaluate?.();
-    const echoes=state.echoes;
-    const saved=ArtifactArchive.listArtifacts();
-    const materials = VaultInventory.getTotals();
+    const echoes=Array.isArray(state.echoes) ? state.echoes : [];
+    const safeMuseumCompute = (label, fallback, compute) => {
+      try { return compute(); }
+      catch(error) { museumDebugLog(`[Museum] failed ${label} -> ${error?.message || error}`); return fallback; }
+    };
+    const saved=safeMuseumCompute('artifacts', [], () => ArtifactArchive.listArtifacts() || []);
+    const materials = safeMuseumCompute('materials', {}, () => VaultInventory.getTotals() || {});
     const totalMaterials = Object.values(materials).reduce((sum, qty)=>sum + Number(qty || 0), 0);
     const meta = MaterialEngine.materialMeta || {};
-    const materialRows = Object.entries(materials).map(([name,count])=>{ const m=meta[name] || { icon:'✦', description:'A private emotional material.', mood:'reflective' }; return `<div class="material-pill mood-${escapeHTML(m.mood)}"><span><b>${escapeHTML(m.icon)}</b> ${escapeHTML(name)}<small>${escapeHTML(m.description)}</small></span><strong>${escapeHTML(count)}</strong></div>`; }).join('') || '<div class="museum-empty">No materials discovered yet. Create an echo to uncover the first fragment.</div>';
-    const craftCards = RelicCrafting.listRecipes().map(recipe => {
-      const missing = RelicCrafting.getMissingMaterials(recipe.id);
-      const can = missing.length === 0;
-      const costs = recipe.cost.map(c => { const have=VaultInventory.getMaterialCount(c.name); return `<span class="cost-chip ${have>=c.qty?'has':'missing'}">${escapeHTML(c.name)} <b>${escapeHTML(have)}/${escapeHTML(c.qty)}</b></span>`; }).join('');
-      const missText = missing.map(m=>`${m.qty} ${m.name}`).join(', ');
-      return `<article class="craft-recipe-card ${can?'can-craft':'is-missing'}"><div class="craft-recipe-top"><span class="craft-rune">✦</span><div><h5>${escapeHTML(recipe.title)}</h5><p>${escapeHTML(recipe.description)}</p></div></div><div class="craft-costs">${costs}</div>${can ? '<small class="craft-ready">Materials aligned.</small>' : `<small class="craft-missing">missing: ${escapeHTML(missText)}</small>`}<button class="receipt-action-btn craft-btn" data-recipe-id="${escapeHTML(recipe.id)}" ${can?'':'disabled'}>Craft</button></article>`;
-    }).join('');
-    const materialsPrep = '<div class="phase-two-note">Materials remain local-first in <code>echovault_inventory_v1</code>; crafting only spends local inventory when every cost is available.</div>';
-    const quest = GentleQuests.current();
-    const avatarHtml = EchoAvatar.render();
-    const societyTeaser = buildEchoSocietyGate();
-    const weather=WeatherMap.compute(echoes);
-    const arch=ArchetypeEngine.compute(PatternEngine.analyze(echoes));
-    const tracks=getSoundprintForEcho(echoes[0] || { mood:weather.mood, intensity:5, silence:5 }, PatternEngine.analyze(echoes));
-    const relics=RelicEngine.fromEchoes(echoes);
+    const buildMaterialRows = () => Object.entries(materials).map(([name,count])=>{ const m=meta[name] || { icon:'✦', description:'A private emotional material.', mood:'reflective' }; return `<div class="material-pill mood-${escapeHTML(m.mood)}"><span><b>${escapeHTML(m.icon)}</b> ${escapeHTML(name)}<small>${escapeHTML(m.description)}</small></span><strong>${escapeHTML(count)}</strong></div>`; }).join('') || '<div class="museum-empty">No materials discovered yet. Create an echo to uncover the first fragment.</div>';
+    const materialRows = buildMaterialRows();
+    const weather=safeMuseumCompute('weather', { name:'Quiet Weather', summary:'This room has no saved material yet.', mood:'reflective' }, () => WeatherMap.compute(echoes));
+    const pattern=safeMuseumCompute('pattern', {}, () => PatternEngine.analyze(echoes));
+    const arch=safeMuseumCompute('archetype', { archetypeName:'Still Forming', archetypeDescription:'Create more echoes to fill this wing.' }, () => ArchetypeEngine.compute(pattern));
+    const quest=safeMuseumCompute('quest', { text:'Create one echo to wake the museum.', completed:false, reward:{ name:'Calm Shard', qty:1 }, xp:0 }, () => GentleQuests.current());
+    const avatarHtml=safeMuseumCompute('avatar', '', () => EchoAvatar.render());
+    const societyTeaser=safeMuseumCompute('society', '<div class="museum-empty">This room is still forming.</div>', () => buildEchoSocietyGate());
     const relicVisual = (name) => {
-      const key = name.toLowerCase();
+      const key = String(name || '').toLowerCase();
       if (key.includes('signal')) return 'relic-star';
       if (key.includes('quiet')) return 'relic-stone';
       if (key.includes('storm')) return 'relic-prism';
       if (key.includes('comet')) return 'relic-comet';
       return 'relic-token';
     };
+    const buildCraftCards = () => RelicCrafting.listRecipes().map(recipe => {
+      const missing = RelicCrafting.getMissingMaterials(recipe.id);
+      const can = missing.length === 0;
+      const costs = recipe.cost.map(c => { const have=VaultInventory.getMaterialCount(c.name); return `<span class="cost-chip ${have>=c.qty?'has':'missing'}">${escapeHTML(c.name)} <b>${escapeHTML(have)}/${escapeHTML(c.qty)}</b></span>`; }).join('');
+      const missText = missing.map(m=>`${m.qty} ${m.name}`).join(', ');
+      return `<article class="craft-recipe-card ${can?'can-craft':'is-missing'}"><div class="craft-recipe-top"><span class="craft-rune">✦</span><div><h5>${escapeHTML(recipe.title)}</h5><p>${escapeHTML(recipe.description)}</p></div></div><div class="craft-costs">${costs}</div>${can ? '<small class="craft-ready">Materials aligned.</small>' : `<small class="craft-missing">missing: ${escapeHTML(missText)}</small>`}<button class="receipt-action-btn craft-btn" data-recipe-id="${escapeHTML(recipe.id)}" ${can?'':'disabled'}>Craft</button></article>`;
+    }).join('') || '<div class="museum-empty">Create more echoes to fill this wing.</div>';
+    const materialsPrep = '<div class="phase-two-note">Materials remain local-first in <code>echovault_inventory_v1</code>; crafting only spends local inventory when every cost is available.</div>';
     const premiumRoomFeatures = { weather_room:'premium_weather_map', soundprint_wall:'advanced_soundprint', relic_hall:'emotional_museum_full', archive_shelf:'artifact_archive', lantern_garden:'vault_rooms', crafting_table:'crafting_table', society_gate:'society_gate' };
+    const roomUnlockAlias = { archetype_hall:'weather_room', materials_room:'crafting_table' };
+    const roomDefs = [
+      { id:'weather_room', panel:'weather', label:'Weather Room' },
+      { id:'archetype_hall', panel:'archetype', label:'Archetype Hall' },
+      { id:'soundprint_wall', panel:'soundprint', label:'Soundprint Wall' },
+      { id:'relic_hall', panel:'relics', label:'Memory Relics' },
+      { id:'archive_shelf', panel:'receipts', label:'Receipt Archive' },
+      { id:'lantern_garden', panel:'lanterns', label:'Void Lanterns' },
+      { id:'crafting_table', panel:'crafting', label:'Crafting Table' },
+      { id:'materials_room', panel:'materials', label:'Vault Materials' },
+      { id:'society_gate', panel:'society', label:'Society Gate' }
+    ];
+    const roomBuilders = {
+      weather_room: () => panelLock('weather_room', `<h4>Weather Room</h4><p>${escapeHTML(weather.summary || 'This room has no saved material yet.')}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div>`),
+      archetype_hall: () => `<h4>Archetype Hall</h4><p>${escapeHTML(arch.archetypeName || 'Still Forming')} · ${escapeHTML(arch.archetypeDescription || 'Create more echoes to fill this wing.')}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button>`,
+      soundprint_wall: () => panelLock('soundprint_wall', (() => { const tracks=getSoundprintForEcho(echoes[0] || { mood:weather.mood || 'reflective', intensity:5, silence:5 }, pattern) || []; const rows=tracks.slice(0,3).map(t=>`<div class='track-item'><div><b>${escapeHTML(t.song)}</b><small>${escapeHTML(t.artist)}</small></div><a class='track-link spotify' href='${escapeHTML(t.spotify)}' target='_blank' rel='noopener noreferrer'>Spotify</a><a class='track-link youtube' href='${escapeHTML(t.youtube)}' target='_blank' rel='noopener noreferrer'>YouTube</a></div>`).join('') || '<div class="museum-empty">No soundprint entries yet. Create more echoes to fill this wing.</div>'; return `<h4>Soundprint Wall</h4>${rows}<button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button>`; })()),
+      relic_hall: () => panelLock('relic_hall', (() => { const relics=RelicEngine.fromEchoes(echoes) || []; const rows=relics.map((r,i)=>`<article class='relic-item mood-${escapeHTML(r.mood)}' style='--delay:${i * 120}ms'><div class='relic-visual ${relicVisual(r.title)}'></div><b>${escapeHTML(r.title)}</b><span class='rarity'>${escapeHTML(r.rarity)}</span><small>${escapeHTML(r.coordinates)}</small><p>${escapeHTML(r.description)}</p><button class='receipt-action-btn relic-dl' data-id='${escapeHTML(r.id)}'>Download Card</button><button class='receipt-action-btn relic-save' data-id='${escapeHTML(r.id)}'>Save Artifact</button></article>`).join('') || '<div class="museum-empty">No relics archived here yet. Create more echoes to fill this wing.</div>'; return `<h4>Memory Relics</h4><div class="relic-grid">${rows}</div>`; })()),
+      archive_shelf: () => panelLock('archive_shelf', `<h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button><div class="artifact-shelf" id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${escapeHTML(a.title)}</b><small>${escapeHTML(a.type)}</small><button class='receipt-action-btn art-fav' data-id='${escapeHTML(a.id)}'>☆</button><button class='receipt-action-btn art-del' data-id='${escapeHTML(a.id)}'>Delete</button></div>`).join('') || '<div class="museum-empty">No artifacts archived here yet.</div>'}</div>`),
+      lantern_garden: () => panelLock('lantern_garden', '<h4>Void Lanterns</h4><p>Still here is still a signal. Crafted lanterns gather here as a private garden.</p><div class="museum-empty">This room has no saved material yet.</div>'),
+      crafting_table: () => panelLock('crafting_table', `<section class="crafting-table"><div class="crafting-head"><div><h4>Crafting Table</h4><p>Shape emotional materials into relics.</p></div><span>${totalMaterials} materials</span></div><section class="vault-materials compact"><h4>Inventory Summary</h4>${materialRows}</section><div class="craft-grid">${buildCraftCards()}</div><div id="crafted-preview" class="crafted-preview" hidden></div></section>`),
+      materials_room: () => `<h4>Vault Materials</h4><section class="vault-materials">${materialRows}</section>${materialsPrep}`,
+      society_gate: () => societyTeaser
+    };
+    const roomFallback = (label, error) => `<div class="museum-empty"><h4>${escapeHTML(label)}</h4><p>This room is still forming.</p><small>${museumDebugEnabled() ? escapeHTML(error?.message || error || '') : 'Create more echoes to fill this wing.'}</small></div>`;
+    const renderRoom = ({ id, panel, label }, index) => {
+      museumDebugLog(`[Museum] building room: ${id}`);
+      try {
+        const builder = roomBuilders[id];
+        if (typeof builder !== 'function') throw new Error(`Missing museum room builder for ${id}`);
+        return `<div class="museum-room ${index===0?'active':''}" data-room-panel="${escapeHTML(panel)}">${builder()}</div>`;
+      } catch(error) {
+        museumDebugLog(`[Museum] failed room: ${id} -> ${error?.message || error}`);
+        return `<div class="museum-room ${index===0?'active':''}" data-room-panel="${escapeHTML(panel)}">${roomFallback(label, error)}</div>`;
+      }
+    };
     const panelLock = (roomId, html) => {
       const feature = premiumRoomFeatures[roomId];
       if (feature && !UserAccess.canUse(feature)) return UserAccess.lockedHTML(feature);
-      return VaultRooms.isUnlocked(roomId) ? html : `<div class="museum-locked"><h4>${escapeHTML(VaultRooms.getRooms().find(r=>r.id===roomId)?.name || 'Locked Room')}</h4><p>${escapeHTML(VaultRooms.getUnlockReason(roomId))}</p></div>`;
+      const unlockId = roomUnlockAlias[roomId] || roomId;
+      return VaultRooms.isUnlocked(unlockId) ? html : `<div class="museum-locked"><h4>${escapeHTML(VaultRooms.getRooms().find(r=>r.id===unlockId)?.name || 'Locked Room')}</h4><p>${escapeHTML(VaultRooms.getUnlockReason(unlockId))}</p></div>`;
     };
-    const roomMap = [
-      ['weather_room','weather','Weather Room'],
-      ['archetype_hall','archetype','Archetype Hall'],
-      ['soundprint_wall','soundprint','Soundprint Wall'],
-      ['relic_hall','relics','Memory Relics'],
-      ['archive_shelf','receipts','Receipt Archive'],
-      ['lantern_garden','lanterns','Void Lanterns'],
-      ['crafting_table','crafting','Crafting Table'],
-      ['materials_room','materials','Vault Materials'],
-      ['society_gate','society','Society Gate']
-    ];
-    const tabButton = ([roomId, panel, label]) => {
-      const unlockId = roomId === 'archetype_hall' ? 'weather_room' : roomId === 'materials_room' ? 'crafting_table' : roomId;
-      const premiumUnlocked = !premiumRoomFeatures[roomId] || UserAccess.canUse(premiumRoomFeatures[roomId]);
+    const tabButton = ({ id, panel, label }) => {
+      const unlockId = roomUnlockAlias[id] || id;
+      const feature = premiumRoomFeatures[id];
+      const premiumUnlocked = !feature || UserAccess.canUse(feature);
       const unlocked = premiumUnlocked && VaultRooms.isUnlocked(unlockId);
-      const title = premiumUnlocked ? (unlocked ? 'Awakened' : VaultRooms.getUnlockReason(unlockId)) : UserAccess.getLockedCopy(premiumRoomFeatures[roomId]).body;
-      return `<button class="museum-tab ${panel==='weather'?'active':''} ${unlocked?'is-unlocked':'is-locked'}" data-room="${panel}" title="${escapeHTML(title)}">${premiumUnlocked ? '' : '✦ '}${escapeHTML(label)}</button>`;
+      const title = premiumUnlocked ? (unlocked ? 'Awakened' : VaultRooms.getUnlockReason(unlockId)) : UserAccess.getLockedCopy(feature).body;
+      return `<button class="museum-tab ${panel==='weather'?'active':''} ${unlocked?'is-unlocked':'is-locked'}" data-room="${escapeHTML(panel)}" title="${escapeHTML(title)}">${premiumUnlocked ? '' : '✦ '}${escapeHTML(label)}</button>`;
     };
-    const shellStart = `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-meta"><span>${echoes.length} echoes</span><span>${saved.length} artifacts</span><span>${totalMaterials} materials</span><span>${weather.name}</span><span>${arch.archetypeName}</span></div></header><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${quest.text}</b><small>${quest.completed ? 'complete' : `Reward: +${quest.reward.qty} ${quest.reward.name}${quest.xp ? ` · +${quest.xp} XP` : ''}`}</small></div>${avatarHtml}<nav class="museum-tabs" aria-label="Museum rooms">${roomMap.map(tabButton).join('')}</nav>`;
-    if(!echoes.length) return `${shellStart}<section class="vault-materials"><h4>Vault Materials</h4>${materialRows}</section>${materialsPrep}${societyTeaser}<div class="museum-empty">The museum is quiet. Create echoes to awaken its rooms.</div></div>`;
-    return `${shellStart}<div class="museum-room active" data-room-panel="weather">${panelLock('weather_room', `<h4>Weather Room</h4><p>${weather.summary}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div>`)}</div><div class="museum-room" data-room-panel="archetype"><h4>Archetype Hall</h4><p>${arch.archetypeName} · ${arch.archetypeDescription}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button></div><div class="museum-room" data-room-panel="soundprint">${panelLock('soundprint_wall', `<h4>Soundprint Wall</h4>${tracks.slice(0,3).map(t=>`<div class='track-item'><div><b>${t.song}</b><small>${t.artist}</small></div><a class='track-link spotify' href='${t.spotify}' target='_blank' rel='noopener noreferrer'>Spotify</a><a class='track-link youtube' href='${t.youtube}' target='_blank' rel='noopener noreferrer'>YouTube</a></div>`).join('')}<button class="receipt-action-btn" id="dl-sound">Download Soundprint Card</button>`)}</div><div class="museum-room" data-room-panel="relics">${panelLock('relic_hall', `<h4>Memory Relics</h4><div class="relic-grid">${relics.map((r,i)=>`<article class='relic-item mood-${escapeHTML(r.mood)}' style='--delay:${i * 120}ms'><div class='relic-visual ${relicVisual(r.title)}'></div><b>${escapeHTML(r.title)}</b><span class='rarity'>${escapeHTML(r.rarity)}</span><small>${escapeHTML(r.coordinates)}</small><p>${escapeHTML(r.description)}</p><button class='receipt-action-btn relic-dl' data-id='${escapeHTML(r.id)}'>Download Card</button><button class='receipt-action-btn relic-save' data-id='${escapeHTML(r.id)}'>Save Artifact</button></article>`).join('')}</div>`)}</div><div class="museum-room" data-room-panel="receipts">${panelLock('archive_shelf', `<h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button><div class="artifact-shelf" id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${escapeHTML(a.title)}</b><small>${escapeHTML(a.type)}</small><button class='receipt-action-btn art-fav' data-id='${escapeHTML(a.id)}'>☆</button><button class='receipt-action-btn art-del' data-id='${escapeHTML(a.id)}'>Delete</button></div>`).join('') || 'No artifacts saved yet. Create one from a ritual.'}</div>`)}</div><div class="museum-room" data-room-panel="lanterns">${panelLock('lantern_garden', `<h4>Void Lanterns</h4><p>Still here is still a signal. Crafted lanterns gather here as a private garden.</p>`)}</div><div class="museum-room" data-room-panel="crafting">${panelLock('crafting_table', `<section class="crafting-table"><div class="crafting-head"><div><h4>Crafting Table</h4><p>Shape emotional materials into relics.</p></div><span>${totalMaterials} materials</span></div><section class="vault-materials compact"><h4>Inventory Summary</h4>${materialRows}</section><div class="craft-grid">${craftCards}</div><div id="crafted-preview" class="crafted-preview" hidden></div></section>`)}</div><div class="museum-room" data-room-panel="materials"><h4>Vault Materials</h4><section class="vault-materials">${materialRows}</section>${materialsPrep}</div><div class="museum-room" data-room-panel="society">${societyTeaser}</div></div>`;
+    const shellStart = `<div class="museum-shell" data-room="weather"><header class="museum-head"><h3>Emotional Museum</h3><p class="museum-sub">A private archive of what your echoes became.</p><div class="museum-meta"><span>${echoes.length} echoes</span><span>${saved.length} artifacts</span><span>${totalMaterials} materials</span><span>${escapeHTML(weather.name || 'Quiet Weather')}</span><span>${escapeHTML(arch.archetypeName || 'Still Forming')}</span></div></header><div class="gentle-quest-card"><span>Today’s Gentle Quest</span><b>${escapeHTML(quest.text)}</b><small>${quest.completed ? 'complete' : `Reward: +${escapeHTML(quest.reward?.qty || 0)} ${escapeHTML(quest.reward?.name || 'material')}${quest.xp ? ` · +${escapeHTML(quest.xp)} XP` : ''}`}</small></div>${avatarHtml}<nav class="museum-tabs" aria-label="Museum rooms">${roomDefs.map(tabButton).join('')}</nav>`;
+    const roomsHtml = roomDefs.map(renderRoom).join('');
+    const emptyNote = !echoes.length ? '<div class="museum-empty">The museum is quiet. Create echoes to awaken its rooms.</div>' : '';
+    return `${shellStart}${roomsHtml}${emptyNote}</div>`;
   }
+
   function startConflictAnimation() {
     const canvas = document.getElementById('conflict-canvas');
     if (!canvas) return;
