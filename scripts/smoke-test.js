@@ -518,6 +518,24 @@ if (/Premium/.test(funGridSource)) failures.push('Visible Premium clutter added 
 // Runtime reliability checks for rituals, Wrapped, and Soundprints
 if (!/function buildMuseum\s*\(/.test(script) || !script.includes('museum:buildMuseum')) failures.push('Emotional Museum builder missing or not mapped from data-fun="museum"');
 if (!script.includes('museumFallbackHTML') || script.includes('<h3>Ritual unavailable</h3>')) failures.push('Museum should not use generic Ritual unavailable fallback');
+if (script.includes('Museum room recovering')) failures.push('Museum should not use vague room recovering fallback copy');
+if (!script.includes('[Museum] building room:') || !script.includes('[Museum] failed room:')) failures.push('Museum debug room-level logging missing');
+if (!script.includes('const roomBuilders = {') || !script.includes('const renderRoom =')) failures.push('Museum rooms should be rendered through independent builders');
+const museumBlockStart = script.indexOf('function buildMuseum');
+const museumBlockEnd = script.indexOf('function startConflictAnimation', museumBlockStart);
+const museumBlock = museumBlockStart >= 0 && museumBlockEnd > museumBlockStart ? script.slice(museumBlockStart, museumBlockEnd) : '';
+const roomDefIds = [...museumBlock.matchAll(/\{ id:'([^']+)', panel:'([^']+)', label:'([^']+)' \}/g)].map((m) => m[1]);
+roomDefIds.forEach((roomId) => {
+  if (!museumBlock.includes(`${roomId}: () =>`)) failures.push(`Museum room list missing builder for ${roomId}`);
+});
+['weather_room','archetype_hall','soundprint_wall','relic_hall','archive_shelf','lantern_garden','crafting_table','materials_room','society_gate'].forEach((roomId) => {
+  if (!roomDefIds.includes(roomId)) failures.push(`Museum room list missing ${roomId}`);
+});
+['No artifacts archived here yet.','No soundprint entries yet.','No relics archived here yet.','Create more echoes to fill this wing.','This room has no saved material yet.'].forEach((copy) => {
+  if (!museumBlock.includes(copy)) failures.push(`Museum empty-state copy missing: ${copy}`);
+});
+if (!museumBlock.includes('try {') || !museumBlock.includes('catch(error)') || !museumBlock.includes('Missing museum room builder')) failures.push('Museum should isolate failed room builders');
+if (!script.includes("museum:'emotional_museum_full'") || !script.includes("UserAccess.requirePremium(premiumRitualMap[type]")) failures.push('Emotional Museum Special Access unlock path missing');
 if (!script.includes('hasBuilder(type)') || !script.includes('Rituals.hasBuilder')) failures.push('Ritual card gating should verify builders exist');
 if (!script.includes('WrappedCinematicLoader') || !script.includes('ensureLoaded') || !script.includes('openIfAvailable')) failures.push('Wrapped cinematic loader/guard missing');
 if (!script.includes('Wrapped.render();') || !script.includes('falling back to standard Wrapped')) failures.push('Wrapped fallback render missing');
