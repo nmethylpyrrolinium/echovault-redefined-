@@ -556,6 +556,18 @@ if (!script.includes('echosociety-shell')) failures.push('echosociety-shell miss
 if (!script.includes('mission-selection-panel')) failures.push('Signal Courier mission selection missing');
 if (!script.includes('courier-district-map') || !script.includes('courier-canvas')) failures.push('Signal Courier district map/canvas missing');
 if (!script.includes('delivery_completed')) failures.push('Signal Courier delivery_completed event missing');
+const courierStart = script.indexOf('const SignalCourierRoute = (() => {');
+const courierEnd = courierStart >= 0 ? script.indexOf('const AlamPrivacy', courierStart) : -1;
+const courierSource = courierStart >= 0 && courierEnd > courierStart ? script.slice(courierStart, courierEnd) : '';
+if (!courierSource.includes('Carry the feeling somewhere safer.')) failures.push('Signal Courier calming mission copy missing');
+if (!courierSource.includes('Tap steady when you’re ready.')) failures.push('Signal Courier steady pacing copy missing');
+if (!courierSource.includes('id=\"courier-steady-btn\"') || !courierSource.includes('Steady')) failures.push('Signal Courier Steady button missing');
+if (script.includes('Signal Grounding Mode')) failures.push('Do not add Signal Grounding Mode');
+if (/cure anxiety|treat anxiety|therapy|mental health treatment|diagnos/i.test(courierSource)) failures.push('Signal Courier contains prohibited medical/therapy language');
+if (!courierSource.includes('Not this district. Follow the glowing route.')) failures.push('Signal Courier wrong-district gentle message missing');
+if (!courierSource.includes('localDeliveryWithoutConsent:true') || !script.includes('society-delivery-launcher-local')) failures.push('Signal Courier local delivery without society consent missing');
+if (!courierSource.includes('SocietySignals.getConsent() ? SocietySignals.contributeDelivery(done) : null') || !courierSource.includes('Signal shared anonymously.')) failures.push('Signal Courier sharing must still require consent');
+if (!script.includes("requirePremium('signal_courier")) failures.push('Signal Courier must remain Special Access gated');
 if (!index.includes('data-fun="alam"') || !script.includes('renderPortal')) failures.push('alam.ai standalone portal/card missing');
 
 // Runtime reliability checks for rituals, Wrapped, and Soundprints
