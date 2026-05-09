@@ -357,22 +357,46 @@ if (!societyWeatherSource) failures.push('SocietyWeather source block not found'
 if (societyWeatherSource.includes('Live Society Weather') && !/const \[daily, publicSignals, reactionRows\][\s\S]*SocietySync\.fetchDailyWeather\(\)[\s\S]*SocietySync\.fetchPublicSignals\(\)[\s\S]*SocietySync\.fetchReactionCounts\(\)[\s\S]*label:'Live Society Weather'/.test(societyWeatherSource)) {
   failures.push('SocietyWeather may label live before using fetched cloud data');
 }
-if (!societyWeatherSource.includes('Live weather unavailable — showing local preview.')) failures.push('SocietyWeather missing live-unavailable local fallback note');
+if (!societyWeatherSource.includes('Live society unavailable — showing local preview.')) failures.push('SocietyWeather missing live-unavailable local fallback note');
 if (!societyWeatherSource.includes("label:'Local Preview Weather'")) failures.push('SocietyWeather missing Local Preview Weather fallback label');
 ['contributeWeather','contributeLantern','contributeStorm','contributeBloom','contributeArchiveLine'].forEach((fn) => {
-  const re = new RegExp(`${fn}[\\s\\S]{0,320}(SocietySignals\\.getConsent\\(\\)|SocietyPrivacy\\.requireConsent\\(\\))`);
-  if (!re.test(societySignalsSource)) failures.push(`${fn} missing explicit society consent guard`);
+  const re = new RegExp(`${fn}[\\s\\S]{0,360}guardDistrictContribution`);
+  if (!re.test(societySignalsSource)) failures.push(`${fn} missing district contribution guard`);
 });
+if (!/function guardDistrictContribution[\s\S]{0,260}SocietyPrivacy\.requireSpecialAccess\(\)[\s\S]{0,260}SocietyPrivacy\.requireConsent\(\)[\s\S]{0,260}SocietyPrivacy\.requireSafeSignalPayload\(payload\)/.test(societySignalsSource)) failures.push('District contribution guard must check Special Access, consent, and safe signal payload');
 if (!/function addReaction[\s\S]{0,320}(SocietySignals\.getConsent\(\)|SocietyPrivacy\.requireConsent\(\))/.test(societySignalsSource)) failures.push('addReaction missing explicit society consent guard');
 if (!script.includes('society-stay-private-btn') || !(script.includes('city.hidden=true') || script.includes('city.hidden = true')) || !script.includes('privatePanel.hidden=false')) failures.push('society-stay-private-btn handler does not immediately hide/disable society-city and show private state');
 
 if (!(script.includes('SocietySync.fetchDailyWeather()') || script.includes('SocietySync.fetchPublicSignals()'))) failures.push('SocietyWeather does not fetch cloud data before live weather');
 ['contributeWeather','contributeLantern','contributeStorm','contributeBloom','contributeArchiveLine'].forEach((fn) => {
-  const re = new RegExp(`${fn}[\\s\\S]{0,260}SocietySignals\\.getConsent\\(\\)`);
-  if (!re.test(script)) failures.push(`${fn} missing explicit SocietySignals.getConsent guard`);
+  const re = new RegExp(`${fn}[\\s\\S]{0,360}guardDistrictContribution`);
+  if (!re.test(script)) failures.push(`${fn} missing district action guard`);
 });
 if (!script.includes('society-stay-private-btn') || !(script.includes('city.hidden=true') || script.includes('updateSocietyConsentUI({ privateState:true })'))) failures.push('society-stay-private-btn handler does not immediately hide/disable society-city');
 ['Ask alam','alam.ai'].forEach((marker) => { if (!script.includes(marker) && !index.includes(marker)) failures.push(`alam.ai UI marker missing: ${marker}`); });
+
+
+// Society Gate state-machine checks
+if (!script.includes('function getSocietyGateState()')) failures.push('getSocietyGateState missing');
+['no_special_access','locked_progress','ready_needs_consent','active','local_preview','cloud_live_unavailable'].forEach((gateState) => {
+  if (!script.includes(`'${gateState}'`) && !script.includes(`society-state-${gateState}`)) failures.push(`Society Gate state missing: ${gateState}`);
+});
+if (!script.includes('Special Access opens this gate.')) failures.push('no_special_access copy missing');
+['Create Echo Avatar','Create 5 echoes','Save or craft 1 artifact'].forEach((copy) => {
+  if (!script.includes(copy)) failures.push(`locked_progress missing requirement copy: ${copy}`);
+});
+if (!/gateState === 'ready_needs_consent'[\s\S]{0,900}Enter EchoSociety[\s\S]{0,900}Stay Private[\s\S]{0,900}Privacy Rules/.test(script)) failures.push('ready_needs_consent copy/actions missing');
+if (/gateState === 'ready_needs_consent'[\s\S]{0,900}society-district-grid/.test(script)) failures.push('Society Gate shows districts before consent');
+if (!/function buildSocietyCity[\s\S]*society-district-grid/.test(script) || !/gateState === 'ready_needs_consent'[\s\S]*return `[\s\S]*buildSocietyCity/.test(script)) {
+  // The ready state must return before the city builder is appended.
+  if (!/if \(gateState === 'ready_needs_consent'\)[\s\S]*return `[\s\S]*`;/ .test(script)) failures.push('Society Gate city/district rendering is not isolated behind consent state');
+}
+if (!/function getSocietyGateState[\s\S]*!authUser[\s\S]*'local_preview'/.test(script) || !script.includes('Local Preview')) failures.push('Local Preview state/copy missing for logged-out Society Gate');
+if (!/allCloudFetchesSucceeded[\s\S]*liveStatus = 'live'[\s\S]*label:'Live Society Weather'/.test(societyWeatherSource)) failures.push('Live Society Weather should only render after Supabase fetch success');
+if (!script.includes('Live society unavailable — showing local preview.')) failures.push('cloud_live_unavailable copy missing');
+if (!/const guardDistrictAction[\s\S]{0,240}SocietyPrivacy\.requireSpecialAccess\(\)[\s\S]{0,240}SocietyPrivacy\.requireConsent\(\)/.test(script)) failures.push('district actions must check Special Access and consent');
+if (!script.includes('Emotional Museum')) failures.push('Emotional Museum marker missing after Society Gate changes');
+if (!script.includes('redeemAccessCode') || !script.includes('SpecialAccessPortal')) failures.push('Special Access code path marker missing after Society Gate changes');
 
 if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}/.test(script + index)) failures.push('Hardcoded AI API key detected');
 ['bro this is not a crisis arc','your silence is doing pushups','you’re not empty, you’re buffering','put the thought down like a heavy bag'].forEach((sample) => { if ((index + readme).includes(sample)) failures.push(`Canned local reply example should not be present in README/index static text: ${sample}`); });

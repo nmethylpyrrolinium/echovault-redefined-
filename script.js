@@ -2993,10 +2993,13 @@ const SocietyPrivacy = (() => {
   const forbidden = ['thought','raw_thought','email','display_name','name','profile','full_echo','user_text','archive_line'];
   function stripUnsafeFields(payload = {}) { return sanitizeSocietySignal(payload); }
   function isSafeSignalPayload(payload = {}) { return forbidden.every((field) => !Object.prototype.hasOwnProperty.call(payload, field)); }
-  function canContribute() { return SocietySignals.getConsent(); }
-  function requireConsent() { if (!canContribute()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return false; } return true; }
+  function hasSpecialAccess() { return Boolean(UserAccess.canUse('echosociety') && UserAccess.canUse('society_gate')); }
+  function requireSpecialAccess() { if (hasSpecialAccess()) return true; UserAccess.requirePremium('society_gate', { openSettings:true }); return false; }
+  function canContribute() { return hasSpecialAccess() && SocietySignals.getConsent(); }
+  function requireConsent() { if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return false; } return true; }
+  function requireSafeSignalPayload(payload = {}) { if (isSafeSignalPayload(payload)) return true; Toast.show('Only anonymous symbolic signals can enter EchoSociety.'); return false; }
   function explainPrivacy() { return 'Raw echoes stay private by default. EchoSociety receives only anonymous symbolic mood, intensity, silence, archetype, district, and day signals after consent.'; }
-  return { canContribute, requireConsent, stripUnsafeFields, isSafeSignalPayload, explainPrivacy };
+  return { canContribute, requireSpecialAccess, requireConsent, requireSafeSignalPayload, stripUnsafeFields, isSafeSignalPayload, explainPrivacy };
 })();
 
 const SocietySignals = (() => {
@@ -3034,10 +3037,13 @@ const SocietySignals = (() => {
   }
   function createSignal(type='weather', source={}){
     ensureKeys();
+    if (!SocietyPrivacy.requireSpecialAccess()) return null;
     if (!requireConsent()) return null;
     const signal = baseSignal(type, source);
+    if (!SocietyPrivacy.requireSafeSignalPayload(signal)) return null;
     const safe = sanitizeSocietySignal(signal);
-    const local = { ...signal, ...safe, synced:false, raw_echo_shared:false };
+    if (!SocietyPrivacy.requireSafeSignalPayload(safe)) return null;
+    const local = { ...safe, id:signal.id, created_at:signal.created_at, synced:false, raw_echo_shared:false };
     const arr = listLocalSignals(); arr.unshift(local); writeLocalJSON(SIGNALS_KEY, arr.slice(0,160));
     SocietySync.uploadSignal(local).then((res)=>{ if(res?.ok) markSynced(local.id); }).catch(()=>{});
     return local;
@@ -3047,15 +3053,15 @@ const SocietySignals = (() => {
   function clearLocalSignals(){ writeLocalJSON(SIGNALS_KEY, []); writeLocalJSON(REACTIONS_KEY, {}); }
   function exportSignals(){ ensureKeys(); const blob = new Blob([JSON.stringify({ version:2, privacy:SocietyPrivacy.explainPrivacy(), consent:readLocalJSON(CONSENT_KEY,{}), signals:listLocalSignals().map(sanitizeSocietySignal), reactions:listReactions() }, null, 2)], {type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='echovault-society-signals.json'; a.click(); URL.revokeObjectURL(url); }
   function listReactions(){ ensureKeys(); const obj = readLocalJSON(REACTIONS_KEY, {}); return obj && typeof obj === 'object' ? obj : {}; }
-  function addReaction(signalId, reactionType){ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } if (!SocietyPrivacy.requireConsent()) return null; if(!SOCIETY_REACTIONS[reactionType]) return null; const all=listReactions(); const key=String(signalId || 'local-preview'); const current=Array.isArray(all[key]) ? all[key] : []; if(!current.includes(reactionType)) current.push(reactionType); all[key]=current; writeLocalJSON(REACTIONS_KEY, all); SocietySync.addReaction(signalId, reactionType).catch(()=>{}); return current; }
-  function guardConsent(){ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return false; } return true; }
-  const contributeWeather=()=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('weather'); };
-  const contributeLantern=()=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('lantern', { mood: latestEcho().mood || 'empty', silence: latestEcho().silence ?? 9 }); };
-  const contributeStorm=()=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('storm', { mood: latestEcho().mood || 'chaos', intensity: latestEcho().intensity ?? 9 }); };
-  const contributeBloom=()=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('bloom', { mood: latestEcho().mood || 'joyful', intensity: latestEcho().intensity ?? 4 }); };
-  const contributeArchiveLine=(optionalLine='')=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('archive', { metadata:{ archive_marker:Boolean(String(optionalLine).trim()) } }); };
-  const contributeDelivery=(mission)=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('delivery', { district:mission?.to || 'Signal Couriers’ Route', metadata:{ delivery_item:mission?.item || 'signal', mission_id:mission?.id || 'delivery' } }); };
-  const contributeAlam=()=>{ if (!SocietySignals.getConsent()) { Toast.show('Join EchoSociety first. Your vault is still private.'); return null; } return createSignal('alam', { metadata:{ portal:'observatory' } }); };
+  function addReaction(signalId, reactionType){ if (!SocietyPrivacy.requireSpecialAccess()) return null; if (!SocietyPrivacy.requireConsent()) return null; if(!SOCIETY_REACTIONS[reactionType]) return null; const payload={ signal_id:String(signalId || 'local-preview'), reaction_type:reactionType, day:dayKey() }; if(!SocietyPrivacy.requireSafeSignalPayload(payload)) return null; const all=listReactions(); const key=payload.signal_id; const current=Array.isArray(all[key]) ? all[key] : []; if(!current.includes(reactionType)) current.push(reactionType); all[key]=current; writeLocalJSON(REACTIONS_KEY, all); SocietySync.addReaction(signalId, reactionType).catch(()=>{}); return current; }
+  function guardDistrictContribution(payload = {}){ return SocietyPrivacy.requireSpecialAccess() && SocietyPrivacy.requireConsent() && SocietyPrivacy.requireSafeSignalPayload(payload); }
+  const contributeWeather=()=> guardDistrictContribution({ signal_type:'weather' }) ? createSignal('weather') : null;
+  const contributeLantern=()=> guardDistrictContribution({ signal_type:'lantern' }) ? createSignal('lantern', { mood: latestEcho().mood || 'empty', silence: latestEcho().silence ?? 9 }) : null;
+  const contributeStorm=()=> guardDistrictContribution({ signal_type:'storm' }) ? createSignal('storm', { mood: latestEcho().mood || 'chaos', intensity: latestEcho().intensity ?? 9 }) : null;
+  const contributeBloom=()=> guardDistrictContribution({ signal_type:'bloom' }) ? createSignal('bloom', { mood: latestEcho().mood || 'joyful', intensity: latestEcho().intensity ?? 4 }) : null;
+  const contributeArchiveLine=(optionalLine='')=> guardDistrictContribution({ signal_type:'archive', metadata:{ archive_marker:Boolean(String(optionalLine).trim()) } }) ? createSignal('archive', { metadata:{ archive_marker:Boolean(String(optionalLine).trim()) } }) : null;
+  const contributeDelivery=(mission)=> guardDistrictContribution({ signal_type:'delivery', district:mission?.to || 'Signal Couriers’ Route', metadata:{ delivery_item:mission?.item || 'signal', mission_id:mission?.id || 'delivery' } }) ? createSignal('delivery', { district:mission?.to || 'Signal Couriers’ Route', metadata:{ delivery_item:mission?.item || 'signal', mission_id:mission?.id || 'delivery' } }) : null;
+  const contributeAlam=()=> guardDistrictContribution({ signal_type:'alam', metadata:{ portal:'observatory' } }) ? createSignal('alam', { metadata:{ portal:'observatory' } }) : null;
   function isSupabaseSocietyAvailable(){ return SocietySync.isAvailable(); }
   function maybePrepareFutureSync(signal){ return { ok:isSupabaseSocietyAvailable(), signal:sanitizeSocietySignal(signal), raw_echo_shared:false }; }
   ensureKeys();
@@ -3077,6 +3083,7 @@ const SocietySync = (() => {
 })();
 
 const SocietyWeather = (() => {
+  let liveStatus = 'local';
   const phrases = { calm:'Blue weather over the Lantern District', chaos:'Electric pressure in the Storm Works', reflective:'Moonlit drift through the Archive', anxious:'Restless wind around the Weather Tower', joyful:'Soft bloom across the market', empty:'Quiet fog around the Society Gate', mixed:'Shifting sky over EchoSociety' };
   function countBy(signals, field){ return signals.reduce((acc, s)=>{ const k=s[field] || 'unknown'; acc[k]=(acc[k]||0)+1; return acc; }, {}); }
   function top(counts, fallback='empty'){ const entries=Object.entries(counts).sort((a,b)=>b[1]-a[1]); if(entries.length>1 && entries[0][1]===entries[1][1]) return 'mixed'; return entries[0]?.[0] || fallback; }
@@ -3097,7 +3104,7 @@ const SocietyWeather = (() => {
     return shaped;
   }
   async function computeLive(){
-    if(!SocietySync.isAvailable()) return computeLocal();
+    if(!SocietySync.isAvailable()) { liveStatus = 'local'; return computeLocal(); }
     try {
       const [daily, publicSignals, reactionRows] = await Promise.all([
         SocietySync.fetchDailyWeather(),
@@ -3108,17 +3115,20 @@ const SocietyWeather = (() => {
       const hasDaily = daily && Object.keys(daily).length > 0;
       const hasReactions = Array.isArray(reactionRows) && reactionRows.length > 0;
       const allCloudFetchesSucceeded = Boolean(daily) && Array.isArray(publicSignals) && Array.isArray(reactionRows);
-      if(!allCloudFetchesSucceeded) return computeLocal('Live weather unavailable — showing local preview.');
+      if(!allCloudFetchesSucceeded) { liveStatus = 'unavailable'; return computeLocal('Live society unavailable — showing local preview.'); }
+      liveStatus = 'live';
       return shapeWeather({label:'Live Society Weather', signals:hasCloudSignals ? publicSignals : [], daily:hasDaily ? daily : null, reactions:hasReactions ? normalizeReactionTotals(reactionRows) : {}, live:true});
     } catch(err) {
       if(window.__ECHOVAULT_DEBUG__) console.warn('[EchoSociety] live weather failed', err);
-      return computeLocal('Live weather unavailable — showing local preview.');
+      liveStatus = 'unavailable';
+      return computeLocal('Live society unavailable — showing local preview.');
     }
   }
   function renderCard(w){ const reactionText=Object.entries(SOCIETY_REACTIONS).map(([key,label])=>`${label}: ${w.reaction_totals[key]||0}`).join(' · '); return `<span>${escapeHTML(w.label)}</span><h4>${escapeHTML(w.phrase)}</h4><p>${escapeHTML(w.total)} anonymous signals today. ${w.connected ? 'Fetched from public-safe EchoSociety data.' : 'This is a local preview, not real global data.'}</p>${w.note ? `<small>${escapeHTML(w.note)}</small>` : ''}<div class="society-weather-grid"><b>${escapeHTML(w.dominant_mood)}</b><small>dominant mood</small><b>${w.lanterns_lit}</b><small>lanterns lit</small><b>${w.storms_contained}</b><small>storms contained</small><b>${w.blooms_planted}</b><small>blooms planted</small><b>${w.archive_signals}</b><small>archive signals</small><b>${Object.values(w.reaction_totals).reduce((a,b)=>a+b,0)}</b><small>reaction totals</small></div><small>${escapeHTML(reactionText)}</small>`; }
-  function refreshLive(){ if(!SocietySync.isAvailable()) return; computeLive().then((w)=>{ const card=document.getElementById('society-weather-card'); if(card) card.innerHTML=renderCard(w); }).catch(()=>{}); }
+  function refreshLive(){ if(!SocietySync.isAvailable()) return; computeLive().then((w)=>{ const card=document.getElementById('society-weather-card'); if(card) card.innerHTML=renderCard(w); const status=document.getElementById('society-live-status'); if(status && liveStatus === 'unavailable') status.textContent='Live society unavailable — showing local preview.'; }).catch(()=>{}); }
   function render(){ const w=computeLocal(SocietySync.isAvailable() ? 'Checking live weather…' : ''); setTimeout(refreshLive, 0); return `<section class="society-weather-card" id="society-weather-card">${renderCard(w)}</section>`; }
-  return { compute:computeLocal, computeLocal, computeLive, render };
+  function getLiveStatus(){ return liveStatus; }
+  return { compute:computeLocal, computeLocal, computeLive, getLiveStatus, render };
 })();
 
 function getSocietyDistrictSuggestion(role='') {
@@ -3273,30 +3283,85 @@ asking for my iman`;
   return { CHAT_KEY, isRemoteAvailable, buildSafeContext, localReply, sendMessage, renderPortal, openChat, closeChat, appendMessage, clearChat, loadMessages, saveMessages, bindShortcut };
 })();
 
-function buildEchoSocietyGate() {
+function getSocietyGateProgress() {
   const avatar = EchoAvatar.load?.() || {};
   const hasAvatar = Boolean(Object.keys(avatar).length && avatar.role);
+  const echoCount = state.echoes.length;
   const artifactCount = ArtifactArchive.listArtifacts().length;
-  const unlocked = hasAvatar && state.echoes.length >= 5 && artifactCount >= 1;
+  const requirementsMet = hasAvatar && echoCount >= 5 && artifactCount >= 1;
+  return { avatar, hasAvatar, echoCount, artifactCount, requirementsMet };
+}
+
+function getSocietyGateState() {
+  const hasSpecialAccess = Boolean(UserAccess.canUse('echosociety') && UserAccess.canUse('society_gate'));
+  const progress = getSocietyGateProgress();
   const consent = SocietySignals.getConsent();
-  const district = getSocietyDistrictSuggestion(avatar.role || '');
-  const requirements = `<ul class="society-requirements"><li class="${hasAvatar?'met':'missing'}">Create Echo Avatar</li><li class="${state.echoes.length >= 5?'met':'missing'}">Create 5 private echoes</li><li class="${artifactCount >= 1?'met':'missing'}">Save 1 artifact</li></ul>`;
-  const echoCircles = `<section class="echo-circles-placeholder"><h4>Echo Circles</h4><p>Small symbolic circles are coming later. No public diary feed. No follower system. No raw echoes.</p></section>`;
-  if (!UserAccess.canUse('society_gate')) return '';
-  const privacy = `<section class="society-privacy-panel" id="society-privacy-panel" ${consent ? 'hidden' : ''}><div class="echo-avatar-kicker">Privacy Rules</div><h4>Privacy Rules</h4><p>${escapeHTML(SocietyPrivacy.explainPrivacy())}</p><p>You choose when to contribute. You can revoke consent anytime.</p><div class="society-actions"><button class="receipt-action-btn" id="society-understand-btn">I Understand</button><button class="receipt-action-btn ghost" id="society-stay-private-btn">Stay Private</button></div></section>`;
-  const intro = `<section class="echo-society-room"><div class="echo-avatar-kicker">Society Gate</div><h4>Welcome to EchoSociety.</h4><p>A shared city built from anonymous symbolic signals — not a public diary feed.</p><p class="society-recommendation">Society role: <b>${escapeHTML(avatar.role || 'Signal Courier')}</b> · Recommended district: <b>${escapeHTML(district)}</b></p><div class="society-actions"><button class="receipt-action-btn" id="society-enter-btn">Enter Society</button><button class="receipt-action-btn ghost" id="society-private-btn">Stay Private</button><button class="receipt-action-btn" id="society-privacy-btn">Privacy Rules</button></div><small>${consent ? 'Consent stored locally; cloud consent syncs when logged in.' : 'Entry waits for consent; local mode remains fully usable.'}</small></section>`;
-  const districts = [
+  const authUser = Auth.user || null;
+  let gateState = 'active';
+  if (!hasSpecialAccess) gateState = 'no_special_access';
+  else if (!progress.requirementsMet) gateState = 'locked_progress';
+  else if (!consent) gateState = 'ready_needs_consent';
+  else if (!authUser) gateState = 'local_preview';
+  else if (SocietyWeather.getLiveStatus?.() === 'unavailable') gateState = 'cloud_live_unavailable';
+  if (location.search.includes('debug=1')) {
+    console.info('[SocietyGate]', gateState, {
+      hasSpecialAccess,
+      hasAvatar: progress.hasAvatar,
+      echoCount: progress.echoCount,
+      artifactCount: progress.artifactCount,
+      consent,
+      authUser
+    });
+  }
+  return gateState;
+}
+
+function buildSocietyDistricts(avatar = {}) {
+  const districtDefinitions = [
     {title:'Lantern District', description:'Blue lantern balconies for quiet signals and void-safe witnessing.', roles:['Lantern Keeper','Void Keeper'], action:'Light Lantern', id:'society-lantern-btn', icon:'🕯️'},
     {title:'Storm Works', description:'Copper storm engines where intense weather becomes contained sparks.', roles:['Stormwright'], action:'Add Storm Spark', id:'society-storm-btn', icon:'⚡'},
     {title:'Bloom Market', description:'Soft stalls trading bloom seeds, green lamps, and tiny mercies.', roles:['Bloom Tender'], action:'Plant Bloom', id:'society-bloom-btn', icon:'🌸'},
     {title:'Moon Archive', description:'A moonlit shelf for optional symbolic witness marks, not raw diary sharing.', roles:['Moon Archivist','Archive Witness'], action:'Leave Anonymous Line', id:'society-archive-btn', icon:'🌙'},
     {title:'Weather Tower', description:'A high glass compass that turns anonymous signals into shared weather.', roles:['Weather Cartographer'], action:'Contribute Weather', id:'society-weather-btn', icon:'🧭'},
-    {title:'Signal Couriers’ Route', description:'Gold paths for peaceful artifact deliveries between districts.', roles:['Signal Courier','Relic Runner'], action:'Start Delivery', id:'society-delivery-btn', icon:'✦'},
-    {title:'alam.ai', description:'A private oracle room with a soft signal.', roles:['Signal Courier','Moon Archivist','Archive Witness'], action:'Open alam.ai', id:'society-alam-btn', icon:'🟣'}
-  ].map(districtCard).join('');
+    {title:'Signal Couriers’ Route', description:'Gold paths for peaceful artifact deliveries between districts.', roles:['Signal Courier','Relic Runner'], action:'Start Delivery', id:'society-delivery-btn', icon:'✦'}
+  ];
+  if (UserAccess.canUse('alam_ai')) districtDefinitions.push({title:'alam.ai Observatory', description:'A private oracle room with a soft signal.', roles:['Signal Courier','Moon Archivist','Archive Witness'], action:'Open alam.ai', id:'society-alam-btn', icon:'🟣'});
+  return districtDefinitions.map((d) => {
+    const roleMatch = d.roles.includes(avatar.role);
+    return `<article class="society-district-card ${roleMatch ? 'recommended' : ''}"><span>${escapeHTML(d.icon)}</span><h4>${escapeHTML(d.title)}</h4><p>${escapeHTML(d.description)}</p><small>${roleMatch ? 'Recommended for your Echo Avatar.' : `Roles: ${escapeHTML(d.roles.join(', '))}`}</small><button class="receipt-action-btn" id="${escapeHTML(d.id)}">${escapeHTML(d.action)}</button></article>`;
+  }).join('');
+}
+
+function buildSocietyCity(gateState, avatar = {}) {
+  const statusCopy = gateState === 'local_preview'
+    ? '<div class="echo-avatar-kicker">Local Preview</div><p>Local symbolic preview only. This does not claim live society data.</p>'
+    : gateState === 'cloud_live_unavailable'
+      ? '<p id="society-live-status">Live society unavailable — showing local preview.</p>'
+      : '<p id="society-live-status">Society city is active.</p>';
   const archiveInput = `<div class="society-archive-note"><input class="society-archive-input" id="society-archive-line" maxlength="80" placeholder="optional line, local preview only…"><small>For now the line is not uploaded; only a symbolic archive marker is used.</small></div>`;
   const signals = SocietySignals.listLocalSignals().slice(0,8).map(signal => `<article class="society-signal" data-signal-id="${escapeHTML(signal.id)}"><span>${escapeHTML(signal.anonymous_label)}</span><b>${escapeHTML(signal.signal_type)} · ${escapeHTML(signal.mood)}</b><small>${escapeHTML(signal.district)} · ${escapeHTML(signal.intensity_band)} intensity · ${escapeHTML(signal.silence_band)} silence · ${escapeHTML(signal.archetype)}</small><div class="society-reactions">${Object.entries(SOCIETY_REACTIONS).map(([key,label])=>`<button data-reaction="${key}">${label}</button>`).join('')}</div></article>`).join('') || '<p class="society-empty">No local society signals yet. Contributions stay symbolic.</p>';
-  return `${intro}${privacy}<section class="society-private-state" id="society-private-state" hidden><h4>You stayed private.</h4><p>EchoSociety will not receive signals.</p><button class="receipt-action-btn" id="society-private-rules-btn">Review Privacy Rules</button></section><section class="society-city" id="society-city" ${consent ? '' : 'hidden'}><div class="society-city-sky"><canvas id="society-particles-canvas" width="720" height="220" aria-hidden="true"></canvas></div><div class="society-district-grid">${districts}</div>${archiveInput}${SocietyWeather.render()}${AlamAI.renderPortal()}<section class="society-local-signals"><h4>Local symbolic signals</h4>${signals}</section>${echoCircles}</section>`;
+  const echoCircles = `<section class="echo-circles-placeholder"><h4>Echo Circles</h4><p>Small symbolic circles are coming later. No public diary feed. No follower system. No raw echoes.</p></section>`;
+  return `<section class="society-city" id="society-city">${statusCopy}<div class="society-city-sky"><canvas id="society-particles-canvas" width="720" height="220" aria-hidden="true"></canvas></div><div class="society-district-grid">${buildSocietyDistricts(avatar)}</div>${archiveInput}${SocietyWeather.render()}${UserAccess.canUse('alam_ai') ? AlamAI.renderPortal() : ''}<section class="society-local-signals"><h4>Local symbolic signals</h4>${signals}</section>${echoCircles}</section>`;
+}
+
+function buildEchoSocietyGate() {
+  const progress = getSocietyGateProgress();
+  const avatar = progress.avatar;
+  const gateState = getSocietyGateState();
+  const district = getSocietyDistrictSuggestion(avatar.role || '');
+  if (gateState === 'no_special_access') return '<section class="echo-society-room society-state-no_special_access"><div class="echo-avatar-kicker">Society Gate</div><h4>Society Gate</h4><p>Special Access opens this gate.</p></section>';
+  if (gateState === 'locked_progress') {
+    const missing = [];
+    if (!progress.hasAvatar) missing.push('Create Echo Avatar');
+    if (progress.echoCount < 5) missing.push('Create 5 echoes');
+    if (progress.artifactCount < 1) missing.push('Save or craft 1 artifact');
+    return `<section class="echo-society-room society-state-locked_progress"><div class="echo-avatar-kicker">Society Gate</div><h4>Society Gate is still forming.</h4><p>Complete these private vault steps first:</p><ul class="society-requirements">${missing.map(item => `<li class="missing">${escapeHTML(item)}</li>`).join('')}</ul></section>`;
+  }
+  const privacy = `<section class="society-privacy-panel" id="society-privacy-panel" ${gateState === 'ready_needs_consent' ? '' : 'hidden'}><div class="echo-avatar-kicker">Privacy Rules</div><h4>Privacy Rules</h4><p>${escapeHTML(SocietyPrivacy.explainPrivacy())}</p><p>You choose when to contribute. You can revoke consent anytime.</p><div class="society-actions"><button class="receipt-action-btn" id="society-understand-btn">I Understand</button><button class="receipt-action-btn ghost" id="society-stay-private-btn">Stay Private</button></div></section>`;
+  if (gateState === 'ready_needs_consent') {
+    return `<section class="echo-society-room society-state-ready_needs_consent"><div class="echo-avatar-kicker">Society Gate</div><h4>Society Gate is ready.</h4><p>EchoSociety only uses anonymous symbolic signals.</p><p class="society-recommendation">Society role: <b>${escapeHTML(avatar.role || 'Signal Courier')}</b> · Recommended district: <b>${escapeHTML(district)}</b></p><div class="society-actions"><button class="receipt-action-btn" id="society-enter-btn">Enter EchoSociety</button><button class="receipt-action-btn ghost" id="society-private-btn">Stay Private</button><button class="receipt-action-btn" id="society-privacy-btn">Privacy Rules</button></div></section>${privacy}<section class="society-private-state" id="society-private-state" hidden><h4>You stayed private.</h4><p>EchoSociety will not receive signals.</p><button class="receipt-action-btn" id="society-private-rules-btn">Review Privacy Rules</button></section>`;
+  }
+  return `<section class="echo-society-room society-state-${gateState}"><div class="echo-avatar-kicker">Society Gate</div><h4>EchoSociety</h4><p>A shared city built from anonymous symbolic signals — not a public diary feed.</p><p class="society-recommendation">Society role: <b>${escapeHTML(avatar.role || 'Signal Courier')}</b> · Recommended district: <b>${escapeHTML(district)}</b></p><div class="society-actions"><button class="receipt-action-btn ghost" id="society-private-btn">Stay Private</button><button class="receipt-action-btn" id="society-privacy-btn">Privacy Rules</button></div></section>${privacy}<section class="society-private-state" id="society-private-state" hidden><h4>You stayed private.</h4><p>EchoSociety will not receive signals.</p><button class="receipt-action-btn" id="society-private-rules-btn">Review Privacy Rules</button></section>${buildSocietyCity(gateState, avatar)}`;
 }
 
 function updateSocietyConsentUI(options={}) {
@@ -3319,15 +3384,16 @@ function bindEchoSocietyGate() {
   document.getElementById('society-private-btn')?.addEventListener('click', stayPrivate);
   document.getElementById('society-stay-private-btn')?.addEventListener('click', stayPrivate);
   document.getElementById('society-understand-btn')?.addEventListener('click', () => { SocietySignals.setConsent(true); Toast.show('EchoSociety consent saved.'); rerenderSocietyGate() || updateSocietyConsentUI({ privateState:false }); });
+  const guardDistrictAction = (payload = {}) => SocietyPrivacy.requireSpecialAccess() && SocietyPrivacy.requireConsent() && SocietyPrivacy.requireSafeSignalPayload(payload);
   const contribute = (fn, msg) => { const signal = fn(); if (!signal) { updateSocietyConsentUI({ privateState:true }); return; } Toast.show(msg); rerenderSocietyGate(); };
   document.getElementById('society-lantern-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeLantern, 'Anonymous lantern lit.'));
   document.getElementById('society-storm-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeStorm, 'Storm spark contained.'));
   document.getElementById('society-bloom-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeBloom, 'Bloom seed planted.'));
   document.getElementById('society-weather-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeWeather, 'Weather signal added.'));
   document.getElementById('society-archive-btn')?.addEventListener('click', () => contribute(() => SocietySignals.contributeArchiveLine(document.getElementById('society-archive-line')?.value || ''), 'Moon Archive symbolic marker saved.'));
-  document.getElementById('society-delivery-btn')?.addEventListener('click', () => { if(!SocietyPrivacy.requireConsent()) return; SignalCourierRoute.openRoute(); });
-  document.getElementById('society-alam-btn')?.addEventListener('click', () => { AlamAI.openChat(); });
-  document.getElementById('alam-open-btn')?.addEventListener('click', AlamAI.openChat);
+  document.getElementById('society-delivery-btn')?.addEventListener('click', () => { if(!guardDistrictAction({ signal_type:'delivery', district:'Signal Couriers’ Route' })) return; SignalCourierRoute.openRoute(); });
+  document.getElementById('society-alam-btn')?.addEventListener('click', () => { if(!guardDistrictAction({ signal_type:'alam', metadata:{ portal:'observatory' } })) return; SocietySignals.contributeAlam(); AlamAI.openChat(); });
+  document.getElementById('alam-open-btn')?.addEventListener('click', () => { if(!guardDistrictAction({ signal_type:'alam', metadata:{ portal:'observatory' } })) return; SocietySignals.contributeAlam(); AlamAI.openChat(); });
   document.querySelectorAll('.society-reactions button').forEach(btn => btn.addEventListener('click', () => { const id=btn.closest('.society-signal')?.dataset.signalId; const reaction = SocietySignals.addReaction(id, btn.dataset.reaction); if (!reaction) { updateSocietyConsentUI({ privateState:true }); return; } btn.classList.add('active'); Toast.show(`${btn.textContent.trim()} symbol recorded.`); }));
   updateSocietyConsentUI({ privateState:false });
 }
@@ -3938,7 +4004,7 @@ Insight: ${d.insight}`;
     const materialsPrep = '<div class="phase-two-note">Materials remain local-first in <code>echovault_inventory_v1</code>; crafting only spends local inventory when every cost is available.</div>';
     const premiumRoomFeatures = { weather_room:'premium_weather_map', soundprint_wall:'advanced_soundprint', relic_hall:'emotional_museum_full', archive_shelf:'artifact_archive', lantern_garden:'vault_rooms', crafting_table:'crafting_table', society_gate:'society_gate' };
     const roomUnlockAlias = { archetype_hall:'weather_room', materials_room:'crafting_table' };
-    const roomDefs = [
+    const allRoomDefs = [
       { id:'weather_room', panel:'weather', label:'Weather Room' },
       { id:'archetype_hall', panel:'archetype', label:'Archetype Hall' },
       { id:'soundprint_wall', panel:'soundprint', label:'Soundprint Wall' },
@@ -3949,6 +4015,7 @@ Insight: ${d.insight}`;
       { id:'materials_room', panel:'materials', label:'Vault Materials' },
       { id:'society_gate', panel:'society', label:'Society Gate' }
     ];
+    const roomDefs = allRoomDefs.filter((room) => room.id !== 'society_gate' || (UserAccess.canUse('echosociety') && UserAccess.canUse('society_gate')));
     const roomBuilders = {
       weather_room: () => panelLock('weather_room', `<h4>Weather Room</h4><p>${escapeHTML(weather.summary || 'This room has no saved material yet.')}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div>`),
       archetype_hall: () => `<h4>Archetype Hall</h4><p>${escapeHTML(arch.archetypeName || 'Still Forming')} · ${escapeHTML(arch.archetypeDescription || 'Create more echoes to fill this wing.')}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button>`,
