@@ -30,8 +30,9 @@ function funCardSource(fun) {
   const marker = `data-fun="${fun}"`;
   const markerIndex = index.indexOf(marker);
   if (markerIndex < 0) return '';
-  const start = index.lastIndexOf('<div class="fun-card', markerIndex);
-  const next = index.indexOf('<div class="fun-card', markerIndex + marker.length);
+  const starts = [...index.matchAll(/<div class="fun-card(?:"| )/g)].map((m) => m.index);
+  const start = starts.filter((i) => i <= markerIndex).pop() ?? -1;
+  const next = starts.find((i) => i > markerIndex + marker.length) ?? -1;
   return index.slice(start >= 0 ? start : markerIndex, next >= 0 ? next : markerIndex + 800);
 }
 function assertFunCard(label, fun, checks) {
@@ -331,7 +332,7 @@ if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|OPENROUTER_A
   ['Local Preview Weather exists', 'Local Preview Weather'],
   ['Signal Couriers’ Route exists', 'Signal Couriers’ Route'],
   ['alam.ai standalone portal exists', 'alam.ai'],
-  ['Signal Courier Route exists', 'Signal Courier Route'],
+  ['Signal Courier exists', 'Signal Courier'],
   ['delivery_completed event exists', 'delivery_completed'],
   ['EchoWorldRenderer exists', 'const EchoWorldRenderer = (() => {'],
   ['Canvas 2D fallback exists', 'canvas2dFallback'],
@@ -343,7 +344,8 @@ if (/hf_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|OPENROUTER_A
   ['Alam chat key exists', 'echovault_alam_ai_chat_v1'],
   ['localReply exists', 'localReply'],
   ['alam.ai fallback toast exists', 'alam.ai is ready.'],
-  ['Echo Circles placeholder exists', 'Echo Circles'],
+  ['EchoSociety standalone overlay exists', 'echosociety-overlay'],
+  ['EchoSociety content shell exists', 'echosociety-shell'],
   ['auth-local-btn still exists', 'auth-local-btn'],
   ['echovault_echoes_v2 still exists', 'echovault_echoes_v2'],
   ['echovault_society_consent_v1 still exists', 'echovault_society_consent_v1'],
@@ -365,7 +367,7 @@ if (!societyWeatherSource.includes("label:'Local Preview Weather'")) failures.pu
 });
 if (!/function guardDistrictContribution[\s\S]{0,260}SocietyPrivacy\.requireSpecialAccess\(\)[\s\S]{0,260}SocietyPrivacy\.requireConsent\(\)[\s\S]{0,260}SocietyPrivacy\.requireSafeSignalPayload\(payload\)/.test(societySignalsSource)) failures.push('District contribution guard must check Special Access, consent, and safe signal payload');
 if (!/function addReaction[\s\S]{0,320}(SocietySignals\.getConsent\(\)|SocietyPrivacy\.requireConsent\(\))/.test(societySignalsSource)) failures.push('addReaction missing explicit society consent guard');
-if (!script.includes('society-stay-private-btn') || !(script.includes('city.hidden=true') || script.includes('city.hidden = true')) || !script.includes('privatePanel.hidden=false')) failures.push('society-stay-private-btn handler does not immediately hide/disable society-city and show private state');
+if (!script.includes('society-stay-private-btn') || !(script.includes('updateSocietyConsentUI({ privateState:true })') || script.includes('city.hidden = !consent'))) failures.push('society-stay-private-btn handler does not route through private state UI');
 
 if (!(script.includes('SocietySync.fetchDailyWeather()') || script.includes('SocietySync.fetchPublicSignals()'))) failures.push('SocietyWeather does not fetch cloud data before live weather');
 ['contributeWeather','contributeLantern','contributeStorm','contributeBloom','contributeArchiveLine'].forEach((fn) => {
@@ -378,11 +380,11 @@ if (!script.includes('society-stay-private-btn') || !(script.includes('city.hidd
 
 // Society Gate state-machine checks
 if (!script.includes('function getSocietyGateState()')) failures.push('getSocietyGateState missing');
-['no_special_access','locked_progress','ready_needs_consent','active','local_preview','cloud_live_unavailable'].forEach((gateState) => {
+['no_special_access','locked_progress','ready_needs_consent','active_local_preview','active_live','live_unavailable'].forEach((gateState) => {
   if (!script.includes(`'${gateState}'`) && !script.includes(`society-state-${gateState}`)) failures.push(`Society Gate state missing: ${gateState}`);
 });
-if (!script.includes('Special Access opens this gate.')) failures.push('no_special_access copy missing');
-['Create Echo Avatar','Create 5 echoes','Save or craft 1 artifact'].forEach((copy) => {
+if (!script.includes('Special Access opens this city.')) failures.push('no_special_access copy missing');
+['Create an Echo Avatar','Create ${5 - echoCount} more echo','Save or craft 1 artifact'].forEach((copy) => {
   if (!script.includes(copy)) failures.push(`locked_progress missing requirement copy: ${copy}`);
 });
 if (!/gateState === 'ready_needs_consent'[\s\S]{0,900}Enter EchoSociety[\s\S]{0,900}Stay Private[\s\S]{0,900}Privacy Rules/.test(script)) failures.push('ready_needs_consent copy/actions missing');
@@ -391,9 +393,9 @@ if (!/function buildSocietyCity[\s\S]*society-district-grid/.test(script) || !/g
   // The ready state must return before the city builder is appended.
   if (!/if \(gateState === 'ready_needs_consent'\)[\s\S]*return `[\s\S]*`;/ .test(script)) failures.push('Society Gate city/district rendering is not isolated behind consent state');
 }
-if (!/function getSocietyGateState[\s\S]*!authUser[\s\S]*'local_preview'/.test(script) || !script.includes('Local Preview')) failures.push('Local Preview state/copy missing for logged-out Society Gate');
+if (!/function getSocietyGateState[\s\S]*!authUser[\s\S]*'active_local_preview'/.test(script) || !script.includes('Local Preview')) failures.push('Local Preview state/copy missing for logged-out Society Gate');
 if (!/allCloudFetchesSucceeded[\s\S]*liveStatus = 'live'[\s\S]*label:'Live Society Weather'/.test(societyWeatherSource)) failures.push('Live Society Weather should only render after Supabase fetch success');
-if (!script.includes('Live society unavailable — showing local preview.')) failures.push('cloud_live_unavailable copy missing');
+if (!script.includes('Live Society Weather is unavailable — showing local preview fallback.')) failures.push('live_unavailable copy missing');
 if (!/const guardDistrictAction[\s\S]{0,240}SocietyPrivacy\.requireSpecialAccess\(\)[\s\S]{0,240}SocietyPrivacy\.requireConsent\(\)/.test(script)) failures.push('district actions must check Special Access and consent');
 if (!script.includes('Emotional Museum')) failures.push('Emotional Museum marker missing after Society Gate changes');
 if (!script.includes('redeemAccessCode') || !script.includes('SpecialAccessPortal')) failures.push('Special Access code path marker missing after Society Gate changes');
@@ -494,15 +496,15 @@ assertFunCard('Mood Receipt', 'receipt', (card) => {
 });
 assertFunCard('Soundprint', 'sound', (card) => {
   if (!card.includes('data-feature="soundprint"')) failures.push('Soundprint card should remain a free soundprint feature');
-  if (/hidden|premium_rituals|advanced_soundprint/i.test(card)) failures.push('Soundprint card is hidden or gated for free users');
+  if (/\shidden\b|premium_rituals|advanced_soundprint/i.test(card)) failures.push('Soundprint card is hidden or gated for free users');
 });
 assertFunCard('Inner Conflict', 'vsvs', (card) => {
   if (!card.includes('data-feature="inner_conflict"')) failures.push('Inner Conflict card should remain a free inner_conflict feature');
-  if (/hidden|premium_rituals/i.test(card)) failures.push('Inner Conflict card is hidden or gated for free users');
+  if (/\shidden\b|premium_rituals/i.test(card)) failures.push('Inner Conflict card is hidden or gated for free users');
 });
 assertFunCard('Shatter Softly', 'shatter', (card) => {
   if (!card.includes('data-feature="shatter_softly"')) failures.push('Shatter Softly card should remain visible as a free shatter_softly feature');
-  if (/hidden|premium_rituals|void_lantern|storm_jar/i.test(card)) failures.push('Shatter Softly card is hidden or gated for free users');
+  if (/\shidden\b|premium_rituals|void_lantern|storm_jar/i.test(card)) failures.push('Shatter Softly card is hidden or gated for free users');
 });
 assertFunCard('Void Lantern', 'lantern', (card) => {
   if (!card.includes('data-feature="void_lantern"')) failures.push('Void Lantern should be gated by the void_lantern Special Access feature');
@@ -538,6 +540,23 @@ const funGridStart = index.indexOf('<div class="fun-grid">');
 const funGridEnd = funGridStart >= 0 ? index.indexOf('</section>', funGridStart) : -1;
 const funGridSource = funGridStart >= 0 && funGridEnd > funGridStart ? index.slice(funGridStart, funGridEnd) : '';
 if (/Premium/.test(funGridSource)) failures.push('Visible Premium clutter added to Ritual cards');
+assertFunCard('EchoSociety standalone', 'echosociety', (card) => {
+  if (!card.includes('data-feature="echosociety"')) failures.push('EchoSociety card should use feature key echosociety');
+  if (!card.includes('A shared city built from anonymous signals.')) failures.push('EchoSociety card description missing');
+});
+const museumBlockForSeparationStart = script.indexOf('function buildMuseum');
+const museumBlockForSeparationEnd = script.indexOf('function startConflictAnimation', museumBlockForSeparationStart);
+const museumBlockForSeparation = museumBlockForSeparationStart >= 0 && museumBlockForSeparationEnd > museumBlockForSeparationStart ? script.slice(museumBlockForSeparationStart, museumBlockForSeparationEnd) : '';
+['Society Gate','Signal Courier','alam.ai Observatory'].forEach((marker) => {
+  if (museumBlockForSeparation.includes(marker)) failures.push(`Emotional Museum no longer allowed to contain ${marker}`);
+});
+if (!index.includes('data-fun="echosociety"')) failures.push('EchoSociety standalone card missing');
+if (!script.includes('id="echosociety-overlay"') && !script.includes('echosociety-overlay')) failures.push('echosociety-overlay missing');
+if (!script.includes('echosociety-shell')) failures.push('echosociety-shell missing');
+if (!script.includes('mission-selection-panel')) failures.push('Signal Courier mission selection missing');
+if (!script.includes('courier-district-map') || !script.includes('courier-canvas')) failures.push('Signal Courier district map/canvas missing');
+if (!script.includes('delivery_completed')) failures.push('Signal Courier delivery_completed event missing');
+if (!index.includes('data-fun="alam"') || !script.includes('renderPortal')) failures.push('alam.ai standalone portal/card missing');
 
 // Runtime reliability checks for rituals, Wrapped, and Soundprints
 if (!/function buildMuseum\s*\(/.test(script) || !script.includes('museum:buildMuseum')) failures.push('Emotional Museum builder missing or not mapped from data-fun="museum"');
@@ -552,8 +571,11 @@ const roomDefIds = [...museumBlock.matchAll(/\{ id:'([^']+)', panel:'([^']+)', l
 roomDefIds.forEach((roomId) => {
   if (!museumBlock.includes(`${roomId}: () =>`)) failures.push(`Museum room list missing builder for ${roomId}`);
 });
-['weather_room','archetype_hall','soundprint_wall','relic_hall','archive_shelf','lantern_garden','crafting_table','materials_room','society_gate'].forEach((roomId) => {
+['weather_room','archetype_hall','soundprint_wall','relic_hall','archive_shelf','lantern_garden','crafting_table','materials_room'].forEach((roomId) => {
   if (!roomDefIds.includes(roomId)) failures.push(`Museum room list missing ${roomId}`);
+});
+['society_gate','Signal Courier','alam.ai Observatory','EchoSociety'].forEach((forbidden) => {
+  if (museumBlock.includes(forbidden)) failures.push(`Emotional Museum still contains ${forbidden}`);
 });
 ['No artifacts archived here yet.','No soundprint entries yet.','No relics archived here yet.','Create more echoes to fill this wing.','This room has no saved material yet.'].forEach((copy) => {
   if (!museumBlock.includes(copy)) failures.push(`Museum empty-state copy missing: ${copy}`);
