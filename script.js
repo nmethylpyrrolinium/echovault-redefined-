@@ -3147,24 +3147,42 @@ const EchoWorldRenderer = (() => {
 
 const SignalCourierRoute = (() => {
   const missions = [
-    {id:'deliver_lantern', label:'Deliver lantern to Lantern District', item:'lantern', to:'Lantern District', reward:{name:'Glow Thread', qty:1}},
-    {id:'carry_storm_jar', label:'Carry storm jar to Storm Works', item:'storm jar', to:'Storm Works', reward:{name:'Storm Glass', qty:1}},
-    {id:'bring_bloom_seed', label:'Bring bloom seed to Bloom Market', item:'bloom seed', to:'Bloom Market', reward:{name:'Bloom Seed', qty:1}},
-    {id:'take_moon_letter', label:'Take moon letter to Moon Archive', item:'moon letter', to:'Moon Archive', reward:{name:'Moon Thread', qty:1}},
-    {id:'deliver_weather_report', label:'Deliver weather report to Weather Tower', item:'weather report', to:'Weather Tower', reward:{name:'Compass Dust', qty:1}},
-    {id:'carry_alam_note', label:"Carry “alam's weird note” to the Observatory", item:'alam note', to:'alam.ai Observatory', reward:{name:'Oracle Static', qty:1}}
+    {id:'deliver_lantern', label:'Deliver a Lantern to Lantern District', item:'Lantern', icon:'🏮', to:'Lantern District', reward:{name:'Glow Thread', qty:1}, xp:8},
+    {id:'carry_storm_jar', label:'Carry a Storm Jar to Storm Works', item:'Storm Jar', icon:'🫙', to:'Storm Works', reward:{name:'Storm Glass', qty:1}, xp:8},
+    {id:'bring_bloom_seed', label:'Bring a Bloom Seed to Bloom Market', item:'Bloom Seed', icon:'✽', to:'Bloom Market', reward:{name:'Bloom Seed', qty:1}, xp:8},
+    {id:'take_moon_letter', label:'Take a Moon Letter to Moon Archive', item:'Moon Letter', icon:'☾', to:'Moon Archive', reward:{name:'Moon Thread', qty:1}, xp:8},
+    {id:'deliver_weather_report', label:'Deliver Weather Report to Weather Tower', item:'Weather Report', icon:'◌', to:'Weather Tower', reward:{name:'Compass Dust', qty:1}, xp:8},
+    {id:'carry_alam_note', label:'Carry Alam’s Note to alam.ai Observatory', item:'Alam’s Note', icon:'◉', to:'alam.ai Observatory', reward:{name:'Oracle Static', qty:1}, xp:8}
   ];
-  const nodes = {'Society Gate':[.50,.82], 'Lantern District':[.18,.32], 'Storm Works':[.44,.20], 'Bloom Market':[.74,.31], 'Moon Archive':[.26,.62], 'Weather Tower':[.61,.58], 'alam.ai Observatory':[.82,.68]};
-  let open=false, raf=0, avatar={x:.50,y:.82,tx:.50,ty:.82}, active=null;
-  function renderModal(){ return `<div class="courier-modal" id="courier-modal" role="dialog" aria-label="Signal Courier Route"><div class="courier-panel"><button class="courier-close" id="courier-close-btn">Close</button><h3>Signal Courier Route</h3><p>A tiny peaceful delivery prototype. No combat, no competitive scoring — just gold paths between districts.</p><div class="courier-layout"><canvas id="courier-canvas" width="680" height="420"></canvas><div class="courier-side"><h4>Delivery missions</h4>${missions.map(m=>`<button class="receipt-action-btn courier-mission" data-mission="${m.id}">${escapeHTML(m.label)}</button>`).join('')}<div class="courier-controls"><button data-move="up">↑</button><button data-move="left">←</button><button data-move="down">↓</button><button data-move="right">→</button></div><small>Tap a destination node or use the arrows.</small></div></div></div></div>`; }
-  function openRoute(){ if(!UserAccess.requirePremium('signal_courier', { openSettings:true })) return; if(!document.getElementById('courier-modal')) document.body.insertAdjacentHTML('beforeend', renderModal()); open=true; document.body.style.overflow='hidden'; bind(); drawLoop(); }
+  const nodes = {'Society Gate':[.50,.84], 'Lantern District':[.17,.30], 'Storm Works':[.43,.18], 'Bloom Market':[.74,.30], 'Moon Archive':[.25,.64], 'Weather Tower':[.60,.56], 'alam.ai Observatory':[.83,.68]};
+  const paths = {
+    'Lantern District':['Society Gate','Moon Archive','Lantern District'],
+    'Storm Works':['Society Gate','Weather Tower','Storm Works'],
+    'Bloom Market':['Society Gate','Weather Tower','Bloom Market'],
+    'Moon Archive':['Society Gate','Moon Archive'],
+    'Weather Tower':['Society Gate','Weather Tower'],
+    'alam.ai Observatory':['Society Gate','Weather Tower','alam.ai Observatory']
+  };
+  let open=false, raf=0, avatar={x:.50,y:.84,tx:.50,ty:.84,progress:0}, active=null, completed=null, particles=[], selectedId=missions[0].id;
+  const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  function selectedMission(){ return missions.find(m=>m.id===selectedId) || missions[0]; }
+  function renderModal(){
+    const mission = selectedMission();
+    return `<div class="courier-modal" id="courier-modal" role="dialog" aria-modal="true" aria-label="Signal Courier"><div class="courier-panel signal-courier-game"><button class="courier-close" id="courier-close-btn">Close</button><header class="courier-hero"><span class="echo-avatar-kicker">Signal Courier</span><h3>Signal Courier</h3><p>Your Echo Avatar delivers symbolic artifacts through EchoSociety’s dark floating city.</p></header><div class="courier-layout"><section class="courier-map-wrap"><canvas id="courier-canvas" class="courier-district-map" width="760" height="460" aria-label="EchoSociety district map canvas"></canvas><div class="courier-progress" id="courier-progress">Choose a mission, then tap Start Mission or a destination.</div></section><aside class="courier-side mission-selection-panel"><h4>Mission selection</h4><select id="courier-mission-select" aria-label="Select Signal Courier mission">${missions.map(m=>`<option value="${escapeHTML(m.id)}" ${m.id===mission.id?'selected':''}>${escapeHTML(m.label)}</option>`).join('')}</select><div class="courier-current-delivery" id="courier-current-delivery"><span>${escapeHTML(mission.icon)}</span><b>${escapeHTML(mission.item)}</b><small>Destination: ${escapeHTML(mission.to)}</small></div><div class="courier-reward" id="courier-reward-preview">Reward preview: +${mission.reward.qty} ${escapeHTML(mission.reward.name)} · +${mission.xp} avatar XP</div><button class="receipt-action-btn" id="courier-start-btn">Start Mission</button><div class="courier-complete" id="courier-complete" hidden><b>Signal delivered.</b><small>+ material reward · + avatar XP</small></div><small>Tap a district node to select its mission. No combat — only cooperative symbolic delivery.</small></aside></div></div></div>`;
+  }
+  function openRoute(){ if(!UserAccess.requirePremium('signal_courier', { openSettings:true })) return; if(!document.getElementById('courier-modal')) document.body.insertAdjacentHTML('beforeend', renderModal()); open=true; document.body.style.overflow='hidden'; bind(); updateMissionUI(); drawLoop(); }
   function closeRoute(){ open=false; cancelAnimationFrame(raf); document.getElementById('courier-modal')?.remove(); document.body.style.overflow=''; }
-  function bind(){ const modal=document.getElementById('courier-modal'); document.getElementById('courier-close-btn')?.addEventListener('click', closeRoute); modal?.querySelectorAll('.courier-mission').forEach(btn=>btn.addEventListener('click',()=>{ active=missions.find(m=>m.id===btn.dataset.mission); const [x,y]=nodes[active.to]; avatar.tx=x; avatar.ty=y; Toast.show(`Courier carrying ${active.item}.`); })); modal?.querySelectorAll('[data-move]').forEach(btn=>btn.addEventListener('click',()=>{ const d=btn.dataset.move; avatar.tx=Math.max(.08,Math.min(.92,avatar.tx+(d==='left'?-0.08:d==='right'?0.08:0))); avatar.ty=Math.max(.10,Math.min(.88,avatar.ty+(d==='up'?-0.08:d==='down'?0.08:0))); })); document.getElementById('courier-canvas')?.addEventListener('pointerdown',(e)=>{ const c=e.currentTarget,r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height; let nearest=null,dist=99; Object.entries(nodes).forEach(([name,[nx,ny]])=>{ const d=Math.hypot(nx-x,ny-y); if(d<dist){dist=d;nearest=[name,nx,ny];} }); if(nearest){ avatar.tx=nearest[1]; avatar.ty=nearest[2]; } }); }
-  function completeIfArrived(){ if(!active) return; const [x,y]=nodes[active.to]; if(Math.hypot(avatar.x-x,avatar.y-y)<.025){ VaultInventory.addMaterials([active.reward]); EchoAvatar.addXP?.(8, 'delivery_completed'); GentleQuests.evaluate('delivery_completed', active); SocietySignals.contributeDelivery(active); Toast.show(`Delivered ${active.item}. +${active.reward.qty} ${active.reward.name} · +8 XP`); active=null; rerenderSocietyGate(); } }
-  function drawLoop(){ if(!open) return; const c=document.getElementById('courier-canvas'); const ctx=c?.getContext('2d'); if(ctx){ const w=c.width, h=c.height; avatar.x += (avatar.tx-avatar.x)*(window.matchMedia('(prefers-reduced-motion: reduce)').matches?1:.08); avatar.y += (avatar.ty-avatar.y)*(window.matchMedia('(prefers-reduced-motion: reduce)').matches?1:.08); ctx.clearRect(0,0,w,h); const g=ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'#080b17'); g.addColorStop(1,'#21132b'); ctx.fillStyle=g; ctx.fillRect(0,0,w,h); ctx.strokeStyle='rgba(214,179,106,.36)'; ctx.lineWidth=3; Object.values(nodes).forEach(([x,y])=>{ctx.beginPath();ctx.moveTo(w*.5,h*.82);ctx.lineTo(w*x,h*y);ctx.stroke();}); Object.entries(nodes).forEach(([name,[x,y]])=>{ ctx.fillStyle=name===active?.to?'rgba(143,255,176,.95)':'rgba(214,179,106,.9)'; ctx.beginPath(); ctx.arc(w*x,h*y,10,0,6.28); ctx.fill(); ctx.fillStyle='rgba(255,255,255,.78)'; ctx.font='12px DM Mono, monospace'; ctx.fillText(name,w*x+14,h*y+4); }); ctx.fillStyle='rgba(255,244,190,.98)'; ctx.shadowColor='rgba(214,179,106,.8)'; ctx.shadowBlur=18; ctx.beginPath(); ctx.arc(w*avatar.x,h*avatar.y,12,0,6.28); ctx.fill(); ctx.shadowBlur=0; if(active){ ctx.fillStyle='rgba(214,179,106,.9)'; ctx.fillText(`carrying: ${active.item}`,16,24); } completeIfArrived(); }
+  function missionForNode(name){ return missions.find(m=>m.to===name); }
+  function pathPoint(mission, t){ const route=(paths[mission.to]||['Society Gate', mission.to]).map(name=>nodes[name]); const segs=route.length-1; const scaled=Math.min(.999, Math.max(0,t))*segs; const i=Math.min(segs-1, Math.floor(scaled)); const local=scaled-i; const [ax,ay]=route[i], [bx,by]=route[i+1]; return [ax+(bx-ax)*local, ay+(by-ay)*local]; }
+  function updateMissionUI(){ const m=selectedMission(); const select=document.getElementById('courier-mission-select'); if(select) select.value=m.id; const current=document.getElementById('courier-current-delivery'); if(current) current.innerHTML=`<span>${escapeHTML(m.icon)}</span><b>${escapeHTML(m.item)}</b><small>Destination: ${escapeHTML(m.to)}</small>`; const reward=document.getElementById('courier-reward-preview'); if(reward) reward.textContent=`Reward preview: +${m.reward.qty} ${m.reward.name} · +${m.xp} avatar XP`; const complete=document.getElementById('courier-complete'); if(complete) complete.hidden = !completed; }
+  function startMission(m=selectedMission()){ active=m; completed=null; avatar.progress=0; const [x,y]=nodes['Society Gate']; avatar.x=x; avatar.y=y; avatar.tx=x; avatar.ty=y; document.getElementById('courier-progress').textContent=`Courier carrying ${m.item} toward ${m.to}.`; updateMissionUI(); }
+  function bind(){ const modal=document.getElementById('courier-modal'); document.getElementById('courier-close-btn')?.addEventListener('click', closeRoute); document.getElementById('courier-start-btn')?.addEventListener('click',()=>startMission()); document.getElementById('courier-mission-select')?.addEventListener('change',(e)=>{ selectedId=e.target.value; active=null; completed=null; updateMissionUI(); }); document.getElementById('courier-canvas')?.addEventListener('pointerdown',(e)=>{ const c=e.currentTarget,r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height; let nearest=null,dist=99; Object.entries(nodes).forEach(([name,[nx,ny]])=>{ const d=Math.hypot(nx-x,ny-y); if(d<dist){dist=d;nearest=name;} }); const mission=missionForNode(nearest); if(mission){ selectedId=mission.id; updateMissionUI(); startMission(mission); } }); modal?.addEventListener('keydown',(e)=>{ if(e.key==='Escape') closeRoute(); }); }
+  function completeMission(){ if(!active) return; VaultInventory.addMaterials([active.reward]); EchoAvatar.addXP?.(active.xp, 'delivery_completed'); GentleQuests.evaluate('delivery_completed', active); SocietySignals.contributeDelivery(active); completed=active; document.getElementById('courier-progress').textContent='Signal delivered.'; const complete=document.getElementById('courier-complete'); if(complete){ complete.hidden=false; complete.innerHTML=`<b>Signal delivered.</b><small>+${active.reward.qty} ${escapeHTML(active.reward.name)} · +${active.xp} avatar XP</small>`; } Toast.show(`Signal delivered. +${active.reward.qty} ${active.reward.name} · +${active.xp} XP`); active=null; rerenderEchoSocietyOverlay() || rerenderSocietyGate(); }
+  function drawCity(ctx,w,h,time){ const g=ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'#050713'); g.addColorStop(.55,'#10162a'); g.addColorStop(1,'#211024'); ctx.fillStyle=g; ctx.fillRect(0,0,w,h); ctx.strokeStyle='rgba(214,179,106,.42)'; ctx.lineWidth=3; Object.values(paths).forEach(route=>{ ctx.beginPath(); route.map(n=>nodes[n]).forEach(([x,y],i)=>{ if(i) ctx.lineTo(w*x,h*y); else ctx.moveTo(w*x,h*y); }); ctx.stroke(); }); Object.entries(nodes).forEach(([name,[x,y]])=>{ const pulse=1+(reduced()?0:Math.sin(time/520+x*8)*.12); const dest=active?.to===name || selectedMission().to===name; ctx.shadowColor=dest?'rgba(255,236,166,.95)':'rgba(214,179,106,.38)'; ctx.shadowBlur=dest?24:12; ctx.fillStyle=dest?'rgba(255,236,166,.98)':'rgba(214,179,106,.88)'; ctx.beginPath(); ctx.arc(w*x,h*y,(name==='Society Gate'?13:10)*pulse,0,6.28); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='rgba(246,239,218,.84)'; ctx.font='12px DM Mono, monospace'; ctx.fillText(name,w*x+14,h*y+4); }); }
+  function drawLoop(time=0){ if(!open) return; const c=document.getElementById('courier-canvas'); const ctx=c?.getContext('2d'); if(ctx){ const w=c.width, h=c.height; if(active){ avatar.progress = reduced()?1:Math.min(1, avatar.progress+.008); [avatar.x,avatar.y]=pathPoint(active, avatar.progress); if(!reduced() && Math.random()<.45) particles.push({x:avatar.x,y:avatar.y,life:1}); if(avatar.progress>=1) completeMission(); } drawCity(ctx,w,h,time); particles=particles.filter(p=>p.life>.04); particles.forEach(p=>{ p.life*=.92; ctx.fillStyle=`rgba(214,179,106,${p.life*.55})`; ctx.beginPath(); ctx.arc(w*p.x,h*p.y,7*p.life,0,6.28); ctx.fill(); }); const m=active || completed || selectedMission(); ctx.shadowColor='rgba(255,236,166,.85)'; ctx.shadowBlur=20; ctx.fillStyle='rgba(255,244,190,.98)'; ctx.beginPath(); ctx.arc(w*avatar.x,h*avatar.y,12,0,6.28); ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='rgba(255,255,255,.92)'; ctx.font='22px serif'; ctx.fillText(m.icon,w*avatar.x-8,h*avatar.y-22); if(completed){ const [dx,dy]=nodes[completed.to]; ctx.strokeStyle='rgba(255,236,166,.8)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(w*dx,h*dy,30+Math.sin(time/180)*5,0,6.28); ctx.stroke(); } }
     raf=requestAnimationFrame(drawLoop);
   }
-  return { missions, openRoute, closeRoute, delivery_completed:true };
+  return { missions, openRoute, closeRoute, delivery_completed:true, missionSelection:true, districtMapCanvas:true };
 })();
 
 const AlamPrivacy = (() => {
@@ -3289,7 +3307,11 @@ function getSocietyGateProgress() {
   const echoCount = state.echoes.length;
   const artifactCount = ArtifactArchive.listArtifacts().length;
   const requirementsMet = hasAvatar && echoCount >= 5 && artifactCount >= 1;
-  return { avatar, hasAvatar, echoCount, artifactCount, requirementsMet };
+  const missing = [];
+  if (!hasAvatar) missing.push('Create an Echo Avatar');
+  if (echoCount < 5) missing.push(`Create ${5 - echoCount} more echo${5 - echoCount === 1 ? '' : 'es'}`);
+  if (artifactCount < 1) missing.push('Save or craft 1 artifact');
+  return { avatar, hasAvatar, echoCount, artifactCount, requirementsMet, missing };
 }
 
 function getSocietyGateState() {
@@ -3297,51 +3319,59 @@ function getSocietyGateState() {
   const progress = getSocietyGateProgress();
   const consent = SocietySignals.getConsent();
   const authUser = Auth.user || null;
-  let gateState = 'active';
+  let gateState = 'active_live';
   if (!hasSpecialAccess) gateState = 'no_special_access';
   else if (!progress.requirementsMet) gateState = 'locked_progress';
   else if (!consent) gateState = 'ready_needs_consent';
-  else if (!authUser) gateState = 'local_preview';
-  else if (SocietyWeather.getLiveStatus?.() === 'unavailable') gateState = 'cloud_live_unavailable';
-  if (location.search.includes('debug=1')) {
-    console.info('[SocietyGate]', gateState, {
-      hasSpecialAccess,
-      hasAvatar: progress.hasAvatar,
-      echoCount: progress.echoCount,
-      artifactCount: progress.artifactCount,
-      consent,
-      authUser
-    });
-  }
+  else if (!authUser || !SocietySync.isAvailable()) gateState = 'active_local_preview';
+  else if (SocietyWeather.getLiveStatus?.() === 'unavailable') gateState = 'live_unavailable';
+  else gateState = 'active_live';
+  if (location.search.includes('debug=1')) console.info('[SocietyGate]', gateState, { hasSpecialAccess, progress, consent, authUser });
   return gateState;
 }
 
+const ECHO_SOCIETY_DISTRICTS = [
+  {title:'Lantern District', description:'Blue lantern balconies for quiet signals and void-safe witnessing.', countKey:'lantern', roles:['Lantern Keeper','Void Keeper'], action:'Light Lantern signal', id:'society-lantern-btn', icon:'🕯️'},
+  {title:'Storm Works', description:'Copper storm engines where intense weather becomes contained sparks.', countKey:'storm', roles:['Stormwright'], action:'Add Storm Spark signal', id:'society-storm-btn', icon:'⚡'},
+  {title:'Bloom Market', description:'Soft stalls trading bloom seeds, green lamps, and tiny mercies.', countKey:'bloom', roles:['Bloom Tender'], action:'Plant Bloom signal', id:'society-bloom-btn', icon:'✽'},
+  {title:'Moon Archive', description:'A moonlit shelf for symbolic archive markers — never raw diary pages.', countKey:'archive', roles:['Moon Archivist','Archive Witness'], action:'Leave symbolic archive signal', id:'society-archive-btn', icon:'🌙'},
+  {title:'Weather Tower', description:'A high glass compass that turns anonymous signals into shared weather.', countKey:'weather', roles:['Weather Cartographer'], action:'Contribute Weather', id:'society-weather-btn', icon:'🧭'},
+  {title:'Signal Couriers’ Route', description:'Gold roads for peaceful artifact deliveries between districts.', countKey:'delivery', roles:['Signal Courier','Relic Runner'], action:'Start Delivery', id:'society-delivery-btn', icon:'✦'},
+  {title:'alam.ai Observatory', description:'A quiet observatory shortcut to alam.ai.', countKey:'alam', roles:['Signal Courier','Moon Archivist','Archive Witness'], action:'Open alam.ai', id:'society-alam-btn', icon:'◉'}
+];
+
+function societyActivityCount(countKey) {
+  return SocietySignals.listLocalSignals().filter(signal => String(signal.signal_type || '').includes(countKey) || String(signal.district || '').toLowerCase().includes(countKey)).length;
+}
+
 function buildSocietyDistricts(avatar = {}) {
-  const districtDefinitions = [
-    {title:'Lantern District', description:'Blue lantern balconies for quiet signals and void-safe witnessing.', roles:['Lantern Keeper','Void Keeper'], action:'Light Lantern', id:'society-lantern-btn', icon:'🕯️'},
-    {title:'Storm Works', description:'Copper storm engines where intense weather becomes contained sparks.', roles:['Stormwright'], action:'Add Storm Spark', id:'society-storm-btn', icon:'⚡'},
-    {title:'Bloom Market', description:'Soft stalls trading bloom seeds, green lamps, and tiny mercies.', roles:['Bloom Tender'], action:'Plant Bloom', id:'society-bloom-btn', icon:'🌸'},
-    {title:'Moon Archive', description:'A moonlit shelf for optional symbolic witness marks, not raw diary sharing.', roles:['Moon Archivist','Archive Witness'], action:'Leave Anonymous Line', id:'society-archive-btn', icon:'🌙'},
-    {title:'Weather Tower', description:'A high glass compass that turns anonymous signals into shared weather.', roles:['Weather Cartographer'], action:'Contribute Weather', id:'society-weather-btn', icon:'🧭'},
-    {title:'Signal Couriers’ Route', description:'Gold paths for peaceful artifact deliveries between districts.', roles:['Signal Courier','Relic Runner'], action:'Start Delivery', id:'society-delivery-btn', icon:'✦'}
-  ];
-  if (UserAccess.canUse('alam_ai')) districtDefinitions.push({title:'alam.ai Observatory', description:'A private oracle room with a soft signal.', roles:['Signal Courier','Moon Archivist','Archive Witness'], action:'Open alam.ai', id:'society-alam-btn', icon:'🟣'});
-  return districtDefinitions.map((d) => {
+  return ECHO_SOCIETY_DISTRICTS.map((d) => {
     const roleMatch = d.roles.includes(avatar.role);
-    return `<article class="society-district-card ${roleMatch ? 'recommended' : ''}"><span>${escapeHTML(d.icon)}</span><h4>${escapeHTML(d.title)}</h4><p>${escapeHTML(d.description)}</p><small>${roleMatch ? 'Recommended for your Echo Avatar.' : `Roles: ${escapeHTML(d.roles.join(', '))}`}</small><button class="receipt-action-btn" id="${escapeHTML(d.id)}">${escapeHTML(d.action)}</button></article>`;
+    return `<article class="society-district-card ${roleMatch ? 'recommended' : ''}"><div class="district-visual" aria-hidden="true"></div><span class="society-district-icon">${escapeHTML(d.icon)}</span><h4>${escapeHTML(d.title)}</h4><p>${escapeHTML(d.description)}</p><small>${societyActivityCount(d.countKey)} symbolic activities · Roles: ${escapeHTML(d.roles.join(', '))}</small><button class="receipt-action-btn" id="${escapeHTML(d.id)}">${escapeHTML(d.action)}</button></article>`;
   }).join('');
 }
 
+function buildSocietyPrivacyPanel(gateState) {
+  return `<section class="society-privacy-panel" id="society-privacy-panel" ${gateState === 'ready_needs_consent' ? '' : ''}><div class="echo-avatar-kicker">Privacy Rules</div><h4>Privacy</h4><p>Raw echoes stay private.</p><p>Only symbolic signals are shared when you consent.</p><p>${escapeHTML(SocietyPrivacy.explainPrivacy())}</p><div class="society-actions"><button class="receipt-action-btn" id="society-understand-btn">Enter EchoSociety</button><button class="receipt-action-btn ghost" id="society-stay-private-btn">Stay Private</button><button class="receipt-action-btn" id="society-privacy-btn">Privacy Rules</button></div></section>`;
+}
+
+function societyStatusLabel(gateState) {
+  if (gateState === 'active_live') return 'Live Society';
+  if (gateState === 'live_unavailable') return 'Live unavailable — local preview';
+  if (gateState === 'active_local_preview') return 'Local Preview';
+  if (gateState === 'ready_needs_consent') return 'Consent needed';
+  if (gateState === 'locked_progress') return 'Progress locked';
+  return 'Special Access required';
+}
+
 function buildSocietyCity(gateState, avatar = {}) {
-  const statusCopy = gateState === 'local_preview'
-    ? '<div class="echo-avatar-kicker">Local Preview</div><p>Local symbolic preview only. This does not claim live society data.</p>'
-    : gateState === 'cloud_live_unavailable'
-      ? '<p id="society-live-status">Live society unavailable — showing local preview.</p>'
-      : '<p id="society-live-status">Society city is active.</p>';
-  const archiveInput = `<div class="society-archive-note"><input class="society-archive-input" id="society-archive-line" maxlength="80" placeholder="optional line, local preview only…"><small>For now the line is not uploaded; only a symbolic archive marker is used.</small></div>`;
-  const signals = SocietySignals.listLocalSignals().slice(0,8).map(signal => `<article class="society-signal" data-signal-id="${escapeHTML(signal.id)}"><span>${escapeHTML(signal.anonymous_label)}</span><b>${escapeHTML(signal.signal_type)} · ${escapeHTML(signal.mood)}</b><small>${escapeHTML(signal.district)} · ${escapeHTML(signal.intensity_band)} intensity · ${escapeHTML(signal.silence_band)} silence · ${escapeHTML(signal.archetype)}</small><div class="society-reactions">${Object.entries(SOCIETY_REACTIONS).map(([key,label])=>`<button data-reaction="${key}">${label}</button>`).join('')}</div></article>`).join('') || '<p class="society-empty">No local society signals yet. Contributions stay symbolic.</p>';
-  const echoCircles = `<section class="echo-circles-placeholder"><h4>Echo Circles</h4><p>Small symbolic circles are coming later. No public diary feed. No follower system. No raw echoes.</p></section>`;
-  return `<section class="society-city" id="society-city">${statusCopy}<div class="society-city-sky"><canvas id="society-particles-canvas" width="720" height="220" aria-hidden="true"></canvas></div><div class="society-district-grid">${buildSocietyDistricts(avatar)}</div>${archiveInput}${SocietyWeather.render()}${UserAccess.canUse('alam_ai') ? AlamAI.renderPortal() : ''}<section class="society-local-signals"><h4>Local symbolic signals</h4>${signals}</section>${echoCircles}</section>`;
+  const statusCopy = gateState === 'active_local_preview'
+    ? '<p id="society-live-status">Local Preview — symbolic district UI is generated on this device.</p>'
+    : gateState === 'live_unavailable'
+      ? '<p id="society-live-status">Live Society Weather is unavailable — showing local preview fallback.</p>'
+      : '<p id="society-live-status">Live Society Weather is available when the public-safe sync succeeds.</p>';
+  const archiveInput = `<div class="society-archive-note"><input class="society-archive-input" id="society-archive-line" maxlength="80" placeholder="optional symbolic marker…"><small>Only a symbolic archive signal is used.</small></div>`;
+  return `<section class="society-city" id="society-city">${statusCopy}<div class="society-city-sky"><canvas id="society-particles-canvas" width="720" height="220" aria-hidden="true"></canvas></div><div class="society-district-grid">${buildSocietyDistricts(avatar)}</div>${archiveInput}${SocietyWeather.render()}</section>`;
 }
 
 function buildEchoSocietyGate() {
@@ -3349,20 +3379,44 @@ function buildEchoSocietyGate() {
   const avatar = progress.avatar;
   const gateState = getSocietyGateState();
   const district = getSocietyDistrictSuggestion(avatar.role || '');
-  if (gateState === 'no_special_access') return '<section class="echo-society-room society-state-no_special_access"><div class="echo-avatar-kicker">Society Gate</div><h4>Society Gate</h4><p>Special Access opens this gate.</p></section>';
+  if (gateState === 'no_special_access') return '<section class="echo-society-room society-state-no_special_access"><div class="echo-avatar-kicker">EchoSociety</div><h4>Special Access opens this city.</h4><p>Use the Special Access portal to enter EchoSociety.</p></section>';
   if (gateState === 'locked_progress') {
-    const missing = [];
-    if (!progress.hasAvatar) missing.push('Create Echo Avatar');
-    if (progress.echoCount < 5) missing.push('Create 5 echoes');
-    if (progress.artifactCount < 1) missing.push('Save or craft 1 artifact');
-    return `<section class="echo-society-room society-state-locked_progress"><div class="echo-avatar-kicker">Society Gate</div><h4>Society Gate is still forming.</h4><p>Complete these private vault steps first:</p><ul class="society-requirements">${missing.map(item => `<li class="missing">${escapeHTML(item)}</li>`).join('')}</ul></section>`;
+    return `<section class="echo-society-room society-state-locked_progress"><div class="echo-avatar-kicker">Society Gate</div><h4>Society Gate is still forming.</h4><p>Complete these private vault steps first:</p><ul class="society-requirements">${progress.missing.map(item => `<li class="missing">${escapeHTML(item)}</li>`).join('')}</ul></section>`;
   }
-  const privacy = `<section class="society-privacy-panel" id="society-privacy-panel" ${gateState === 'ready_needs_consent' ? '' : 'hidden'}><div class="echo-avatar-kicker">Privacy Rules</div><h4>Privacy Rules</h4><p>${escapeHTML(SocietyPrivacy.explainPrivacy())}</p><p>You choose when to contribute. You can revoke consent anytime.</p><div class="society-actions"><button class="receipt-action-btn" id="society-understand-btn">I Understand</button><button class="receipt-action-btn ghost" id="society-stay-private-btn">Stay Private</button></div></section>`;
-  if (gateState === 'ready_needs_consent') {
-    return `<section class="echo-society-room society-state-ready_needs_consent"><div class="echo-avatar-kicker">Society Gate</div><h4>Society Gate is ready.</h4><p>EchoSociety only uses anonymous symbolic signals.</p><p class="society-recommendation">Society role: <b>${escapeHTML(avatar.role || 'Signal Courier')}</b> · Recommended district: <b>${escapeHTML(district)}</b></p><div class="society-actions"><button class="receipt-action-btn" id="society-enter-btn">Enter EchoSociety</button><button class="receipt-action-btn ghost" id="society-private-btn">Stay Private</button><button class="receipt-action-btn" id="society-privacy-btn">Privacy Rules</button></div></section>${privacy}<section class="society-private-state" id="society-private-state" hidden><h4>You stayed private.</h4><p>EchoSociety will not receive signals.</p><button class="receipt-action-btn" id="society-private-rules-btn">Review Privacy Rules</button></section>`;
-  }
-  return `<section class="echo-society-room society-state-${gateState}"><div class="echo-avatar-kicker">Society Gate</div><h4>EchoSociety</h4><p>A shared city built from anonymous symbolic signals — not a public diary feed.</p><p class="society-recommendation">Society role: <b>${escapeHTML(avatar.role || 'Signal Courier')}</b> · Recommended district: <b>${escapeHTML(district)}</b></p><div class="society-actions"><button class="receipt-action-btn ghost" id="society-private-btn">Stay Private</button><button class="receipt-action-btn" id="society-privacy-btn">Privacy Rules</button></div></section>${privacy}<section class="society-private-state" id="society-private-state" hidden><h4>You stayed private.</h4><p>EchoSociety will not receive signals.</p><button class="receipt-action-btn" id="society-private-rules-btn">Review Privacy Rules</button></section>${buildSocietyCity(gateState, avatar)}`;
+  if (gateState === 'ready_needs_consent') return buildSocietyPrivacyPanel(gateState);
+  return `<section class="echo-society-room society-state-${gateState}"><div class="echo-avatar-kicker">Society Gate</div><h4>EchoSociety</h4><p>A shared city built from anonymous signals.</p><p class="society-recommendation">Avatar role: <b>${escapeHTML(avatar.role || 'Signal Courier')}</b> · Recommended district: <b>${escapeHTML(district)}</b></p></section>${buildSocietyCity(gateState, avatar)}`;
 }
+
+function buildEchoSocietyOverlay() {
+  const progress = getSocietyGateProgress();
+  const avatar = progress.avatar;
+  const gateState = getSocietyGateState();
+  const district = getSocietyDistrictSuggestion(avatar.role || '');
+  const status = `<div class="echosociety-status-strip"><span>${escapeHTML(societyStatusLabel(gateState))}</span><span>Consent: ${SocietySignals.getConsent() ? 'granted' : 'private'}</span><span>Avatar role: ${escapeHTML(avatar.role || 'unformed')}</span><span>Recommended: ${escapeHTML(district)}</span></div>`;
+  let main = '';
+  if (gateState === 'no_special_access') main = UserAccess.lockedHTML('echosociety');
+  else if (gateState === 'locked_progress') main = buildEchoSocietyGate();
+  else if (gateState === 'ready_needs_consent') main = buildSocietyPrivacyPanel(gateState);
+  else main = `<div class="echosociety-main"><section class="society-gate-panel">${buildEchoSocietyGate()}</section><section class="society-launchers"><button class="receipt-action-btn" id="society-delivery-launcher">Launch Signal Courier</button><button class="receipt-action-btn" id="society-alam-shortcut">alam.ai Observatory</button></section></div>${buildSocietyPrivacyPanel(gateState)}`;
+  return `<div class="echosociety-shell" role="document"><button class="courier-close echosociety-close" id="echosociety-close-btn">Close</button><header class="echosociety-head"><span class="echo-avatar-kicker">EchoSociety</span><h3>EchoSociety</h3><p>“A shared city built from anonymous signals.”</p></header>${status}<main>${main}</main></div>`;
+}
+
+function openEchoSocietyOverlay() {
+  if (!UserAccess.requirePremium('echosociety', { openSettings:true })) return;
+  let overlay = document.getElementById('echosociety-overlay');
+  if (!overlay) {
+    document.body.insertAdjacentHTML('beforeend', '<div class="echosociety-overlay" id="echosociety-overlay" role="dialog" aria-modal="true" aria-label="EchoSociety"></div>');
+    overlay = document.getElementById('echosociety-overlay');
+  }
+  overlay.innerHTML = buildEchoSocietyOverlay();
+  overlay.classList.add('open');
+  document.body.style.overflow='hidden';
+  bindEchoSocietyGate();
+  setTimeout(startSocietyParticles, 80);
+}
+
+function closeEchoSocietyOverlay() { document.getElementById('echosociety-overlay')?.remove(); document.body.style.overflow=''; }
+function rerenderEchoSocietyOverlay() { const overlay = document.getElementById('echosociety-overlay'); if (!overlay) return false; overlay.innerHTML = buildEchoSocietyOverlay(); bindEchoSocietyGate(); setTimeout(startSocietyParticles, 80); return true; }
 
 function updateSocietyConsentUI(options={}) {
   const consent = SocietySignals.getConsent();
@@ -3370,31 +3424,34 @@ function updateSocietyConsentUI(options={}) {
   const city = document.getElementById('society-city');
   const privatePanel = document.getElementById('society-private-state');
   if (city) { city.hidden = !consent; city.querySelectorAll('button,input,textarea,select').forEach((el) => { el.disabled = !consent; }); }
-  if (privacyPanel) privacyPanel.hidden = consent || Boolean(options.privateState);
+  if (privacyPanel && getSocietyGateState() !== 'ready_needs_consent') privacyPanel.hidden = Boolean(options.privateState);
   if (privatePanel) privatePanel.hidden = !(options.privateState && !consent);
   if (consent) setTimeout(()=>EchoWorldRenderer.startSocietyBackground(document.getElementById('society-particles-canvas')), 60);
 }
-function rerenderSocietyGate() { const panel = document.querySelector('[data-room-panel="society"]'); if (!panel) return false; panel.innerHTML = buildEchoSocietyGate(); bindEchoSocietyGate(); return true; }
+function rerenderSocietyGate() { return rerenderEchoSocietyOverlay(); }
 function bindEchoSocietyGate() {
   const showPrivacy = () => { document.getElementById('society-privacy-panel')?.removeAttribute('hidden'); document.getElementById('society-private-state')?.setAttribute('hidden',''); updateSocietyConsentUI({ privateState:false }); };
-  const stayPrivate = () => { SocietySignals.setConsent(false); const city=document.getElementById('society-city'); if(city){ city.hidden=true; city.querySelectorAll('button,input,textarea,select').forEach((el)=>{ el.disabled=true; }); } const privacyPanel=document.getElementById('society-privacy-panel'); if(privacyPanel) privacyPanel.hidden=true; const privatePanel=document.getElementById('society-private-state'); if(privatePanel) privatePanel.hidden=false; updateSocietyConsentUI({ privateState:true }); Toast.show('You stayed private. EchoSociety will not receive signals.'); };
+  const stayPrivate = () => { SocietySignals.setConsent(false); updateSocietyConsentUI({ privateState:true }); Toast.show('You stayed private. EchoSociety will not receive signals.'); rerenderEchoSocietyOverlay(); };
+  document.getElementById('echosociety-close-btn')?.addEventListener('click', closeEchoSocietyOverlay);
+  document.getElementById('echosociety-overlay')?.addEventListener('click', e => { if(e.target?.id === 'echosociety-overlay') closeEchoSocietyOverlay(); });
   document.getElementById('society-privacy-btn')?.addEventListener('click', showPrivacy);
   document.getElementById('society-private-rules-btn')?.addEventListener('click', showPrivacy);
   document.getElementById('society-enter-btn')?.addEventListener('click', () => SocietySignals.getConsent() ? updateSocietyConsentUI({ privateState:false }) : showPrivacy());
   document.getElementById('society-private-btn')?.addEventListener('click', stayPrivate);
   document.getElementById('society-stay-private-btn')?.addEventListener('click', stayPrivate);
-  document.getElementById('society-understand-btn')?.addEventListener('click', () => { SocietySignals.setConsent(true); Toast.show('EchoSociety consent saved.'); rerenderSocietyGate() || updateSocietyConsentUI({ privateState:false }); });
+  document.getElementById('society-understand-btn')?.addEventListener('click', () => { SocietySignals.setConsent(true); Toast.show('EchoSociety consent saved.'); rerenderEchoSocietyOverlay(); });
   const guardDistrictAction = (payload = {}) => SocietyPrivacy.requireSpecialAccess() && SocietyPrivacy.requireConsent() && SocietyPrivacy.requireSafeSignalPayload(payload);
-  const contribute = (fn, msg) => { const signal = fn(); if (!signal) { updateSocietyConsentUI({ privateState:true }); return; } Toast.show(msg); rerenderSocietyGate(); };
+  const contribute = (fn, msg) => { const signal = fn(); if (!signal) { updateSocietyConsentUI({ privateState:true }); return; } Toast.show(msg); rerenderEchoSocietyOverlay(); };
   document.getElementById('society-lantern-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeLantern, 'Anonymous lantern lit.'));
   document.getElementById('society-storm-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeStorm, 'Storm spark contained.'));
   document.getElementById('society-bloom-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeBloom, 'Bloom seed planted.'));
   document.getElementById('society-weather-btn')?.addEventListener('click', () => contribute(SocietySignals.contributeWeather, 'Weather signal added.'));
   document.getElementById('society-archive-btn')?.addEventListener('click', () => contribute(() => SocietySignals.contributeArchiveLine(document.getElementById('society-archive-line')?.value || ''), 'Moon Archive symbolic marker saved.'));
   document.getElementById('society-delivery-btn')?.addEventListener('click', () => { if(!guardDistrictAction({ signal_type:'delivery', district:'Signal Couriers’ Route' })) return; SignalCourierRoute.openRoute(); });
+  document.getElementById('society-delivery-launcher')?.addEventListener('click', () => { if(!guardDistrictAction({ signal_type:'delivery', district:'Signal Couriers’ Route' })) return; SignalCourierRoute.openRoute(); });
   document.getElementById('society-alam-btn')?.addEventListener('click', () => { if(!guardDistrictAction({ signal_type:'alam', metadata:{ portal:'observatory' } })) return; SocietySignals.contributeAlam(); AlamAI.openChat(); });
-  document.getElementById('alam-open-btn')?.addEventListener('click', () => { if(!guardDistrictAction({ signal_type:'alam', metadata:{ portal:'observatory' } })) return; SocietySignals.contributeAlam(); AlamAI.openChat(); });
-  document.querySelectorAll('.society-reactions button').forEach(btn => btn.addEventListener('click', () => { const id=btn.closest('.society-signal')?.dataset.signalId; const reaction = SocietySignals.addReaction(id, btn.dataset.reaction); if (!reaction) { updateSocietyConsentUI({ privateState:true }); return; } btn.classList.add('active'); Toast.show(`${btn.textContent.trim()} symbol recorded.`); }));
+  document.getElementById('society-alam-shortcut')?.addEventListener('click', () => { if(!guardDistrictAction({ signal_type:'alam', metadata:{ portal:'observatory' } })) return; SocietySignals.contributeAlam(); AlamAI.openChat(); });
+  document.getElementById('alam-open-btn')?.addEventListener('click', () => { if(!guardDistrictAction({ signal_type:'alam', metadata:{ portal:'standalone' } })) return; AlamAI.openChat(); });
   updateSocietyConsentUI({ privateState:false });
 }
 
@@ -3496,7 +3553,7 @@ const Rituals = (() => {
   }
 
   function getBuilders() { return {museum:buildMuseum,lantern:buildLantern,stormjar:buildStormJar,receipt:buildReceipt, dna:buildDNA, crash:buildCrash, sound:buildSound, vsvs:buildConflict, shatter:buildShatter}; }
-  function hasBuilder(type) { return type === 'special-access' || type === 'alam' || Boolean(getBuilders()[type]); }
+  function hasBuilder(type) { return type === 'special-access' || type === 'alam' || type === 'echosociety' || Boolean(getBuilders()[type]); }
   function unknownRitualHTML(type) { return `<div class="ritual-error-card"><h3>Unknown ritual</h3><p>${escapeHTML(type || 'This ritual')} is not available in this build.</p></div>`; }
   function museumDebugEnabled() {
     return typeof location !== 'undefined' && location.search.includes('debug=1');
@@ -3515,7 +3572,8 @@ const Rituals = (() => {
   function open(type) {
     if (type === 'special-access') { SpecialAccessPortal.open(); return; }
     if (type === 'alam') { if (UserAccess.requirePremium('alam_chat')) AlamAI.openChat(); return; }
-    const premiumRitualMap = { museum:'emotional_museum_full', lantern:'void_lantern', stormjar:'storm_jar', receipt:'basic_receipt', dna:'emotion_dna', crash:'crash_report', sound:'soundprint', vsvs:'inner_conflict', shatter:'shatter_softly' };
+    if (type === 'echosociety') { openEchoSocietyOverlay(); return; }
+    const premiumRitualMap = { museum:'emotional_museum_full', echosociety:'echosociety', lantern:'void_lantern', stormjar:'storm_jar', receipt:'basic_receipt', dna:'emotion_dna', crash:'crash_report', sound:'soundprint', vsvs:'inner_conflict', shatter:'shatter_softly' };
     if (premiumRitualMap[type] && !UserAccess.requirePremium(premiumRitualMap[type], { openSettings:true })) return;
     const builders = getBuilders();
     const fn = builders[type];
@@ -3548,7 +3606,6 @@ const Rituals = (() => {
       WeatherMap.render(document.getElementById('weather-map-canvas'), w);
       GentleQuests.evaluate('weather_room_visited', w);
       EchoAvatar.bind();
-      bindEchoSocietyGate();
       document.querySelectorAll('.museum-tab').forEach(btn=>btn.addEventListener('click',()=>{
         const room = btn.dataset.room;
         document.querySelectorAll('.museum-tab,.museum-room').forEach(el=>el.classList.remove('active'));
@@ -3985,7 +4042,6 @@ Insight: ${d.insight}`;
     const arch=safeMuseumCompute('archetype', { archetypeName:'Still Forming', archetypeDescription:'Create more echoes to fill this wing.' }, () => ArchetypeEngine.compute(pattern));
     const quest=safeMuseumCompute('quest', { text:'Create one echo to wake the museum.', completed:false, reward:{ name:'Calm Shard', qty:1 }, xp:0 }, () => GentleQuests.current());
     const avatarHtml=safeMuseumCompute('avatar', '', () => EchoAvatar.render());
-    const societyTeaser=safeMuseumCompute('society', '<div class="museum-empty">This room is still forming.</div>', () => buildEchoSocietyGate());
     const relicVisual = (name) => {
       const key = String(name || '').toLowerCase();
       if (key.includes('signal')) return 'relic-star';
@@ -4002,7 +4058,7 @@ Insight: ${d.insight}`;
       return `<article class="craft-recipe-card ${can?'can-craft':'is-missing'}"><div class="craft-recipe-top"><span class="craft-rune">✦</span><div><h5>${escapeHTML(recipe.title)}</h5><p>${escapeHTML(recipe.description)}</p></div></div><div class="craft-costs">${costs}</div>${can ? '<small class="craft-ready">Materials aligned.</small>' : `<small class="craft-missing">missing: ${escapeHTML(missText)}</small>`}<button class="receipt-action-btn craft-btn" data-recipe-id="${escapeHTML(recipe.id)}" ${can?'':'disabled'}>Craft</button></article>`;
     }).join('') || '<div class="museum-empty">Create more echoes to fill this wing.</div>';
     const materialsPrep = '<div class="phase-two-note">Materials remain local-first in <code>echovault_inventory_v1</code>; crafting only spends local inventory when every cost is available.</div>';
-    const premiumRoomFeatures = { weather_room:'premium_weather_map', soundprint_wall:'advanced_soundprint', relic_hall:'emotional_museum_full', archive_shelf:'artifact_archive', lantern_garden:'vault_rooms', crafting_table:'crafting_table', society_gate:'society_gate' };
+    const premiumRoomFeatures = { weather_room:'premium_weather_map', soundprint_wall:'advanced_soundprint', relic_hall:'emotional_museum_full', archive_shelf:'artifact_archive', lantern_garden:'vault_rooms', crafting_table:'crafting_table' };
     const roomUnlockAlias = { archetype_hall:'weather_room', materials_room:'crafting_table' };
     const allRoomDefs = [
       { id:'weather_room', panel:'weather', label:'Weather Room' },
@@ -4012,10 +4068,9 @@ Insight: ${d.insight}`;
       { id:'archive_shelf', panel:'receipts', label:'Receipt Archive' },
       { id:'lantern_garden', panel:'lanterns', label:'Void Lanterns' },
       { id:'crafting_table', panel:'crafting', label:'Crafting Table' },
-      { id:'materials_room', panel:'materials', label:'Vault Materials' },
-      { id:'society_gate', panel:'society', label:'Society Gate' }
+      { id:'materials_room', panel:'materials', label:'Vault Materials' }
     ];
-    const roomDefs = allRoomDefs.filter((room) => room.id !== 'society_gate' || (UserAccess.canUse('echosociety') && UserAccess.canUse('society_gate')));
+    const roomDefs = allRoomDefs;
     const roomBuilders = {
       weather_room: () => panelLock('weather_room', `<h4>Weather Room</h4><p>${escapeHTML(weather.summary || 'This room has no saved material yet.')}</p><canvas id="weather-map-canvas" style="width:100%;height:240px"></canvas><div class="ritual-actions"><button class="receipt-action-btn" id="dl-weather">Download Weather Card</button><button class="receipt-action-btn" id="save-weather">Save Weather Artifact</button></div>`),
       archetype_hall: () => `<h4>Archetype Hall</h4><p>${escapeHTML(arch.archetypeName || 'Still Forming')} · ${escapeHTML(arch.archetypeDescription || 'Create more echoes to fill this wing.')}</p><button class="receipt-action-btn" id="dl-arch">Download Archetype Card</button>`,
@@ -4024,8 +4079,7 @@ Insight: ${d.insight}`;
       archive_shelf: () => panelLock('archive_shelf', `<h4>Receipt Archive</h4><p>Receipts you save will appear here.</p><button class='receipt-action-btn' id='save-receipt-latest'>Save Latest Receipt</button><div class="artifact-shelf" id='artifact-list'>${saved.map(a=>`<div class='artifact-row'><b>${escapeHTML(a.title)}</b><small>${escapeHTML(a.type)}</small><button class='receipt-action-btn art-fav' data-id='${escapeHTML(a.id)}'>☆</button><button class='receipt-action-btn art-del' data-id='${escapeHTML(a.id)}'>Delete</button></div>`).join('') || '<div class="museum-empty">No artifacts archived here yet.</div>'}</div>`),
       lantern_garden: () => panelLock('lantern_garden', '<h4>Void Lanterns</h4><p>Still here is still a signal. Crafted lanterns gather here as a private garden.</p><div class="museum-empty">This room has no saved material yet.</div>'),
       crafting_table: () => panelLock('crafting_table', `<section class="crafting-table"><div class="crafting-head"><div><h4>Crafting Table</h4><p>Shape emotional materials into relics.</p></div><span>${totalMaterials} materials</span></div><section class="vault-materials compact"><h4>Inventory Summary</h4>${materialRows}</section><div class="craft-grid">${buildCraftCards()}</div><div id="crafted-preview" class="crafted-preview" hidden></div></section>`),
-      materials_room: () => `<h4>Vault Materials</h4><section class="vault-materials">${materialRows}</section>${materialsPrep}`,
-      society_gate: () => societyTeaser
+      materials_room: () => `<h4>Vault Materials</h4><section class="vault-materials">${materialRows}</section>${materialsPrep}`
     };
     const roomFallback = (label, error) => `<div class="museum-empty"><h4>${escapeHTML(label)}</h4><p>This room is still forming.</p><small>${museumDebugEnabled() ? escapeHTML(error?.message || error || '') : 'Create more echoes to fill this wing.'}</small></div>`;
     const renderRoom = ({ id, panel, label }, index) => {
