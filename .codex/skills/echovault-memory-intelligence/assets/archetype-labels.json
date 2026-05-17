@@ -1,0 +1,38 @@
+[
+  {
+    "id": "quiet-anchor",
+    "label": "Quiet Anchor",
+    "shortCopy": "Returning to steadiness in small, quiet ways.",
+    "emptyState": "Not enough steady signal yet."
+  },
+  {
+    "id": "weather-watcher",
+    "label": "Weather Watcher",
+    "shortCopy": "Noticing emotional weather before rushing to explain it.",
+    "emptyState": "More echoes will help reveal the weather."
+  },
+  {
+    "id": "soft-rebuilder",
+    "label": "Soft Rebuilder",
+    "shortCopy": "Rebuilding gently without making the story simple.",
+    "emptyState": "Growth signals are still forming."
+  },
+  {
+    "id": "ember-carrier",
+    "label": "Ember Carrier",
+    "shortCopy": "Carrying heat near the places where something matters.",
+    "emptyState": "Boundary signals are still quiet."
+  },
+  {
+    "id": "tender-seeker",
+    "label": "Tender Seeker",
+    "shortCopy": "Letting connection matter deeply in the memory field.",
+    "emptyState": "Connection motifs have not gathered yet."
+  },
+  {
+    "id": "threshold-crosser",
+    "label": "Threshold Crosser",
+    "shortCopy": "Standing in a doorway between versions of yourself.",
+    "emptyState": "Transition signals are still emerging."
+  }
+]
