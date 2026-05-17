@@ -380,20 +380,24 @@ function analyzeEchoHistory(echoes) {
   };
 }
 
-function loadCliInput(path) {
+function loadCliInput() {
   const fs = require('fs');
-  const raw = path ? fs.readFileSync(path, 'utf8') : fs.readFileSync(0, 'utf8');
+  const raw = fs.readFileSync(0, 'utf8');
   return JSON.parse(raw);
 }
 
+function writeCliOutput(payload) {
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+}
+
 if (require.main === module) {
-  const input = loadCliInput(process.argv[2]);
+  const input = loadCliInput();
   const echoes = Array.isArray(input) ? input : input.echoes;
   if (!Array.isArray(echoes)) {
-    console.error('Expected a JSON array of echoes or an object with an echoes array.');
+    process.stderr.write('Expected a JSON array of echoes or an object with an echoes array.\n');
     process.exit(1);
   }
-  console.log(JSON.stringify(analyzeEchoHistory(echoes), null, 2));
+  writeCliOutput(analyzeEchoHistory(echoes));
 }
 
 module.exports = {

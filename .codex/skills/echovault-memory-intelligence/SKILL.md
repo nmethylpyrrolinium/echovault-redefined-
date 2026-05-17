@@ -33,10 +33,10 @@ Use this skill to make EchoVault's memory features feel emotionally intelligent,
 
 ## Script quick start
 
-Use the reusable JS module directly in app code or run it as a CLI against a JSON array of echoes:
+Use the reusable JS module directly in app code or run it as a CLI by piping a JSON array of echoes through stdin. The CLI intentionally avoids reading user-supplied file paths so echo data is not routed through dynamic filesystem access.
 
 ```bash
-node .codex/skills/echovault-memory-intelligence/scripts/memory-intelligence.js ./echoes.json
+cat ./echoes.json | node .codex/skills/echovault-memory-intelligence/scripts/memory-intelligence.js
 ```
 
 Expected echo fields are flexible, but best results use:
