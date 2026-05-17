@@ -1,5 +1,5 @@
-const APP_VERSION = 'special-access-v4-login-press-fix';
-const CACHE = 'echovault-v12-login-press-fix';
+const APP_VERSION = 'phase-1-polish';
+const CACHE = 'echovault-v13-phase-1-polish';
 
 const toScopeUrl = (path) => new URL(path, self.registration.scope).toString();
 const PRECACHE = ['./', 'index.html', 'styles.css', 'script.js', 'manifest.json', 'icons/icon.svg', 'wrapped-cinematic-module.js'];
