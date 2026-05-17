@@ -1,0 +1,5 @@
+{
+  "livingOrb": { "blurPx": 28, "innerGlowOpacity": 0.55, "outerGlowOpacity": 0.28, "driftRadiusPx": 10, "breathingScale": 0.035, "tempo": 0.85 },
+  "reflectiveOrb": { "blurPx": 34, "innerGlowOpacity": 0.42, "outerGlowOpacity": 0.22, "driftRadiusPx": 6, "breathingScale": 0.018, "tempo": 0.55 },
+  "reducedMotionOrb": { "blurPx": 24, "innerGlowOpacity": 0.48, "outerGlowOpacity": 0.18, "driftRadiusPx": 0, "breathingScale": 0, "tempo": 0 }
+}

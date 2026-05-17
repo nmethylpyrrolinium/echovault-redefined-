@@ -1,0 +1,4 @@
+interface:
+  display_name: "EchoVault Cinematic Visuals"
+  short_description: "Premium motion, particles, orbs, and scenes"
+  default_prompt: "Use $echovault-cinematic-visuals to make EchoVault animations feel premium, expressive, and performance-safe."

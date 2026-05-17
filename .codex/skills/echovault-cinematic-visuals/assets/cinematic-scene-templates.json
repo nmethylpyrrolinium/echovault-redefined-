@@ -1,0 +1,12 @@
+{
+  "wrappedMemoryConstellation": {
+    "layers": ["deepGradient", "ambientParticles", "memoryNodes", "affinityLinks", "heroSummary"],
+    "camera": { "movement": "slow-dolly", "maxOrbitDegrees": 6 },
+    "fallback": "static constellation poster with gentle crossfade"
+  },
+  "emotionalWeather": {
+    "layers": ["moodGradient", "weatherParticles", "softVignette", "foregroundMemory"],
+    "weatherTypes": ["mist", "embers", "aurora", "rain", "stardust"],
+    "fallback": "static gradient with sparse particles"
+  }
+}
