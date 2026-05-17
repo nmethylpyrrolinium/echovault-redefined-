@@ -313,6 +313,7 @@ window.ECHOVAULT_CONFIG = {
       </div>
       <div id="timeline-tide-label" style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-align:right"></div>
     </div>
+    <div class="timeline-season-card" id="timeline-season-card" aria-live="polite"></div>
     <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);margin:4px 2px 10px">Legend: calm 🌊 · chaos ⚡ · reflective 🌙 · anxious 🌀 · joyful 🌸 · empty 🌑</div>
 
     <div id="timeline-empty" class="empty-state" style="display:none">
@@ -422,6 +423,9 @@ window.ECHOVAULT_CONFIG = {
     <div class="detail-intensity"  id="detail-int"></div>
     <div class="detail-int-label">intensity</div>
     <div class="detail-thought"   id="detail-thought"></div>
+    <div class="detail-season" id="detail-season"></div>
+    <div class="detail-relations" id="detail-relations"></div>
+    <div class="detail-actions"><button class="receipt-action-btn" id="detail-trace-btn" type="button">Trace connection</button></div>
     <div class="detail-meta"      id="detail-meta"></div>
   </div>
 </div>
@@ -611,6 +615,7 @@ window.ECHOVAULT_CONFIG = {
   </div>
 </div>
 
+<script src="phase2-emotional-intelligence.js"></script>
 <script src="script.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="wrapped-cinematic-module.js"></script>

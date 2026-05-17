@@ -3,12 +3,13 @@ const crypto = require('crypto');
 
 const failures = [];
 
-['index.html','styles.css','script.js','README.md','manifest.json','sw.js','wrapped-cinematic-module.js'].forEach((f) => {
+['index.html','styles.css','script.js','phase2-emotional-intelligence.js','README.md','manifest.json','sw.js','wrapped-cinematic-module.js'].forEach((f) => {
   if (!fs.existsSync(f)) failures.push(`Missing required file: ${f}`);
 });
 
 const index = fs.readFileSync('index.html','utf8');
 const script = fs.readFileSync('script.js','utf8');
+const phase2 = fs.readFileSync('phase2-emotional-intelligence.js','utf8');
 const style = fs.readFileSync('styles.css','utf8');
 const wrappedCinematic = fs.readFileSync('wrapped-cinematic-module.js','utf8');
 const readme = fs.readFileSync('README.md','utf8');
@@ -180,8 +181,8 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 
 // Phase 1 game/community foundation checks
 const sw = fs.readFileSync('sw.js','utf8');
-if (!script.includes("phase-1-polish")) failures.push('APP_VERSION not updated to phase-1-polish');
-if (!script.includes('echovault-v13-phase-1-polish') && !sw.includes('echovault-v13-phase-1-polish')) failures.push('Phase 1 cache marker missing');
+if (!script.includes("phase-2-emotional-universe")) failures.push('APP_VERSION not updated to phase-2-emotional-universe');
+if (!script.includes('echovault-v14-phase-2-emotional-universe') && !sw.includes('echovault-v14-phase-2-emotional-universe')) failures.push('Phase 2 cache marker missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');
 ['EchoAvatar','echovault_avatar_v1','MaterialEngine','VaultInventory','echovault_inventory_v1','GentleQuests','echovault_quests_v1','Society Gate'].forEach((marker) => {
   if (!script.includes(marker) && !index.includes(marker)) failures.push(`Missing Phase 1 marker: ${marker}`);
@@ -601,6 +602,7 @@ if (!script.includes('moodFamily') || !wrappedCinematic.includes('moodFamily(e.m
 if (!wrappedCinematic.includes('getSoundprintForEcho') || !wrappedCinematic.includes('escapeHTML(t.song)')) failures.push('Wrapped cinematic should use guarded soundprint selection and escaped track markup');
 if (!index.includes('nav-wrapped')) failures.push('nav-wrapped missing');
 if (!script.includes('getSoundprintForEcho')) failures.push('getSoundprintForEcho missing');
+if (!phase2.includes('analyzeSeason') || !phase2.includes('buildConstellationLinks')) failures.push('Phase 2 intelligence helper missing season or constellation logic');
 const soundBlock = script.slice(script.indexOf('const SOUNDPRINTS = {'), script.indexOf('function getSoundprintForEcho'));
 ['calm','chaos','reflective','anxious','joyful','empty'].forEach((family, idx, arr) => {
   const start = soundBlock.indexOf(`${family}:[`);
