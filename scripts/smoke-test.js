@@ -180,8 +180,8 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 
 // Phase 1 game/community foundation checks
 const sw = fs.readFileSync('sw.js','utf8');
-if (!script.includes("special-access-v4-login-press-fix")) failures.push('APP_VERSION not updated to special-access-v4-login-press-fix');
-if (!script.includes('echovault-v12-login-press-fix') && !sw.includes('echovault-v12-login-press-fix')) failures.push('Special Access cache marker missing');
+if (!script.includes("phase-1-polish")) failures.push('APP_VERSION not updated to phase-1-polish');
+if (!script.includes('echovault-v13-phase-1-polish') && !sw.includes('echovault-v13-phase-1-polish')) failures.push('Phase 1 cache marker missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');
 ['EchoAvatar','echovault_avatar_v1','MaterialEngine','VaultInventory','echovault_inventory_v1','GentleQuests','echovault_quests_v1','Society Gate'].forEach((marker) => {
   if (!script.includes(marker) && !index.includes(marker)) failures.push(`Missing Phase 1 marker: ${marker}`);

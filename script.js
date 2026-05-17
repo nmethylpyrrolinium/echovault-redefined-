@@ -1,8 +1,8 @@
 (function EchoVault() {
 'use strict';
 
-const APP_VERSION = 'special-access-v4-login-press-fix';
-const SW_CACHE_VERSION = 'echovault-v12-login-press-fix';
+const APP_VERSION = 'phase-1-polish';
+const SW_CACHE_VERSION = 'echovault-v13-phase-1-polish';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
@@ -24,6 +24,9 @@ const AppEnvironment = (() => {
 const STORAGE_KEY  = 'echovault_echoes_v2';
 const USER_KEY     = 'echoUser';
 const OB_KEY       = 'echoOnboarded';
+const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+function prefersReducedMotion() { return reduceMotionQuery.matches; }
+function isMobileViewport() { return window.innerWidth < 768; }
 
 
 function escapeHTML(value) {
@@ -684,23 +687,22 @@ const Nav = (() => {
     navBtns[v] = document.getElementById('nav-' + v);
     viewEls[v] = document.getElementById('view-' + v);
     if (navBtns[v]) {
-      navBtns[v].addEventListener('click', () => {
-        show(v);
-        if (v === 'wrapped') WrappedCinematicLoader.openIfAvailable();
-      });
+      navBtns[v].addEventListener('click', () => show(v));
     }
   });
   function show(name) {
     views.forEach(v => {
       viewEls[v]?.classList.toggle('active', v === name);
       navBtns[v]?.classList.toggle('active',  v === name);
+      navBtns[v]?.setAttribute('aria-current', v === name ? 'page' : 'false');
     });
     state.currentView = name;
     if (name === 'timeline') { Timeline.render(); setTimeout(ConnectionCanvas.render, 60); }
     if (name === 'wrapped')  Wrapped.render();
     if (name === 'home')     IdentityCore.update();
-    // Smooth scroll to top of the view content, then to the active section
-    window.scrollTo({top:0, behavior:'smooth'});
+    // Smooth scroll to the active view without letting the fixed header overlap content.
+    const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
+    window.scrollTo({top:0, behavior});
     // After the scroll, ensure the view's first meaningful content is in focus
     setTimeout(() => {
       const activeView = viewEls[name];
@@ -709,7 +711,7 @@ const Nav = (() => {
       if (firstFocusable) {
         const rect = firstFocusable.getBoundingClientRect();
         if (rect.top < 0 || rect.top > window.innerHeight * 0.3) {
-          firstFocusable.scrollIntoView({behavior:'smooth', block:'start'});
+          firstFocusable.scrollIntoView({behavior, block:'start'});
         }
       }
     }, 80);
@@ -903,6 +905,7 @@ const Login = (() => {
   const authSignUp = document.getElementById('auth-signup-btn');
   const authLocal = document.getElementById('auth-local-btn');
   const authModeNote = document.getElementById('auth-mode-note');
+  const authStatus = document.getElementById('auth-status');
 
   let otpCooldownUntil = 0;
   let signupCooldownUntil = 0;
@@ -917,8 +920,14 @@ const Login = (() => {
   };
 
   function showStep(el){ [lsOrb,lsBreath,lsName,lsReturn].forEach(s => s.classList.remove('active')); el.classList.add('active'); }
+  function setAuthStatus(message = '', tone = '') {
+    if (!authStatus) return;
+    authStatus.textContent = message;
+    authStatus.className = `auth-status ${tone}`.trim();
+  }
+  function validEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
   function enterApp(){ screen.classList.add('hidden'); setTimeout(() => { screen.style.display='none'; if (!localStorage.getItem(OB_KEY)) Onboarding.start(); }, 950); }
-  function setButtonLoading(btn, loading, idleText, busyText){ if(!btn) return; btn.disabled=loading; btn.textContent=loading?busyText:idleText; }
+  function setButtonLoading(btn, loading, idleText, busyText){ if(!btn) return; btn.disabled=loading; btn.setAttribute('aria-busy', String(loading)); btn.textContent=loading?busyText:idleText; }
   function setOtpUiStep(codeSent){
     authOtp.style.display = codeSent ? 'block' : 'none';
     authVerifyCode.style.display = codeSent ? 'inline-flex' : 'none';
@@ -946,30 +955,32 @@ const Login = (() => {
   }
 
   async function sendEmailOtp(email){
-    if (!email || !/.+@.+\..+/.test(email)) return Toast.show('Enter a valid email.');
+    if (!email || !validEmail(email)) { setAuthStatus('Enter a valid email address first.', 'error'); return Toast.show('Enter a valid email.'); }
+    setAuthStatus('Sending your vault code…', '');
     setButtonLoading(authSendCode, true, 'Send Vault Code', 'Sending…');
     const res = await Auth.sendEmailOtp(email);
     setButtonLoading(authSendCode, false, 'Send Vault Code', 'Sending…');
-    if (!res.ok) return Toast.show(normalizeAuthError(res.error), 4200);
+    if (!res.ok) { const msg = normalizeAuthError(res.error); setAuthStatus(`${msg} You can still continue locally.`, 'error'); return Toast.show(msg, 4200); }
     setOtpUiStep(true);
+    setAuthStatus('Email sent. Use the code if shown, or open the magic link.', 'success');
     Toast.show('Email sent — use the code if shown, or open the magic link.', 4600);
     if (authModeNote) authModeNote.innerHTML = 'Code shown? Enter it below. Link shown? Open it to unlock your vault.<br><small>To receive a visible 6-digit code, the Supabase Magic Link template must include {{ .Token }}.</small>';
     startOtpCooldown(60);
   }
 
   async function verifyEmailOtp(email, token){
-    if (!email || !/.+@.+\..+/.test(email)) return Toast.show('Enter a valid email.');
-    if (!token || !/^\d{6}$/.test(token)) return Toast.show('Enter the 6-digit code.');
+    if (!email || !validEmail(email)) { setAuthStatus('Enter a valid email address first.', 'error'); return Toast.show('Enter a valid email.'); }
+    if (!token || !/^\d{6}$/.test(token)) { setAuthStatus('Enter the 6-digit code from your email.', 'error'); return Toast.show('Enter the 6-digit code.'); }
     setButtonLoading(authVerifyCode, true, 'Verify Code', 'Verifying…');
     const res = await Auth.verifyEmailOtp(email, token);
     setButtonLoading(authVerifyCode, false, 'Verify Code', 'Verifying…');
-    if (!res.ok) return Toast.show('Invalid or expired code. If your email only has a magic link, open that link instead.', 4200);
-    if (!res.data?.session) return Toast.show('Session not created. If your email has a magic link, open it instead.', 4200);
+    if (!res.ok) { setAuthStatus('That code did not open the vault. Try again or continue locally.', 'error'); return Toast.show('Invalid or expired code. If your email only has a magic link, open that link instead.', 4200); }
+    if (!res.data?.session) { setAuthStatus('Open the magic link from your email, or continue locally.', 'error'); return Toast.show('Session not created. If your email has a magic link, open it instead.', 4200); }
     const profile = await Auth.fetchProfile(); if (profile) ProfileStore.write(profile);
     UserAccess.refreshAccessState();
     await Auth.upsertProfile({ ...ProfileStore.read(), display_name: nameInput.value.trim() || ProfileStore.read().display_name });
     UserChip.refresh();
-  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Profile Synced" : "Local Vault"); Toast.show('Vault unlocked. Welcome back.'); enterApp();
+  VaultPulse.set(Auth.user ? "synced" : "local", Auth.user ? "Profile Synced" : "Local Vault"); setAuthStatus('Vault unlocked. Welcome back.', 'success'); Toast.show('Vault unlocked. Welcome back.'); enterApp();
   }
 
   async function resendEmailOtp(email){
@@ -1027,7 +1038,7 @@ const Login = (() => {
     if (!Auth.hasSupabase && authModeNote) authModeNote.textContent = 'Supabase is not configured — local mode only.';
     if (savedUser && !Auth.hasSupabase) { document.getElementById('return-name').textContent = savedUser; showStep(lsReturn); document.getElementById('return-enter-btn').addEventListener('click', () => enterApp()); return; }
 
-    authLocal?.addEventListener('click', () => { const name = nameInput.value.trim() || localStorage.getItem(USER_KEY) || 'local voyager'; localStorage.setItem(USER_KEY, name); ProfileStore.write({ display_name: name }); UserChip.refresh(); enterApp(); });
+    authLocal?.addEventListener('click', () => { const name = nameInput.value.trim() || localStorage.getItem(USER_KEY) || 'local voyager'; localStorage.setItem(USER_KEY, name); ProfileStore.write({ display_name: name }); UserChip.refresh(); setAuthStatus('Local vault ready. Nothing leaves this device.', 'success'); enterApp(); });
     authTogglePassword?.addEventListener('click', () => setAuthMode(authUiMode === 'otp' ? 'password' : 'otp'));
     authSendCode?.addEventListener('click', () => sendEmailOtp(authEmail.value.trim()));
     authVerifyCode?.addEventListener('click', () => verifyEmailOtp(authEmail.value.trim(), authOtp.value.trim()));
@@ -1072,28 +1083,51 @@ const PWAInstall = (() => {
   const banner = document.getElementById('pwa-banner');
   const installBtn = document.getElementById('pwa-install-btn');
   const dismissBtn = document.getElementById('pwa-dismiss-btn');
+  const subText = banner?.querySelector('.pwa-sub');
   const DISMISS_KEY = 'echovault_pwa_dismissed';
   const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
   function syncStandaloneClass() {
     document.documentElement.classList.toggle('is-standalone', Boolean(isStandalone()));
   }
-  function hide() { banner?.classList.remove('show'); }
-  function show() { if (!localStorage.getItem(DISMISS_KEY) && !isStandalone() && deferredInstallPrompt) banner?.classList.add('show'); }
+  function setBannerVisible(visible) {
+    banner?.classList.toggle('show', visible);
+    document.documentElement.style.setProperty('--pwa-space', visible ? '92px' : '0px');
+  }
+  function hide() { setBannerVisible(false); }
+  function show(fallback = false) {
+    if (localStorage.getItem(DISMISS_KEY) || isStandalone()) return;
+    if (fallback) {
+      installBtn.textContent = 'How';
+      if (subText) subText.textContent = 'Install from your browser menu when available';
+      banner?.setAttribute('data-fallback', 'true');
+    } else {
+      installBtn.textContent = 'Install';
+      if (subText) subText.textContent = 'Works offline · Feels like an app';
+      banner?.removeAttribute('data-fallback');
+    }
+    setBannerVisible(true);
+  }
   function init() {
     syncStandaloneClass();
     AppEnvironment.applyClasses();
     window.matchMedia('(display-mode: standalone)').addEventListener?.('change', syncStandaloneClass);
     window.addEventListener('resize', AppEnvironment.applyClasses);
-    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; show(); });
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; show(false); });
     installBtn?.addEventListener('click', async () => {
-      if (!deferredInstallPrompt) return;
+      if (!deferredInstallPrompt) {
+        Toast.show('Use your browser menu to add EchoVault to your Home Screen when install is available.', 5200);
+        return;
+      }
+      installBtn.disabled = true;
       deferredInstallPrompt.prompt();
       await deferredInstallPrompt.userChoice;
+      installBtn.disabled = false;
       hide();
       deferredInstallPrompt = null;
     });
     dismissBtn?.addEventListener('click', () => { localStorage.setItem(DISMISS_KEY, '1'); hide(); });
     window.addEventListener('appinstalled', () => { hide(); deferredInstallPrompt = null; });
+    setTimeout(() => { if (!deferredInstallPrompt) show(true); }, 2600);
     if (isStandalone()) hide();
   }
   return { init };
@@ -1216,7 +1250,12 @@ const Onboarding = (() => {
   });
   skipBtn.addEventListener('click', finish);
 
-  return {start};
+  document.addEventListener('keydown', (event) => {
+    if (!overlay.classList.contains('open')) return;
+    if (event.key === 'Enter') { event.preventDefault(); nextBtn.click(); }
+  });
+
+  return {start, finish};
 })();
 
 /* ── COSMOS CANVAS ── */
@@ -1232,8 +1271,9 @@ const Cosmos = (() => {
 
   function init() {
     resize();
-    const max   = window.innerWidth < 600 ? 30 : 52;
-    const count = Math.min(max, Math.floor(canvas.width * canvas.height / 20000));
+    const max   = prefersReducedMotion() ? 0 : (isMobileViewport() ? 18 : 46);
+    const density = isMobileViewport() ? 36000 : 24000;
+    const count = Math.min(max, Math.floor(canvas.width * canvas.height / density));
     particles   = [];
     for (let i = 0; i < count; i++) {
       particles.push({
@@ -1249,7 +1289,8 @@ const Cosmos = (() => {
   }
 
   function draw() {
-    if (state.tabHidden) { requestAnimationFrame(draw); return; }
+    if (prefersReducedMotion()) return;
+    if (state.tabHidden) { setTimeout(() => requestAnimationFrame(draw), 300); return; }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const cellSize = 100;
@@ -1319,7 +1360,8 @@ const Ripple = (() => {
   }
 
   function tick() {
-    if (state.tabHidden) { requestAnimationFrame(tick); return; }
+    if (prefersReducedMotion()) return;
+    if (state.tabHidden) { setTimeout(() => requestAnimationFrame(tick), 300); return; }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     rings = rings.filter(r => r.a > 0.01);
     rings.forEach(ring => {
@@ -1363,6 +1405,7 @@ const ConnectionCanvas = (() => {
     if (state.currentView !== 'timeline') { animActive = false; return; }
     animActive = true;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (prefersReducedMotion()) { ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
     phase += 0.012;
 
     const field = document.getElementById('bubble-field');
@@ -1402,7 +1445,7 @@ const ConnectionCanvas = (() => {
 const Breathing = (() => {
   let phase = 0;
   function tick() {
-    if (!state.tabHidden) {
+    if (!prefersReducedMotion() && !state.tabHidden) {
       phase += 0.008;
       const intensity = state.echoes[0]?.intensity || 5;
       const amp = 0.008 + (intensity / 10) * 0.012;
@@ -1411,7 +1454,7 @@ const Breathing = (() => {
     }
     requestAnimationFrame(tick);
   }
-  function start() { tick(); }
+  function start() { if (!prefersReducedMotion()) tick(); }
   return {start};
 })();
 
@@ -1456,6 +1499,7 @@ const Whip = (() => {
       ctx.beginPath(); ctx.arc(cx,cy,120,0,Math.PI*2);
       ctx.fillStyle = grd; ctx.fill();
       t++;
+      if (prefersReducedMotion()) { ctx.clearRect(0,0,canvas.width,canvas.height); canvas.style.opacity = '0'; running = false; return; }
       if (t < 90) requestAnimationFrame(frame);
       else {
         ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -1476,7 +1520,8 @@ const Whip = (() => {
 const SilenceParticles = (() => {
   const layer = document.getElementById('silence-layer');
   function spawn(silenceLevel) {
-    const count = Math.floor(silenceLevel * 2.2);
+    if (prefersReducedMotion()) return;
+    const count = Math.floor(silenceLevel * (isMobileViewport() ? 1.1 : 2.0));
     for (let i=0; i<count; i++) {
       setTimeout(() => {
         const p = document.createElement('div');
@@ -1502,7 +1547,7 @@ const SilenceParticles = (() => {
 
 /* ── CURSOR AURA (desktop only) ── */
 const CursorAura = (() => {
-  if (window.innerWidth < 768 || !window.matchMedia('(pointer:fine)').matches) return {update:()=>{}};
+  if (prefersReducedMotion() || window.innerWidth < 768 || !window.matchMedia('(pointer:fine)').matches) return {update:()=>{}};
   const aura = document.createElement('div');
   aura.style.cssText = `
     position:fixed;width:280px;height:280px;border-radius:50%;
@@ -1516,7 +1561,7 @@ const CursorAura = (() => {
   let mx=0,my=0,ax=0,ay=0,raf=null,visible=false;
   document.addEventListener('mousemove', e => { mx=e.clientX; my=e.clientY; if (!visible) { aura.style.opacity='1'; visible=true; } }, {passive:true});
   document.addEventListener('mouseleave', () => { aura.style.opacity='0'; visible=false; });
-  function tick() { ax += (mx-ax) * 0.08; ay += (my-ay) * 0.08; aura.style.transform = `translate(${ax-140}px,${ay-140}px)`; raf = requestAnimationFrame(tick); }
+  function tick() { if (state.tabHidden || prefersReducedMotion()) { raf = setTimeout(() => requestAnimationFrame(tick), 300); return; } ax += (mx-ax) * 0.08; ay += (my-ay) * 0.08; aura.style.transform = `translate(${ax-140}px,${ay-140}px)`; raf = requestAnimationFrame(tick); }
   tick();
   function update(mood) { if (!mood) return; const c = MOOD_COLORS[mood]; aura.style.background = `radial-gradient(circle,${c}18 0%,transparent 70%)`; }
   return {update};
@@ -1547,13 +1592,15 @@ const GhostLayer = (() => {
     setTimeout(() => ghost.remove(), (dur+8)*1000);
   }
   function initFromEchoes(echoes) {
-    echoes.slice(0,7).forEach((e,i) => setTimeout(() => spawn(e), i*1800));
+    if (prefersReducedMotion()) return;
+    echoes.slice(0,isMobileViewport()?3:6).forEach((e,i) => setTimeout(() => spawn(e), i*1800));
   }
   return {spawn, initFromEchoes};
 })();
 
 /* ── RESIDUE & VOID PULSE ── */
 function spawnResidue(x, y, color) {
+  if (prefersReducedMotion()) return;
   const r = document.createElement('div');
   const size = 60 + Math.random()*40;
   r.className = 'residue';
@@ -1567,6 +1614,7 @@ function spawnResidue(x, y, color) {
 }
 
 function spawnVoidPulse(x, y) {
+  if (prefersReducedMotion()) return;
   const size = 80, p = document.createElement('div');
   p.className = 'void-pulse';
   p.style.cssText = `width:${size}px;height:${size}px;left:${x-size/2}px;top:${y-size/2}px;`;
@@ -1576,6 +1624,7 @@ function spawnVoidPulse(x, y) {
 
 /* ── SPARKLE TRAIL ── */
 function spawnSparkle(x, y, color) {
+  if (prefersReducedMotion()) return;
   const s = document.createElement('div');
   s.className = 'sparkle';
   const size = 3 + Math.random()*5;
@@ -1590,7 +1639,8 @@ function spawnSparkle(x, y, color) {
 
 /* ── PARTICLE BURST ── */
 function spawnBurst(x, y, color) {
-  for (let i=0; i<14; i++) {
+  if (prefersReducedMotion()) return;
+  for (let i=0; i<(isMobileViewport()?8:14); i++) {
     const el = document.createElement('div');
     el.className = 'residue';
     const angle = (i/14)*Math.PI*2;
@@ -1668,7 +1718,8 @@ const IdentityCore = (() => {
       }
     }
 
-    if (state.tabHidden) { rafId = requestAnimationFrame(update); return; }
+    if (prefersReducedMotion()) { ctx.clearRect(0,0,w,h); return; }
+    if (state.tabHidden) { rafId = setTimeout(() => requestAnimationFrame(update), 300); return; }
 
     ctx.clearRect(0,0,w,h);
     phase += 0.005;
@@ -1740,8 +1791,8 @@ const IdentityOrb = (() => {
   }
 
   function tick() {
-    if (!state.tabHidden) update();
-    requestAnimationFrame(tick);
+    if (!prefersReducedMotion() && !state.tabHidden) update();
+    (state.tabHidden ? setTimeout : requestAnimationFrame)(tick, state.tabHidden ? 300 : undefined);
   }
   tick();
   return {update};
@@ -1847,7 +1898,7 @@ const OrbInteraction = (() => {
   function tick() {
     const field = document.getElementById('bubble-field');
     if (!field || state.currentView !== 'timeline') {
-      animId = requestAnimationFrame(tick); return;
+      animId = setTimeout(() => requestAnimationFrame(tick), 250); return;
     }
     const fw = field.offsetWidth, fh = field.offsetHeight;
     const rect = field.getBoundingClientRect();
@@ -1877,7 +1928,7 @@ const OrbInteraction = (() => {
   }
 
   function clear() { orbs = []; if(animId) cancelAnimationFrame(animId); }
-  function start() { tick(); }
+  function start() { if (!prefersReducedMotion()) tick(); }
 
   start();
   return {register, clear};
@@ -1894,12 +1945,51 @@ const EntryForm = (() => {
   const voidToggle      = document.getElementById('void-toggle');
   const formWrap        = document.getElementById('entry-form-wrap');
   const confirmEl       = document.getElementById('echo-confirm');
+  const submitBtn       = document.getElementById('submit-btn');
+  const moodButtons     = Array.from(document.querySelectorAll('.mood-btn'));
 
-  document.querySelectorAll('.mood-btn').forEach(btn => {
+  function updateSubmitState() {
+    const ready = Boolean(selectedMood);
+    submitBtn.disabled = !ready;
+    submitBtn.setAttribute('aria-disabled', String(!ready));
+    submitBtn.classList.toggle('is-ready', ready);
+    submitBtn.textContent = ready ? 'Crystallize this Echo' : 'Choose a feeling to continue';
+  }
+
+  function setupMoodProgressiveReveal() {
+    const grid = document.querySelector('.mood-grid');
+    if (!grid || moodButtons.length <= 8) return;
+    const moreBtn = document.createElement('button');
+    moreBtn.type = 'button';
+    moreBtn.className = 'btn-ghost mood-more-btn';
+    moreBtn.setAttribute('aria-expanded', 'false');
+    moreBtn.textContent = `Show ${moodButtons.length - 8} more feelings`;
+    moodButtons.forEach((button, index) => {
+      button.setAttribute('aria-pressed', 'false');
+      if (index >= 8) {
+        button.classList.add('mood-extra');
+        button.hidden = true;
+      }
+    });
+    grid.insertAdjacentElement('afterend', moreBtn);
+    moreBtn.addEventListener('click', () => {
+      const expanded = moreBtn.getAttribute('aria-expanded') === 'true';
+      moodButtons.slice(8).forEach(button => { button.hidden = expanded; });
+      moreBtn.setAttribute('aria-expanded', String(!expanded));
+      moreBtn.textContent = expanded ? `Show ${moodButtons.length - 8} more feelings` : 'Show fewer feelings';
+    });
+  }
+
+  setupMoodProgressiveReveal();
+  updateSubmitState();
+
+  moodButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('selected'));
+      moodButtons.forEach(b => { b.classList.remove('selected'); b.setAttribute('aria-pressed', 'false'); });
       btn.classList.add('selected');
+      btn.setAttribute('aria-pressed', 'true');
       selectedMood = btn.dataset.mood;
+      updateSubmitState();
       CursorAura.update(selectedMood);
       const rect = btn.getBoundingClientRect();
       spawnResidue(rect.left+rect.width/2, rect.top+rect.height/2, MOOD_COLORS[selectedMood]);
@@ -1927,7 +2017,7 @@ const EntryForm = (() => {
   voidToggle.addEventListener('click', toggleVoid);
   voidToggle.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleVoid();}});
 
-  document.getElementById('submit-btn').addEventListener('click', submit);
+  submitBtn.addEventListener('click', submit);
 
   function submit() {
     if (!selectedMood) {
@@ -1988,8 +2078,9 @@ const EntryForm = (() => {
   }
 
   function reset() {
-    document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('selected'));
+    moodButtons.forEach(b => { b.classList.remove('selected'); b.setAttribute('aria-pressed', 'false'); });
     selectedMood = null; voidMode = false;
+    updateSubmitState();
     intensitySlider.value = '5'; intensityVal.textContent = '5';
     silenceSlider.value   = '3'; silenceVal.textContent   = '3';
     thoughtInput.value = ''; thoughtInput.disabled = false; thoughtInput.style.opacity = '1';
@@ -4178,7 +4269,8 @@ Insight: ${d.insight}`;
     function frame() {
       if (!document.getElementById('conflict-canvas')) return;
       ctx.clearRect(0,0,w,h);
-      phase += 0.012;
+      if (prefersReducedMotion()) { ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
+    phase += 0.012;
 
       entities.forEach(en => {
         en.vx *= 0.98; en.vy *= 0.98;
@@ -4266,7 +4358,9 @@ document.getElementById('nav-logo-btn').addEventListener('click', e => { e.preve
 document.getElementById('home-create-btn').addEventListener('click', () => Nav.show('entry'));
 document.getElementById('home-enter-btn').addEventListener('click',  () => Nav.show('timeline'));
 document.getElementById('timeline-create-btn').addEventListener('click', () => Nav.show('entry'));
+document.getElementById('wrapped-create-btn')?.addEventListener('click', () => Nav.show('entry'));
 document.getElementById('view-uni-btn').addEventListener('click', () => Nav.show('timeline'));
+document.getElementById('chip-onboarding-btn')?.addEventListener('click', () => { localStorage.removeItem(OB_KEY); Onboarding.start(); });
 document.getElementById('detail-close-btn').addEventListener('click', () =>
   document.getElementById('node-detail').classList.remove('open'));
 document.getElementById('node-detail').addEventListener('click', e => {
@@ -4277,8 +4371,9 @@ document.getElementById('period-month').addEventListener('click', function(){ se
 document.getElementById('period-all').addEventListener('click',   function(){ setPeriod('all',this);   });
 function setPeriod(p, btn) {
   state.wrappedPeriod = p;
-  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.period-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
   btn.classList.add('active');
+  btn.setAttribute('aria-pressed', 'true');
   Wrapped.render();
 }
 document.getElementById('export-btn').addEventListener('click', () => Storage.exportVault(state.echoes));
