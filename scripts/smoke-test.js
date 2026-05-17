@@ -180,8 +180,8 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 
 // Phase 1 game/community foundation checks
 const sw = fs.readFileSync('sw.js','utf8');
-if (!script.includes("phase-1-polish")) failures.push('APP_VERSION not updated to phase-1-polish');
-if (!script.includes('echovault-v13-phase-1-polish') && !sw.includes('echovault-v13-phase-1-polish')) failures.push('Phase 1 cache marker missing');
+if (!script.includes("echo-replay-drift")) failures.push('APP_VERSION not updated to echo-replay-drift');
+if (!script.includes('echovault-v14-replay-drift') && !sw.includes('echovault-v14-replay-drift')) failures.push('Replay Drift cache marker missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');
 ['EchoAvatar','echovault_avatar_v1','MaterialEngine','VaultInventory','echovault_inventory_v1','GentleQuests','echovault_quests_v1','Society Gate'].forEach((marker) => {
   if (!script.includes(marker) && !index.includes(marker)) failures.push(`Missing Phase 1 marker: ${marker}`);
@@ -191,6 +191,14 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 });
 if (/\b(leaderboard)\b/i.test(script)) failures.push('Forbidden social/community implementation wording detected');
 if (script.toLowerCase().includes('chatbot')) failures.push('Chatbot added unexpectedly');
+if (!index.includes('replay-drift-btn') || !index.includes('Drift Through Memory')) failures.push('Replay Drift CTA missing');
+if (!index.includes('replay-drift-stage') || !index.includes('aria-modal="true"')) failures.push('Replay Drift accessible dialog shell missing');
+['const ReplayDrift = (() => {','buildMemoryMap','buildSeasons','document.visibilityState','prefersReducedMotion()','AudioContext','renderer.dispose()'].forEach((marker) => {
+  if (!script.includes(marker)) failures.push(`Replay Drift implementation missing marker: ${marker}`);
+});
+['.replay-drift-entry','.replay-drift-stage.reduced','@media(prefers-reduced-motion:reduce)'].forEach((marker) => {
+  if (!style.includes(marker)) failures.push(`Replay Drift CSS missing marker: ${marker}`);
+});
 if (!script.includes('Profile Synced')) failures.push('Vault sync wording does not use Profile Synced');
 if (script.includes('Vault Synced')) failures.push('Vault Synced wording still present despite placeholder echo sync');
 

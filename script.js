@@ -1,8 +1,8 @@
 (function EchoVault() {
 'use strict';
 
-const APP_VERSION = 'phase-1-polish';
-const SW_CACHE_VERSION = 'echovault-v13-phase-1-polish';
+const APP_VERSION = 'echo-replay-drift';
+const SW_CACHE_VERSION = 'echovault-v14-replay-drift';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
@@ -4337,6 +4337,358 @@ Insight: ${d.insight}`;
   return {open, hasBuilder};
 })();
 
+
+/* ── ECHO REPLAY DRIFT ── */
+const ReplayDrift = (() => {
+  const stage = document.getElementById('replay-drift-stage');
+  const canvas = document.getElementById('replay-drift-canvas');
+  const staticLayer = document.getElementById('replay-drift-static');
+  const seasonEl = document.getElementById('replay-drift-season');
+  const narrationEl = document.getElementById('replay-drift-narration');
+  const fragmentEl = document.getElementById('replay-drift-fragment');
+  const exitBtn = document.getElementById('replay-drift-exit');
+  const skipBtn = document.getElementById('replay-drift-skip');
+  const audioBtn = document.getElementById('replay-drift-audio');
+  const clock = { start:0, last:0, duration:52000, fps:45, paused:false };
+  const seasonDefs = {
+    quietWinter:{ label:'Quiet Winter', color:'#BFD7FF', fog:0.055, line:0.18, text:'You were quieter here.' },
+    neonCollapse:{ label:'Neon Collapse', color:'#C084FC', fog:0.042, line:0.28, text:'Some echoes flickered before they softened.' },
+    solarDrift:{ label:'Solar Drift', color:'#FFD37A', fog:0.032, line:0.24, text:'Warmth kept finding a way back.' },
+    voidSeason:{ label:'Void Season', color:'#8796C8', fog:0.071, line:0.12, text:'Some echoes refused to disappear.' },
+    lunarArchive:{ label:'Lunar Archive', color:'#C8B6FF', fog:0.048, line:0.2, text:'You returned to this feeling often.' }
+  };
+  let renderer = null;
+  let scene = null;
+  let camera = null;
+  let raf = null;
+  let points = null;
+  let lineMesh = null;
+  let memoryGroup = null;
+  let memories = [];
+  let seasons = [];
+  let narrationMarks = [];
+  let activeSeason = '';
+  let previousFocus = null;
+  let audio = null;
+  let resizeHandler = null;
+  let visibilityHandler = null;
+  let keyHandler = null;
+
+  function chronologicalEchoes() {
+    return [...state.echoes]
+      .filter((echo) => echo && echo.date)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+  }
+
+  function seeded(value) {
+    const str = String(value || 'echo');
+    let hash = 2166136261;
+    for (let i = 0; i < str.length; i++) hash = Math.imul(hash ^ str.charCodeAt(i), 16777619);
+    return (hash >>> 0) / 4294967295;
+  }
+
+  function buildMemoryMap(echoes) {
+    const maxEchoes = isMobileViewport() ? 32 : 54;
+    const step = Math.max(1, Math.ceil(echoes.length / maxEchoes));
+    const sampled = echoes.filter((_, index) => index % step === 0 || index === echoes.length - 1);
+    const first = new Date(sampled[0]?.date || Date.now()).getTime();
+    const last = new Date(sampled[sampled.length - 1]?.date || Date.now()).getTime();
+    const span = Math.max(1, last - first);
+    return sampled.map((echo, index) => {
+      const family = moodFamily(echo.mood);
+      const date = new Date(echo.date);
+      const age = (date.getTime() - first) / span;
+      const monthCurve = ((date.getMonth() / 11) - 0.5) * 20;
+      const seed = seeded(echo.id || echo.date || index);
+      const drift = (seed - 0.5) * 16;
+      const silence = Number(echo.silence || 4);
+      const intensity = Number(echo.intensity || 5);
+      return {
+        echo, index, family, date,
+        x: monthCurve + drift,
+        y: (5.5 - intensity) * 2.1 + (seeded(echo.thought || echo.mood) - 0.5) * 5,
+        z: -92 + age * 142,
+        size: 0.34 + Math.min(1.15, intensity / 10) * 0.46 + (echo.void ? 0.16 : 0),
+        color: MOOD_COLORS[family] || '#c9a84c',
+        silence,
+        opacity: 0.38 + Math.max(0, 10 - silence) * 0.045
+      };
+    });
+  }
+
+  function classifySeason(group) {
+    const counts = {};
+    let silence = 0;
+    let intensity = 0;
+    group.forEach((memory) => {
+      counts[memory.family] = (counts[memory.family] || 0) + 1;
+      silence += memory.silence;
+      intensity += Number(memory.echo.intensity || 5);
+    });
+    const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'reflective';
+    const avgSilence = silence / Math.max(1, group.length);
+    const avgIntensity = intensity / Math.max(1, group.length);
+    if (dominant === 'empty' || avgSilence >= 7.2) return 'voidSeason';
+    if (dominant === 'chaos' || (dominant === 'anxious' && avgIntensity >= 6.2)) return 'neonCollapse';
+    if (dominant === 'joyful' || dominant === 'calm') return 'solarDrift';
+    if (avgSilence >= 5.8) return 'quietWinter';
+    return 'lunarArchive';
+  }
+
+  function buildSeasons(memoryMap) {
+    const groups = [];
+    const chunkSize = Math.max(3, Math.ceil(memoryMap.length / 5));
+    for (let i = 0; i < memoryMap.length; i += chunkSize) groups.push(memoryMap.slice(i, i + chunkSize));
+    return groups.map((group, groupIndex) => {
+      const key = classifySeason(group);
+      const start = group[0]?.z || -92;
+      const end = group[group.length - 1]?.z || start + 10;
+      return { key, ...seasonDefs[key], start, end, groupIndex };
+    });
+  }
+
+  function chooseNarration(memoryMap, seasonMap) {
+    const oldestWithWords = memoryMap.find((memory) => memory.echo.thought && !memory.echo.void);
+    const repeated = Object.entries(memoryMap.reduce((acc, memory) => {
+      acc[memory.family] = (acc[memory.family] || 0) + 1;
+      return acc;
+    }, {})).sort((a, b) => b[1] - a[1])[0]?.[0];
+    return [
+      { t:0.08, text:'The oldest echoes are farther out.' },
+      { t:0.34, text:seasonMap[1]?.text || 'This season moved slowly.' },
+      { t:0.62, text:oldestWithWords ? 'A forgotten fragment is returning.' : 'Even wordless echoes left gravity.', fragment:oldestWithWords },
+      { t:0.82, text:repeated ? `You returned to ${repeated} more than once.` : 'Your echoes made a quiet constellation.' }
+    ].map((mark) => ({ ...mark, shown:false }));
+  }
+
+  function setAtmosphere(season) {
+    if (!season || activeSeason === season.label) return;
+    activeSeason = season.label;
+    seasonEl.textContent = season.label;
+    stage.style.setProperty('--drift-glow', `${season.color}33`);
+  }
+
+  function initStaticReduced() {
+    staticLayer.innerHTML = memories.map((memory) => {
+      const left = 14 + ((memory.z + 92) / 142) * 72;
+      const top = 50 + memory.y * 1.9;
+      return `<span class="replay-drift-memory" style="left:${left.toFixed(2)}%;top:${Math.max(18, Math.min(78, top)).toFixed(2)}%;--memory-color:${memory.color}"></span>`;
+    }).join('');
+    const firstSeason = seasons[0] || seasonDefs.lunarArchive;
+    setAtmosphere(firstSeason);
+    narrationEl.textContent = memories.length > 1 ? 'Your echoes rest in chronological orbit.' : 'One echo can still hold a sky.';
+    const fragment = memories.find((memory) => memory.echo.thought && !memory.echo.void);
+    fragmentEl.textContent = fragment ? `“${String(fragment.echo.thought).slice(0, 96)}${String(fragment.echo.thought).length > 96 ? '…' : ''}”` : '';
+  }
+
+  function initThree() {
+    const THREE = window.THREE;
+    renderer = new THREE.WebGLRenderer({ canvas, antialias:false, alpha:true, powerPreference:'low-power' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileViewport() ? 1.35 : 1.65));
+    scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x050508, 0.045);
+    camera = new THREE.PerspectiveCamera(54, window.innerWidth / Math.max(1, window.innerHeight), 0.1, 260);
+    camera.position.set(0, 0, 68);
+    memoryGroup = new THREE.Group();
+    scene.add(memoryGroup);
+
+    const starCount = Math.min(isMobileViewport() ? 90 : 150, Math.max(44, Math.round(window.innerWidth * window.innerHeight / (isMobileViewport() ? 15000 : 11000))));
+    const starPositions = new Float32Array(starCount * 3);
+    const starColors = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+      const seed = seeded(`star-${i}-${memories.length}`);
+      starPositions[i * 3] = (seeded(`sx-${i}`) - 0.5) * 76;
+      starPositions[i * 3 + 1] = (seeded(`sy-${i}`) - 0.5) * 48;
+      starPositions[i * 3 + 2] = -106 + seeded(`sz-${i}`) * 176;
+      const color = new THREE.Color(seed > 0.72 ? '#D8A85A' : '#8796C8');
+      starColors[i * 3] = color.r; starColors[i * 3 + 1] = color.g; starColors[i * 3 + 2] = color.b;
+    }
+    const starGeometry = new THREE.BufferGeometry();
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+    points = new THREE.Points(starGeometry, new THREE.PointsMaterial({ size:isMobileViewport() ? 0.085 : 0.105, vertexColors:true, transparent:true, opacity:0.52, depthWrite:false }));
+    scene.add(points);
+
+    memories.forEach((memory) => {
+      const material = new THREE.MeshBasicMaterial({ color:new THREE.Color(memory.color), transparent:true, opacity:memory.opacity });
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(memory.size, 12, 8), material);
+      mesh.position.set(memory.x, memory.y, memory.z);
+      mesh.userData = memory;
+      memoryGroup.add(mesh);
+    });
+
+    const linePositions = [];
+    memories.forEach((memory, index) => {
+      const next = memories[index + 1];
+      if (next) linePositions.push(memory.x, memory.y, memory.z, next.x, next.y, next.z);
+      const sibling = memories.slice(index + 2, index + 8).find((candidate) => candidate.family === memory.family);
+      if (sibling && seeded(`${memory.echo.id || index}-link`) > 0.38) linePositions.push(memory.x, memory.y, memory.z, sibling.x, sibling.y, sibling.z);
+    });
+    const lineGeometry = new THREE.BufferGeometry();
+    lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+    lineMesh = new THREE.LineSegments(lineGeometry, new THREE.LineBasicMaterial({ color:0xc9a84c, transparent:true, opacity:0.14 }));
+    scene.add(lineMesh);
+
+    resizeHandler = () => {
+      if (!renderer || !camera) return;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileViewport() ? 1.35 : 1.65));
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+      camera.aspect = window.innerWidth / Math.max(1, window.innerHeight);
+      camera.updateProjectionMatrix();
+      clock.fps = isMobileViewport() ? 30 : 45;
+    };
+    resizeHandler();
+    window.addEventListener('resize', resizeHandler);
+  }
+
+  function renderFrame(now) {
+    if (!stage.classList.contains('open')) return;
+    raf = requestAnimationFrame(renderFrame);
+    if (clock.paused) return;
+    const minFrame = 1000 / clock.fps;
+    if (now - clock.last < minFrame) return;
+    clock.last = now;
+    const elapsed = now - clock.start;
+    const progress = Math.min(1, elapsed / clock.duration);
+    const ease = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+    const z = -84 + ease * 130;
+    const currentSeason = seasons.find((season) => z >= season.start - 12 && z <= season.end + 16) || seasons[Math.min(seasons.length - 1, Math.floor(progress * seasons.length))] || seasonDefs.lunarArchive;
+    setAtmosphere(currentSeason);
+    scene.fog.density += ((currentSeason.fog || 0.045) - scene.fog.density) * 0.025;
+    lineMesh.material.opacity += ((currentSeason.line || 0.18) - lineMesh.material.opacity) * 0.025;
+    narrationMarks.forEach((mark) => {
+      if (!mark.shown && progress >= mark.t) {
+        mark.shown = true;
+        narrationEl.textContent = mark.text;
+        if (mark.fragment) {
+          const text = String(mark.fragment.echo.thought || '').trim();
+          fragmentEl.textContent = text ? `“${text.slice(0, 118)}${text.length > 118 ? '…' : ''}”` : '';
+        }
+      }
+    });
+    camera.position.z += (z - camera.position.z) * 0.018;
+    camera.position.x = Math.sin(progress * Math.PI * 1.4) * 3.2;
+    camera.position.y = Math.cos(progress * Math.PI * 1.1) * 1.8;
+    camera.lookAt(Math.sin(progress * Math.PI) * 2, 0, z - 34);
+    memoryGroup.children.forEach((mesh, index) => {
+      const distance = Math.abs(mesh.position.z - camera.position.z);
+      const targetOpacity = distance < 34 ? mesh.userData.opacity : Math.max(0.12, mesh.userData.opacity * 0.34);
+      mesh.material.opacity += (targetOpacity - mesh.material.opacity) * 0.035;
+      const pulse = 1 + Math.sin(now * 0.0012 + index) * 0.035;
+      mesh.scale.setScalar(pulse);
+    });
+    points.rotation.y += 0.00014;
+    renderer.render(scene, camera);
+    if (progress >= 1) {
+      narrationEl.textContent = 'The universe remembers in layers.';
+      fragmentEl.textContent = 'Replay complete. You can exit whenever you are ready.';
+    }
+  }
+
+  function startAudio() {
+    if (audio?.enabled) return stopAudio();
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const context = new AudioContext();
+    const gain = context.createGain();
+    const low = context.createOscillator();
+    const high = context.createOscillator();
+    low.type = 'sine'; high.type = 'triangle';
+    low.frequency.value = 58; high.frequency.value = 146;
+    gain.gain.value = 0.0001;
+    low.connect(gain); high.connect(gain); gain.connect(context.destination);
+    low.start(); high.start();
+    gain.gain.setTargetAtTime(0.028, context.currentTime, 1.8);
+    audio = { context, gain, low, high, enabled:true };
+    audioBtn.textContent = 'Ambience On';
+    audioBtn.setAttribute('aria-pressed', 'true');
+  }
+
+  function stopAudio() {
+    if (!audio) return;
+    const { context, gain, low, high } = audio;
+    gain.gain.setTargetAtTime(0.0001, context.currentTime, 0.4);
+    setTimeout(() => {
+      low.stop(); high.stop(); context.close();
+    }, 550);
+    audio = null;
+    audioBtn.textContent = 'Ambience Off';
+    audioBtn.setAttribute('aria-pressed', 'false');
+  }
+
+  function disposeThree() {
+    cancelAnimationFrame(raf);
+    raf = null;
+    window.removeEventListener('resize', resizeHandler);
+    resizeHandler = null;
+    if (points) { points.geometry.dispose(); points.material.dispose(); }
+    if (lineMesh) { lineMesh.geometry.dispose(); lineMesh.material.dispose(); }
+    if (memoryGroup) memoryGroup.children.forEach((mesh) => { mesh.geometry.dispose(); mesh.material.dispose(); });
+    if (renderer) renderer.dispose();
+    points = null; lineMesh = null; memoryGroup = null; renderer = null; scene = null; camera = null;
+  }
+
+  function close() {
+    stopAudio();
+    disposeThree();
+    document.removeEventListener('visibilitychange', visibilityHandler);
+    document.removeEventListener('keydown', keyHandler);
+    visibilityHandler = null; keyHandler = null;
+    stage.classList.remove('open', 'reduced');
+    stage.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    staticLayer.innerHTML = '';
+    fragmentEl.textContent = '';
+    if (previousFocus?.focus) previousFocus.focus({ preventScroll:true });
+  }
+
+  function open() {
+    const echoes = chronologicalEchoes();
+    if (!echoes.length) { Toast.show('Create an Echo before entering Replay Drift.'); return; }
+    previousFocus = document.activeElement;
+    memories = buildMemoryMap(echoes);
+    seasons = buildSeasons(memories);
+    narrationMarks = chooseNarration(memories, seasons);
+    activeSeason = '';
+    clock.start = performance.now(); clock.last = 0; clock.fps = isMobileViewport() ? 30 : 45; clock.paused = false;
+    stage.classList.add('open');
+    stage.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    exitBtn.focus({ preventScroll:true });
+    narrationEl.textContent = 'Your echoes are gathering in the distance.';
+    fragmentEl.textContent = '';
+    if (prefersReducedMotion() || !window.THREE) {
+      stage.classList.add('reduced');
+      initStaticReduced();
+    } else {
+      initThree();
+      raf = requestAnimationFrame(renderFrame);
+    }
+    visibilityHandler = () => { clock.paused = document.visibilityState === 'hidden'; };
+    keyHandler = (event) => {
+      if (event.key === 'Escape') close();
+      if (event.key === 'Tab') {
+        const focusables = [audioBtn, exitBtn, skipBtn].filter(Boolean);
+        const current = focusables.indexOf(document.activeElement);
+        if (event.shiftKey && current === 0) { event.preventDefault(); focusables[focusables.length - 1].focus(); }
+        else if (!event.shiftKey && current === focusables.length - 1) { event.preventDefault(); focusables[0].focus(); }
+      }
+    };
+    document.addEventListener('visibilitychange', visibilityHandler);
+    document.addEventListener('keydown', keyHandler);
+  }
+
+  function bind() {
+    document.getElementById('replay-drift-btn')?.addEventListener('click', open);
+    exitBtn?.addEventListener('click', close);
+    skipBtn?.addEventListener('click', close);
+    audioBtn?.addEventListener('click', startAudio);
+    stage?.addEventListener('click', (event) => { if (event.target === stage) close(); });
+  }
+
+  return { bind, open, close, buildMemoryMap, buildSeasons };
+})();
+
 /* ── HELPER FUNCTIONS ── */
 function getArchetype(mc) {
   const max = Object.entries(mc).sort((a,b)=>b[1]-a[1])[0]?.[0];
@@ -4659,6 +5011,7 @@ async function init() {
   PWAInstall.init();
   Login.init();
   AlamAI.bindShortcut();
+  ReplayDrift.bind();
   await ServiceWorkerManager.register();
   DebugPanel.ensure();
 }

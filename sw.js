@@ -1,5 +1,5 @@
-const APP_VERSION = 'phase-1-polish';
-const CACHE = 'echovault-v13-phase-1-polish';
+const APP_VERSION = 'echo-replay-drift';
+const CACHE = 'echovault-v14-replay-drift';
 
 const toScopeUrl = (path) => new URL(path, self.registration.scope).toString();
 const PRECACHE = ['./', 'index.html', 'styles.css', 'script.js', 'manifest.json', 'icons/icon.svg', 'wrapped-cinematic-module.js'];

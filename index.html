@@ -342,6 +342,14 @@ window.ECHOVAULT_CONFIG = {
       <div class="empty-sub">Create your first Echo to unlock Wrapped.</div>
       <button class="btn-primary empty-cta" id="wrapped-create-btn" type="button">Create your first Echo</button>
     </div>
+    <section class="replay-drift-entry" aria-label="Echo Replay Drift entry point">
+      <div>
+        <div class="replay-drift-kicker">Signature memory travel</div>
+        <h3>Echo Replay Drift</h3>
+        <p>Drift through your old echoes as constellations, seasons, and forgotten fragments.</p>
+      </div>
+      <button class="replay-drift-cta" id="replay-drift-btn" type="button">Drift Through Memory</button>
+    </section>
     <div id="wrapped-content"></div>
   </div>
 
@@ -609,6 +617,28 @@ window.ECHOVAULT_CONFIG = {
     <div class="settings-save-status" id="settings-save-status"></div>
 
   </div>
+</div>
+<!-- ECHO REPLAY DRIFT -->
+<div id="replay-drift-stage" class="replay-drift-stage" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="replay-drift-title">
+  <canvas id="replay-drift-canvas" aria-hidden="true"></canvas>
+  <div class="replay-drift-static" id="replay-drift-static" aria-hidden="true"></div>
+  <div class="replay-drift-vignette" aria-hidden="true"></div>
+  <div class="replay-drift-topbar">
+    <div>
+      <div class="replay-drift-eyebrow">Echo Replay Drift</div>
+      <h2 id="replay-drift-title">Memory in orbit</h2>
+    </div>
+    <div class="replay-drift-controls">
+      <button id="replay-drift-audio" class="replay-drift-control" type="button" aria-pressed="false">Ambience Off</button>
+      <button id="replay-drift-exit" class="replay-drift-control" type="button">Exit</button>
+    </div>
+  </div>
+  <div class="replay-drift-caption" aria-live="polite">
+    <div id="replay-drift-season" class="replay-drift-season">Quiet Archive</div>
+    <p id="replay-drift-narration">Your echoes are gathering in the distance.</p>
+    <div id="replay-drift-fragment" class="replay-drift-fragment"></div>
+  </div>
+  <button id="replay-drift-skip" class="replay-drift-skip" type="button">Skip replay</button>
 </div>
 
 <script src="script.js"></script>
