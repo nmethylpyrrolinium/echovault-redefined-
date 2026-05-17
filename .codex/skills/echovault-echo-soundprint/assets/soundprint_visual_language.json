@@ -1,0 +1,17 @@
+{
+  "visualLanguage": {
+    "orb": "The user's emotional memory object; color, opacity, and motion respond to mood and intensity.",
+    "echo": "A memory trace represented through soundwaves, rings, captions, or particles.",
+    "soundprint": "A repeatable emotional audio identity built from recurring moods, tracks, and textures."
+  },
+  "moodPalettes": {
+    "grief": { "colors": ["#243B6B", "#6D5A9C"], "texture": "rain grain", "motion": "slow orbit" },
+    "ache": { "colors": ["#B76E8C", "#314A78"], "texture": "glass reflection", "motion": "soft pulse" },
+    "joy": { "colors": ["#FFD166", "#FF8C42"], "texture": "bloom particles", "motion": "upward burst" },
+    "awe": { "colors": ["#D9E6F2", "#E8C46A"], "texture": "cosmic dust", "motion": "expanding rings" },
+    "anger": { "colors": ["#E63946", "#FF7A1A"], "texture": "sharp contrast", "motion": "angular flare" },
+    "calm": { "colors": ["#9DE2E8", "#D9FFF8"], "texture": "still water", "motion": "slow ripple" },
+    "numb": { "colors": ["#7D8A99", "#314052"], "texture": "fog", "motion": "barely visible drift" },
+    "confidence": { "colors": ["#2ECC71", "#D4AF37"], "texture": "spotlight", "motion": "clean forward sweep" }
+  }
+}
