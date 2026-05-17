@@ -1,0 +1,23 @@
+{
+  "summaryBlock": {
+    "title": "Emotional Summary",
+    "fields": [
+      "dominantEmotion",
+      "secondaryEmotion",
+      "valenceLabel",
+      "energyLabel",
+      "confidence",
+      "sourceEchoCount",
+      "silenceLevel"
+    ],
+    "copyTemplate": "Your echoes leaned {{valenceLabel}} and {{energyLabel}}, led by {{dominantEmotion}}{{secondaryEmotionClause}}."
+  },
+  "identityDriftBlock": {
+    "title": "Identity Drift",
+    "copyTemplate": "This period showed {{direction}} {{emotion}} than before. Treat this as a seasonal drift, not a fixed identity."
+  },
+  "silenceBlock": {
+    "title": "Quiet Spaces",
+    "copyTemplate": "There were quieter spaces in the record. EchoVault should lower confidence and avoid over-reading what was not written."
+  }
+}

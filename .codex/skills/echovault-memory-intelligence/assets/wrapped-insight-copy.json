@@ -1,0 +1,22 @@
+{
+  "headlines": [
+    "Your echoes kept returning to {{dominantEmotion}}.",
+    "This season carried {{emotionalWeather}}.",
+    "A recurring thread gathered around {{motif}}."
+  ],
+  "careNotes": [
+    "This is a mirror, not a verdict.",
+    "If this does not fit, rename it or hide it.",
+    "Some seasons are quiet; silence does not need to prove anything."
+  ],
+  "clusterLines": [
+    "{{count}} echoes gathered around {{theme}}.",
+    "{{theme}} appeared more than once, usually with {{emotion}} nearby.",
+    "A small constellation formed around {{theme}}."
+  ],
+  "identityDriftLines": [
+    "Compared with earlier echoes, {{currentPeriod}} showed more {{emotion}}.",
+    "Your attention seemed to drift from {{fromTheme}} toward {{toTheme}}.",
+    "The tone moved {{direction}}, but not in a straight line."
+  ]
+}

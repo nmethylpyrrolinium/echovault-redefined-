@@ -1,0 +1,4 @@
+interface:
+  display_name: "EchoVault Memory Intelligence"
+  short_description: "Emotional memory logic for EchoVault"
+  default_prompt: "Use $echovault-memory-intelligence to make EchoVault reflections, Wrapped insights, and memory patterns feel emotionally intelligent."
