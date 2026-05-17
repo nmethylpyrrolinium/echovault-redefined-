@@ -1,0 +1,5 @@
+{
+  "premiumFadeRise": { "durationMs": 480, "easing": "cubic-bezier(0.22, 1, 0.36, 1)", "from": { "opacity": 0, "transform": "translate3d(0, 14px, 0) scale(0.985)" }, "to": { "opacity": 1, "transform": "translate3d(0, 0, 0) scale(1)" } },
+  "wrappedCinematicReveal": { "durationMs": 1100, "easing": "cubic-bezier(0.16, 1, 0.3, 1)", "stages": ["atmosphere", "orb", "constellation", "summary"] },
+  "reducedMotionCrossfade": { "durationMs": 180, "easing": "linear", "from": { "opacity": 0 }, "to": { "opacity": 1 } }
+}

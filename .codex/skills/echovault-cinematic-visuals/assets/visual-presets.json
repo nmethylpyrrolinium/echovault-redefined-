@@ -1,0 +1,14 @@
+{
+  "premiumCalm": {
+    "background": "radial-gradient(circle at 50% 20%, rgba(157,183,255,0.18), transparent 42%), linear-gradient(180deg, #080A14 0%, #111427 100%)",
+    "glow": "rgba(157,183,255,0.32)",
+    "particleColor": "190, 210, 255",
+    "constellationColor": "157, 183, 255"
+  },
+  "hopefulAurora": {
+    "background": "radial-gradient(circle at 35% 18%, rgba(142,240,177,0.20), transparent 38%), radial-gradient(circle at 72% 28%, rgba(255,224,138,0.12), transparent 34%), #070D12",
+    "glow": "rgba(142,240,177,0.28)",
+    "particleColor": "185, 255, 214",
+    "constellationColor": "142, 240, 177"
+  }
+}

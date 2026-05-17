@@ -1,0 +1,5 @@
+{
+  "ambientMemoryField": { "density": 0.00008, "min": 24, "max": 120, "speed": 0.16, "size": [0.7, 2.4], "alpha": [0.06, 0.32] },
+  "wrappedReveal": { "density": 0.00013, "min": 48, "max": 180, "speed": 0.22, "size": [0.8, 2.8], "alpha": [0.08, 0.46] },
+  "reducedMotion": { "density": 0.000025, "min": 8, "max": 32, "speed": 0.02, "size": [0.9, 2.2], "alpha": [0.05, 0.18] }
+}
