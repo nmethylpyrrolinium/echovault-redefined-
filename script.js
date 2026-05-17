@@ -4386,6 +4386,18 @@ const UserChip = (() => {
   const chip = document.getElementById('user-chip');
   const menu = chip?.querySelector('.chip-menu');
   const settingsBtn = document.getElementById('chip-settings-btn');
+  function sanitizeAvatarUrl(value) {
+    if (!value || typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (/^data:image\/[a-zA-Z0-9.+-]+;base64,[a-zA-Z0-9+/=]+$/i.test(trimmed)) return trimmed;
+    try {
+      const parsed = new URL(trimmed, window.location.origin);
+      return (parsed.protocol === 'https:' || parsed.protocol === 'http:') ? parsed.href : '';
+    } catch {
+      return '';
+    }
+  }
   function refresh() {
     const profile = ProfileStore.read();
     const name = profile.display_name || Auth.user?.user_metadata?.display_name || localStorage.getItem(USER_KEY) || 'you';
@@ -4399,7 +4411,7 @@ const UserChip = (() => {
     const syncLabel = document.getElementById('chip-sync-label');
     if (syncLabel) syncLabel.textContent = UserAccess.isPremium() ? 'Special Access Active' : (Auth.user ? 'Profile Synced' : 'Local Vault');
     const avatarEl = document.getElementById('chip-avatar');
-    const avatarUrl = profile.avatar_url || profile.avatar_data_url;
+    const avatarUrl = sanitizeAvatarUrl(profile.avatar_url || profile.avatar_data_url);
     if (avatarUrl && avatarEl) {
       avatarEl.textContent = '';
       const img = document.createElement('img');
