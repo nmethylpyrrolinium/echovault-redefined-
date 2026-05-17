@@ -1,0 +1,25 @@
+{
+  "type": "echo_soundprint_playlist_card",
+  "title": "Midnight Ache, Turning Gold",
+  "subtitle": "A five-scene soundtrack for this echo",
+  "moodFamily": "ache",
+  "orb": {
+    "color": "rose-blue",
+    "texture": "glass reflections, soft grain, low neon"
+  },
+  "arc": [
+    { "scene": "Opening scene", "purpose": "Name the feeling without fixing it" },
+    { "scene": "Descent", "purpose": "Let the ache become specific" },
+    { "scene": "Turning point", "purpose": "Add motion and a small lift" },
+    { "scene": "Integration", "purpose": "Make the memory feel held" },
+    { "scene": "Credits", "purpose": "Close with resolution, not denial" }
+  ],
+  "tracks": [
+    {
+      "slot": 1,
+      "songOrCategory": "late-night R&B ache",
+      "reason": "Mirrors the echo's midnight loneliness without making it melodramatic."
+    }
+  ],
+  "actions": ["save to my soundprint", "more like this", "less intense"]
+}

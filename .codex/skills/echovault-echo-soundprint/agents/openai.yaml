@@ -1,0 +1,4 @@
+interface:
+  display_name: "EchoVault Echo Soundprint"
+  short_description: "Cinematic emotion-to-music engine guidance"
+  default_prompt: "Use $echovault-echo-soundprint to design emotionally intelligent EchoVault mood-to-music logic."
