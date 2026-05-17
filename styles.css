@@ -1517,6 +1517,41 @@ nav{background:linear-gradient(to bottom,rgba(5,5,8,.98),rgba(5,5,8,.82) 72%,rgb
 @media(max-width:420px){.nav-links button{font-size:8px;padding:7px 8px}.mood-grid{grid-template-columns:1fr}.period-btn{font-size:9px;padding-inline:8px}.auth-actions{display:grid;grid-template-columns:1fr}.name-enter-btn{width:100%;padding-inline:18px}.fun-card-meta span{width:100%}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}#cosmos-canvas,#ripple-canvas,#connection-canvas,#whip-canvas{display:none!important}#breath-layer{transition:opacity .2s!important;transform:none!important}.echo-bubble,.gravity-ring,.ghost-memory,.sil-particle,.residue,.sparkle,.dissolve-particle{animation:none!important}.fun-modal-card,.detail-card,.ob-card,.echo-confirm{animation:fadeUp .01ms linear forwards!important}}
 
+/* ── ECHO REPLAY DRIFT ── */
+.replay-drift-entry{
+  position:relative;display:flex;align-items:center;justify-content:space-between;gap:22px;
+  margin:0 0 22px;padding:24px;border:1px solid rgba(201,168,76,.22);border-radius:18px;
+  background:radial-gradient(circle at 12% 20%,rgba(201,168,76,.14),transparent 34%),linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.02));
+  box-shadow:0 24px 70px rgba(0,0,0,.22);overflow:hidden;
+}
+.replay-drift-entry::after{content:'';position:absolute;inset:auto -20% -45% 36%;height:120%;background:radial-gradient(circle,rgba(135,150,200,.13),transparent 62%);pointer-events:none}
+.replay-drift-kicker,.replay-drift-eyebrow{font-family:var(--font-mono);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);opacity:.82}
+.replay-drift-entry h3{font-family:var(--font-editorial);font-weight:400;font-size:26px;color:var(--text);margin:8px 0 6px}
+.replay-drift-entry p{font-size:14px;font-style:italic;color:var(--muted);line-height:1.65;max-width:430px;margin:0}
+.replay-drift-cta,.replay-drift-control,.replay-drift-skip{
+  border:1px solid rgba(201,168,76,.32);background:rgba(201,168,76,.08);color:var(--gold);
+  border-radius:999px;font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  padding:12px 16px;min-height:44px;transition:background .32s var(--ease),border-color .32s var(--ease),transform .32s var(--ease),color .32s var(--ease);
+}
+.replay-drift-cta{white-space:nowrap;background:linear-gradient(135deg,rgba(201,168,76,.24),rgba(135,150,200,.09));box-shadow:0 0 34px rgba(201,168,76,.12)}
+.replay-drift-cta:hover,.replay-drift-control:hover,.replay-drift-skip:hover{border-color:rgba(201,168,76,.58);background:rgba(201,168,76,.14);transform:translateY(-1px);color:#f3df99}
+.replay-drift-stage{position:fixed;inset:0;z-index:750;display:none;background:#020308;overflow:hidden;color:var(--text)}
+.replay-drift-stage.open{display:block;animation:replayDriftEnter .72s cubic-bezier(.16,1,.3,1) both}
+#replay-drift-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background:radial-gradient(ellipse at 50% 45%,rgba(24,26,45,.9),#020308 70%)}
+.replay-drift-static{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(circle at 30% 34%,var(--drift-glow,rgba(201,168,76,.22)),transparent 24%),radial-gradient(circle at 72% 58%,rgba(135,150,200,.14),transparent 30%)}
+.replay-drift-vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 36%,rgba(2,3,8,.48) 72%,rgba(0,0,0,.88) 100%),linear-gradient(to bottom,rgba(0,0,0,.46),transparent 28%,rgba(0,0,0,.62));z-index:2}
+.replay-drift-topbar{position:absolute;z-index:4;top:calc(22px + var(--safe-top));left:clamp(16px,4vw,42px);right:clamp(16px,4vw,42px);display:flex;align-items:flex-start;justify-content:space-between;gap:18px;pointer-events:none}
+.replay-drift-topbar h2{font-family:var(--font-display);font-size:clamp(28px,5vw,58px);font-weight:300;line-height:1.04;margin:8px 0 0;color:rgba(255,255,255,.88);text-shadow:0 0 34px rgba(201,168,76,.18)}
+.replay-drift-controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;pointer-events:auto}.replay-drift-control{background:rgba(5,5,8,.46);backdrop-filter:blur(14px);color:rgba(255,255,255,.78)}
+.replay-drift-caption{position:absolute;z-index:4;left:clamp(18px,5vw,72px);bottom:calc(52px + var(--safe-bottom));max-width:min(560px,calc(100vw - 36px));padding:22px 24px;border-left:1px solid rgba(201,168,76,.32);background:linear-gradient(90deg,rgba(5,5,8,.56),rgba(5,5,8,0));backdrop-filter:blur(8px)}
+.replay-drift-season{font-family:var(--font-mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}.replay-drift-caption p{font-family:var(--font-editorial);font-size:clamp(22px,4.2vw,40px);font-style:italic;line-height:1.22;color:rgba(255,255,255,.84);margin:0;text-shadow:0 0 30px rgba(0,0,0,.6)}
+.replay-drift-fragment{min-height:20px;margin-top:14px;font-size:13px;line-height:1.7;color:rgba(255,255,255,.56);font-style:italic;letter-spacing:.01em;transition:opacity .9s var(--ease)}
+.replay-drift-skip{position:absolute;z-index:4;right:clamp(16px,4vw,42px);bottom:calc(22px + var(--safe-bottom));background:rgba(5,5,8,.5);backdrop-filter:blur(14px);color:rgba(255,255,255,.68)}
+.replay-drift-memory{position:absolute;width:8px;height:8px;border-radius:50%;background:var(--memory-color,#c9a84c);box-shadow:0 0 22px var(--memory-color,#c9a84c);opacity:.74;transform:translate(-50%,-50%)}
+.replay-drift-stage.reduced #replay-drift-canvas{display:none}.replay-drift-stage.reduced .replay-drift-static{opacity:1}.replay-drift-stage.reduced .replay-drift-memory{opacity:.64}
+@keyframes replayDriftEnter{from{opacity:0;filter:blur(12px)}to{opacity:1;filter:blur(0)}}
+@media(max-width:768px){.replay-drift-entry{display:block;padding:22px 18px}.replay-drift-cta{width:100%;margin-top:18px}.replay-drift-topbar{display:block}.replay-drift-controls{justify-content:flex-start;margin-top:14px}.replay-drift-control{font-size:9px;padding:10px 12px}.replay-drift-caption{bottom:calc(86px + var(--safe-bottom));padding:18px}.replay-drift-skip{left:18px;right:auto}.replay-drift-caption p{font-size:24px}}
+@media(prefers-reduced-motion:reduce){.replay-drift-stage.open{animation:none}.replay-drift-cta,.replay-drift-control,.replay-drift-skip{transition:none}.replay-drift-cta:hover,.replay-drift-control:hover,.replay-drift-skip:hover{transform:none}}
 /* ── PHASE 2: emotional constellations, seasons, cinematic recap ── */
 .timeline-season-card{
   --season-color:var(--gold);
