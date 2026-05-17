@@ -3,6 +3,8 @@
 
 const APP_VERSION = 'echo-replay-drift';
 const SW_CACHE_VERSION = 'echovault-v14-replay-drift';
+const APP_VERSION = 'phase-2-emotional-universe';
+const SW_CACHE_VERSION = 'echovault-v14-phase-2-emotional-universe';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
@@ -27,6 +29,10 @@ const OB_KEY       = 'echoOnboarded';
 const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 function prefersReducedMotion() { return reduceMotionQuery.matches; }
 function isMobileViewport() { return window.innerWidth < 768; }
+const Phase2 = window.Phase2EmotionalIntelligence || null;
+function getEmotionalSeason(echoes = state.echoes) {
+  return Phase2?.analyzeSeason ? Phase2.analyzeSeason(echoes, moodFamily) : { title:'Quiet Winter', traits:['forming'], interpretation:'The universe is still gathering signal.', influence:'dim gold atmosphere', color:'#c9a84c', confidence:0 };
+}
 
 
 function escapeHTML(value) {
@@ -206,7 +212,8 @@ const PatternEngine = (() => {
     else if (volatilityScore > 65) oneLineInsight = 'You are not chaotic all the time. You spike, then disappear.';
     else if (averageSilence >= 7) oneLineInsight = 'You have been carrying more than you are saying.';
     else if (dominantMood === 'calm' && averageSilence >= 5) oneLineInsight = 'Your calm is returning, but your silence is still high.';
-    return { totalEchoes, dominantMood, moodCounts, moodPercentages, averageIntensity, averageSilence, voidCount, voidPercentage, mostRecentMood, previousMood, recentShift, volatilityScore, intensityTrend, silenceTrend, currentStreakMood, currentStreakCount, emotionalWeather, oneLineInsight };
+    const emotionalSeason = getEmotionalSeason(echoes);
+    return { totalEchoes, dominantMood, moodCounts, moodPercentages, averageIntensity, averageSilence, voidCount, voidPercentage, mostRecentMood, previousMood, recentShift, volatilityScore, intensityTrend, silenceTrend, currentStreakMood, currentStreakCount, emotionalWeather, emotionalSeason, oneLineInsight };
   }
   return { analyze };
 })();
@@ -1389,56 +1396,77 @@ const Ripple = (() => {
   return {spawn, resize};
 })();
 
-/* ── CONNECTION CANVAS — glowing lines between similar orbs ── */
+/* ── CONNECTION CANVAS — glowing lines between emotionally similar orbs ── */
 const ConnectionCanvas = (() => {
   const canvas = document.getElementById('connection-canvas');
   const ctx    = canvas.getContext('2d');
   let orbData  = [];
+  let links    = [];
   let phase    = 0;
-  let animActive = false;
+  let raf      = null;
+  let lastLinkCompute = 0;
 
-  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, isMobileViewport() ? 1.5 : 1.75);
+    canvas.width = Math.round(window.innerWidth * dpr);
+    canvas.height = Math.round(window.innerHeight * dpr);
+    canvas.style.width = `${window.innerWidth}px`;
+    canvas.style.height = `${window.innerHeight}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
 
-  function setOrbs(data) { orbData = data; }
+  function setOrbs(data, force = false) {
+    orbData = Array.isArray(data) ? data.slice(0, isMobileViewport() ? 36 : 72) : [];
+    const now = Date.now();
+    if (!force && now - lastLinkCompute < 520) return;
+    lastLinkCompute = now;
+    links = Phase2?.buildConstellationLinks
+      ? Phase2.buildConstellationLinks(orbData, { moodFamily, maxLinks:isMobileViewport() ? 18 : 42, maxDistance:isMobileViewport() ? 170 : 245 })
+      : [];
+  }
+
+  function stop() {
+    if (raf) cancelAnimationFrame(raf);
+    raf = null;
+  }
 
   function render() {
-    if (state.currentView !== 'timeline') { animActive = false; return; }
-    animActive = true;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (prefersReducedMotion()) { ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
-    phase += 0.012;
-
+    stop();
+    if (state.currentView !== 'timeline' || prefersReducedMotion() || state.tabHidden || !orbData.length) {
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      return;
+    }
     const field = document.getElementById('bubble-field');
     if (!field) return;
     const fieldRect = field.getBoundingClientRect();
+    phase += 0.012;
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    const liveLinks = links.length ? links : (Phase2?.buildConstellationLinks?.(orbData, { moodFamily, maxLinks:isMobileViewport() ? 12 : 28 }) || []);
 
-    for (let i=0; i<orbData.length; i++) {
-      for (let j=i+1; j<orbData.length; j++) {
-        const a = orbData[i], b = orbData[j];
-        if (a.mood !== b.mood) continue;
-        const ax = a.x + fieldRect.left, ay = a.y + fieldRect.top;
-        const bx = b.x + fieldRect.left, by = b.y + fieldRect.top;
-        const dx = ax-bx, dy = ay-by;
-        const dist = Math.sqrt(dx*dx+dy*dy);
-        const maxDist = 220;
-        if (dist > maxDist) continue;
-        const alpha = (1 - dist/maxDist) * .22 * (0.7 + 0.3*Math.sin(phase + i));
-        const color = MOOD_COLORS[a.mood];
-        const grad = ctx.createLinearGradient(ax,ay,bx,by);
-        grad.addColorStop(0, color + '00');
-        grad.addColorStop(.5, color + Math.floor(alpha*255).toString(16).padStart(2,'0'));
-        grad.addColorStop(1, color + '00');
-        ctx.beginPath();
-        ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 1.4; ctx.stroke();
-      }
-    }
-    requestAnimationFrame(() => { if(state.currentView==='timeline' && !state.tabHidden) render(); else animActive=false; });
+    liveLinks.forEach((link, index) => {
+      const a = link.a, b = link.b;
+      const ax = a.x + fieldRect.left, ay = a.y + fieldRect.top;
+      const bx = b.x + fieldRect.left, by = b.y + fieldRect.top;
+      const family = moodFamily(a.echo?.mood || a.mood);
+      const color = MOOD_COLORS[a.echo?.mood] || MOOD_COLORS[family] || '#c9a84c';
+      const pulse = 0.78 + Math.sin(phase + index * 0.7) * 0.22;
+      const alpha = Math.min(0.22, Math.max(0.035, link.strength * 0.25 * pulse));
+      const grad = ctx.createLinearGradient(ax, ay, bx, by);
+      grad.addColorStop(0, color + '00');
+      grad.addColorStop(.5, color + Math.floor(alpha * 255).toString(16).padStart(2, '0'));
+      grad.addColorStop(1, color + '00');
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = isMobileViewport() ? 0.85 : 1.15;
+      ctx.stroke();
+    });
+    raf = requestAnimationFrame(render);
   }
 
   resize();
-  return {setOrbs, render, resize};
+  return {setOrbs, render, resize, stop, getLinkCount:()=>links.length};
 })();
 
 /* ── BREATHING ── */
@@ -1805,12 +1833,23 @@ const OrbInteraction = (() => {
   let dragOffX = 0, dragOffY = 0;
   let animId = null;
 
-  function register(el, x, y, size, color, id) {
-    const orb = { el, x, y, vx:(Math.random()-.5)*.4, vy:(Math.random()-.5)*.4,
-      baseX:x, baseY:y, size, color, id, held:false, lastTap:0, tapCount:0,
-      scale:1, targetScale:1, pressed:false,
+  function register(el, x, y, size, color, id, echo = {}) {
+    const family = moodFamily(echo.mood);
+    const profile = {
+      calm:{speed:.0022, amp:.010, className:'orb-calm'},
+      anxious:{speed:.0060, amp:.020, className:'orb-anxious'},
+      reflective:{speed:.0032, amp:.014, className:'orb-reflective'},
+      joyful:{speed:.0048, amp:.018, className:'orb-joyful'},
+      empty:{speed:.0020, amp:.008, className:'orb-empty'},
+      chaos:{speed:.0042, amp:.016, className:'orb-chaos'}
+    }[family] || {speed:.003, amp:.012, className:'orb-reflective'};
+    el.classList.add(profile.className);
+    const orb = { el, x, y, vx:(Math.random()-.5)*.28, vy:(Math.random()-.5)*.28,
+      baseX:x, baseY:y, size, color, id, echo, held:false, lastTap:0, tapCount:0,
+      scale:1, targetScale:1, pressed:false, family, motion:profile,
       driftPhase: Math.random()*Math.PI*2,
-      driftSpeed: 0.003 + Math.random()*0.003 };
+      orbitPhase: Math.random()*Math.PI*2,
+      driftSpeed: profile.speed + Math.random()*0.0015 };
     orbs.push(orb);
 
     el.addEventListener('pointerdown', e => onDown(e, orb), {passive:true});
@@ -1908,10 +1947,16 @@ const OrbInteraction = (() => {
       orbs.forEach(orb => {
         if (orb.held) return;
         orb.vx *= 0.97; orb.vy *= 0.97;
-        // Gentle drift using per-orb phase
+        // Emotion-shaped drift using per-orb phase: subtle, deterministic, never chaotic.
         orb.driftPhase += orb.driftSpeed;
-        orb.vx += Math.sin(orb.driftPhase * 0.7) * 0.014;
-        orb.vy += Math.cos(orb.driftPhase * 0.5) * 0.014;
+        orb.orbitPhase += orb.family === 'reflective' ? 0.010 : 0.004;
+        const amp = orb.motion.amp * (0.75 + Number(orb.echo?.intensity || 5) / 14);
+        orb.vx += Math.sin(orb.driftPhase * 0.7) * amp;
+        orb.vy += Math.cos(orb.driftPhase * 0.5) * amp;
+        if (orb.family === 'reflective') { orb.vx += Math.cos(orb.orbitPhase) * 0.006; orb.vy += Math.sin(orb.orbitPhase) * 0.006; }
+        if (orb.family === 'anxious') { orb.vx += Math.sin(t * 11 + orb.driftPhase) * 0.0035; orb.vy += Math.cos(t * 13 + orb.driftPhase) * 0.0035; }
+        if (orb.family === 'empty') { orb.vx *= 0.985; orb.vy *= 0.985; }
+        if (orb.family === 'chaos') { orb.targetScale = Math.max(1, 1 + Math.sin(t * 5 + orb.driftPhase) * 0.025); }
         orb.x += orb.vx; orb.y += orb.vy;
         const r = orb.size/2 + 4;
         if (orb.x - r < 0)     { orb.x = r;    orb.vx *= -.55; }
@@ -1922,7 +1967,8 @@ const OrbInteraction = (() => {
         el_setTransform(orb);
       });
       checkMerge();
-      ConnectionCanvas.setOrbs(orbs.map(o => ({x:o.x, y:o.y, mood:o._mood})));
+      ConnectionCanvas.setOrbs(orbs.map(o => ({x:o.x, y:o.y, mood:o._mood, echo:o.echo})));
+      if (state.currentView === 'timeline' && !prefersReducedMotion()) ConnectionCanvas.render();
     }
     animId = requestAnimationFrame(tick);
   }
@@ -2097,6 +2143,7 @@ const Timeline = (() => {
   const field    = document.getElementById('bubble-field');
   const emptyEl  = document.getElementById('timeline-empty');
   const subtitle = document.getElementById('timeline-subtitle');
+  const seasonCard = document.getElementById('timeline-season-card');
   let focusedId  = null;
 
   function render() {
@@ -2107,7 +2154,12 @@ const Timeline = (() => {
       emptyEl.style.display = 'block'; field.style.display = 'none'; return;
     }
     emptyEl.style.display = 'none'; field.style.display = 'block';
-    subtitle.textContent = `${state.echoes.length} echo${state.echoes.length!==1?'s':''} in your cosmos`;
+    const season = getEmotionalSeason(state.echoes);
+    subtitle.textContent = `${state.echoes.length} echo${state.echoes.length!==1?'s':''} in your cosmos · ${season.title}`;
+    if (seasonCard) {
+      seasonCard.style.setProperty('--season-color', season.color || '#c9a84c');
+      seasonCard.innerHTML = `<div><span class="season-kicker">Current emotional season</span><strong>${escapeHTML(season.title)}</strong></div><p>${escapeHTML(season.interpretation)}</p><small>${escapeHTML((season.traits || []).join(' · '))} · confidence ${escapeHTML(season.confidence || 0)}%</small>`;
+    }
 
     const fieldW = field.offsetWidth || window.innerWidth - 64;
     const fieldH = Math.max(560, state.echoes.length * 34);
@@ -2130,7 +2182,7 @@ const Timeline = (() => {
         const dx = p.x-x, dy = p.y-y;
         return Math.sqrt(dx*dx+dy*dy) < (p.r+size/2+14);
       }));
-      placed.push({x, y, r:size/2, mood:echo.mood});
+      placed.push({x, y, r:size/2, mood:echo.mood, echo});
 
       // Gravity ring for top 3
       if (i < 3) {
@@ -2190,12 +2242,12 @@ const Timeline = (() => {
 
       field.appendChild(wrap);
 
-      const orb = OrbInteraction.register(wrap, x, y, size, color, echo.id);
+      const orb = OrbInteraction.register(wrap, x, y, size, color, echo.id, echo);
       orb._mood = echo.mood;
     });
 
     // Feed connection canvas
-    ConnectionCanvas.setOrbs(placed.map(p => ({x:p.x, y:p.y, mood:p.mood})));
+    ConnectionCanvas.setOrbs(placed.map(p => ({x:p.x, y:p.y, mood:p.mood, echo:p.echo})), true);
     ConnectionCanvas.render();
 
     document.getElementById('timeline-tide-label').textContent =
@@ -2218,8 +2270,10 @@ const Timeline = (() => {
 
   function openDetail(echo) {
     const panel = document.getElementById('node-detail');
-    const color = MOOD_COLORS[echo.mood];
-    document.getElementById('detail-badge').textContent = `${MOOD_EMOJIS[echo.mood]} ${echo.mood}`;
+    const color = MOOD_COLORS[echo.mood] || MOOD_COLORS[moodFamily(echo.mood)] || '#c9a84c';
+    const season = getEmotionalSeason(state.echoes);
+    const relations = Phase2?.describeRelations ? Phase2.describeRelations(echo, state.echoes, moodFamily) : [];
+    document.getElementById('detail-badge').textContent = `${MOOD_EMOJIS[echo.mood] || MOOD_EMOJIS[moodFamily(echo.mood)] || '✦'} ${echo.mood}`;
     document.getElementById('detail-badge').style.background = color;
     document.getElementById('detail-int').textContent = echo.intensity;
     document.getElementById('detail-int').style.color = color;
@@ -2229,12 +2283,37 @@ const Timeline = (() => {
     } else {
       thoughtEl.textContent = `"${echo.thought}"`;
     }
+    const seasonEl = document.getElementById('detail-season');
+    if (seasonEl) {
+      seasonEl.style.setProperty('--season-color', season.color || color);
+      seasonEl.innerHTML = `<span>Emotional season</span><strong>${escapeHTML(season.title)}</strong><small>${escapeHTML(season.interpretation)}</small>`;
+    }
+    const relationEl = document.getElementById('detail-relations');
+    if (relationEl) {
+      relationEl.innerHTML = `<span>Constellation relations</span>${relations.length ? relations.map(({echo:rel, score}) => `<button class="detail-relation-pill" type="button" data-echo-id="${escapeHTML(rel.id)}">${escapeHTML(rel.mood)} · ${Math.round(score)}%</button>`).join('') : '<small>No close relation yet. This orb is keeping its own orbit.</small>'}`;
+    }
+    const traceBtn = document.getElementById('detail-trace-btn');
+    if (traceBtn) {
+      traceBtn.disabled = !relations.length;
+      traceBtn.onclick = () => {
+        const target = relations[0]?.echo;
+        if (!target) return;
+        panel.classList.remove('open');
+        const wrap = Array.from(field.querySelectorAll('.bubble-wrap')).find(node => String(node.dataset.id) === String(target.id));
+        if (wrap) { wrap.scrollIntoView({behavior:prefersReducedMotion() ? 'auto' : 'smooth', block:'center'}); handleFocus(wrap); Toast.show('Nearest resonance traced.'); }
+      };
+    }
+    relationEl?.querySelectorAll('.detail-relation-pill').forEach(btn => btn.addEventListener('click', () => {
+      const target = state.echoes.find(item => String(item.id) === btn.dataset.echoId);
+      if (target) openDetail(target);
+    }));
     const silence = echo.silence || 1;
     document.getElementById('detail-meta').innerHTML = `
       ${formatDate(echo.date)}<br>
-      Silence level: ${silence}/10 · ${echo.void ? 'void mode' : 'spoken'}
+      Silence level: ${silence}/10 · ${echo.void ? 'void mode' : 'spoken'} · ${relations.length} relation${relations.length === 1 ? '' : 's'}
     `;
     panel.classList.add('open');
+    setTimeout(() => document.getElementById('detail-close-btn')?.focus(), 40);
   }
 
   return {render};
@@ -2251,10 +2330,22 @@ const Wrapped = (() => {
     return state.echoes;
   }
 
+  function summarizeEvolution(echoes, patterns) {
+    if (echoes.length < 2) return 'One echo is enough to begin the sky. More signals will reveal the arc.';
+    const oldest = echoes[echoes.length - 1];
+    const newest = echoes[0];
+    const shift = moodFamily(oldest.mood) === moodFamily(newest.mood) ? `kept circling ${moodFamily(newest.mood)} weather` : `moved from ${moodFamily(oldest.mood)} into ${moodFamily(newest.mood)}`;
+    const tone = patterns.silenceTrend === 'rising' ? 'with a quieter edge' : patterns.intensityTrend === 'rising' ? 'with brighter pressure' : 'with a steady pulse';
+    return `This period ${shift}, ${tone}. EchoVault reads that as motion, not a verdict.`;
+  }
+
   function render() {
     const filtered = filterEchoes();
     if (!filtered.length) {
-      emptyEl.style.display='block'; contentEl.style.display='none'; return;
+      emptyEl.style.display='block'; contentEl.style.display='none';
+      emptyEl.querySelector('.empty-title').textContent = 'No echoes in this period — the room is still dim.';
+      emptyEl.querySelector('.empty-sub').textContent = 'Create one small echo and Wrapped will turn it into a gentle emotional recap. Nothing dramatic required.';
+      return;
     }
     emptyEl.style.display='none'; contentEl.style.display='block';
     const patterns = PatternEngine.analyze(filtered);
@@ -2262,58 +2353,65 @@ const Wrapped = (() => {
     const moodCounts = patterns.moodCounts || {};
     const sorted = Object.entries(moodCounts).sort((a,b)=>b[1]-a[1]);
     const dominant = patterns.dominantMood || sorted[0]?.[0] || 'reflective';
+    const season = patterns.emotionalSeason || getEmotionalSeason(filtered);
+    const strongest = [...filtered].sort((a,b)=>(b.intensity||0)-(a.intensity||0))[0];
+    const quietest = [...filtered].sort((a,b)=>(b.silence||0)-(a.silence||0))[0];
+    const constellationCount = Phase2?.buildConstellationLinks ? Phase2.buildConstellationLinks(filtered.map((echo, index)=>({x:(index%6)*90,y:Math.floor(index/6)*90,mood:echo.mood,echo})), { moodFamily, maxLinks:64, maxDistance:135 }).length : 0;
+    const tracks = getSoundprintForEcho(strongest || filtered[0], patterns).slice(0,3);
     const chaos = Math.round(((moodCounts.chaos||0)+(moodCounts.anxious||0))/Math.max(1,filtered.length)*100);
 
     contentEl.innerHTML = `
+      <section class="wrapped-hero-card" style="--season-color:${escapeHTML(season.color || MOOD_COLORS[dominant] || '#c9a84c')}">
+        <div class="wrapped-kicker">cinematic recap · ${escapeHTML(state.wrappedPeriod)}</div>
+        <h3>${escapeHTML(season.title)}</h3>
+        <p>${escapeHTML(season.interpretation)}</p>
+        <div class="wrapped-hero-stats">
+          <span><b>${filtered.length}</b> echoes</span>
+          <span><b>${escapeHTML(dominant)}</b> dominant mood</span>
+          <span><b>${constellationCount}</b> constellations</span>
+        </div>
+      </section>
+      <div class="wrapped-card wrapped-season-card">
+        <div class="wrapped-card-title">Emotional Season</div>
+        <p>${escapeHTML(season.summary || season.interpretation)}</p>
+        <div class="season-traits">${(season.traits || []).map(t=>`<span>${escapeHTML(t)}</span>`).join('')}</div>
+        <small>Visual influence: ${escapeHTML(season.influence || 'soft atmospheric glow')} · confidence ${escapeHTML(season.confidence || 0)}%</small>
+      </div>
       <div class="wrapped-card">
         <div class="wrapped-card-title">Emotional Palette</div>
         <div class="palette-wrap">
           ${sorted.map(([mood,count])=>`
             <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
-              <div class="palette-swatch" style="background:${MOOD_COLORS[mood]}"></div>
-              <div style="font-family:var(--font-mono);font-size:8px;color:var(--muted);text-transform:uppercase;margin-top:22px">${mood}</div>
+              <div class="palette-swatch" style="background:${MOOD_COLORS[mood] || MOOD_COLORS[moodFamily(mood)]}"></div>
+              <div style="font-family:var(--font-mono);font-size:8px;color:var(--muted);text-transform:uppercase;margin-top:22px">${escapeHTML(mood)}</div>
               <div style="font-family:var(--font-mono);font-size:8px;color:var(--gold)">${count}×</div>
             </div>`).join('')}
         </div>
       </div>
       <div class="wrapped-card">
-        <div class="wrapped-card-title">By The Numbers</div>
-        <div class="stat-row">
-          <div class="stat-item"><div class="stat-value">${filtered.length}</div><div class="stat-label">Echoes</div></div>
-          <div class="stat-item"><div class="stat-value">${patterns.averageIntensity}</div><div class="stat-label">Avg Intensity</div></div>
-          <div class="stat-item"><div class="stat-value">${patterns.averageSilence}</div><div class="stat-label">Avg Silence</div></div>
-          <div class="stat-item"><div class="stat-value" style="color:${MOOD_COLORS[dominant]};font-size:20px">${dominant}</div><div class="stat-label">Dominant</div></div>
-          <div class="stat-item"><div class="stat-value">${patterns.voidCount}</div><div class="stat-label">Void Entries</div></div>
+        <div class="wrapped-card-title">Cinematic Highlights</div>
+        <div class="wrapped-highlight-grid">
+          <article><span>strongest echo</span><b>${escapeHTML(strongest?.mood || '—')}</b><small>intensity ${escapeHTML(strongest?.intensity ?? '—')} · ${escapeHTML(formatDateShort(strongest?.date || Date.now()))}</small></article>
+          <article><span>quietest echo</span><b>${escapeHTML(quietest?.mood || '—')}</b><small>silence ${escapeHTML(quietest?.silence ?? '—')} · ${escapeHTML(formatDateShort(quietest?.date || Date.now()))}</small></article>
+          <article><span>highest intensity moment</span><b>${escapeHTML(strongest?.thought ? strongest.thought.slice(0, 44) + (strongest.thought.length > 44 ? '…' : '') : 'wordless signal')}</b><small>held, not ranked</small></article>
         </div>
       </div>
       <div class="wrapped-card">
-        <div class="wrapped-card-title">Stability / Chaos Balance</div>
+        <div class="wrapped-card-title">Stability / Static Balance</div>
         <div class="balance-bar"><div class="balance-fill" style="width:${chaos}%"></div></div>
-        <div class="balance-labels"><span>stability ${100-chaos}%</span><span>${chaos}% chaos</span></div>
-        <p style="font-size:15px;font-style:italic;color:var(--muted);margin-top:14px;line-height:1.7">
-          ${chaos<20?'You moved through this period with quiet steadiness.':
-            chaos<50?'A balanced mix of turbulence and calm.':
-            chaos<75?'The winds were strong. You stayed upright.':
-            "Storms and more storms. You're still here. That's everything."}
-        </p>
+        <div class="balance-labels"><span>stability ${100-chaos}%</span><span>${chaos}% static</span></div>
+        <p style="font-size:15px;font-style:italic;color:var(--muted);margin-top:14px;line-height:1.7">${escapeHTML(summarizeEvolution(filtered, patterns))}</p>
       </div>
       <div class="wrapped-card">
-        <div class="wrapped-card-title">Recurring Patterns · ${patterns.emotionalWeather}</div>
-        <ul class="pattern-list">
-          ${sorted.slice(0,5).map(([mood,count])=>`
-            <li class="pattern-item">
-              <div class="pattern-dot" style="background:${MOOD_COLORS[mood]}"></div>
-              <div class="pattern-name">${MOOD_EMOJIS[mood]} ${mood}</div>
-              <div class="pattern-count">${count} time${count!==1?'s':''}</div>
-            </li>`).join('')}
-        </ul>
+        <div class="wrapped-card-title">Soundtrack Motifs</div>
+        <div class="wrapped-track-list">${tracks.map(track=>`<div><b>${escapeHTML(track.song)}</b><span>${escapeHTML(track.artist)}</span><small>${escapeHTML(track.reason)}</small></div>`).join('')}</div>
       </div>
       <div class="wrapped-card" style="text-align:center">
-        <div class="wrapped-card-title">Identity Snapshot</div>
-        <div style="font-family:var(--font-editorial);font-size:28px;color:var(--gold);margin-bottom:8px">${getArchetype(moodCounts)}</div>
-        <p style="font-size:15px;font-style:italic;color:var(--muted);line-height:1.7">${archetype.archetypeDescription}</p>
-        <p style="font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">streak: ${patterns.currentStreakMood || '—'} × ${patterns.currentStreakCount || 0} · volatility ${patterns.volatilityScore}</p>
-        <p style="font-size:14px;color:var(--text);margin-top:8px">${patterns.oneLineInsight || 'You kept returning. That counts.'}</p>
+        <div class="wrapped-card-title">Final Reflection</div>
+        <div style="font-family:var(--font-editorial);font-size:28px;color:var(--gold);margin-bottom:8px">${escapeHTML(archetype.archetypeName || getArchetype(moodCounts))}</div>
+        <p style="font-size:15px;font-style:italic;color:var(--muted);line-height:1.7">${escapeHTML(archetype.archetypeDescription)}</p>
+        <p style="font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">streak: ${escapeHTML(patterns.currentStreakMood || '—')} × ${escapeHTML(patterns.currentStreakCount || 0)} · volatility ${escapeHTML(patterns.volatilityScore)}</p>
+        <p style="font-size:14px;color:var(--text);margin-top:8px">${escapeHTML(patterns.oneLineInsight || 'You kept returning. That counts.')}</p>
       </div>`;
   }
 
@@ -2701,7 +2799,8 @@ const ReceiptRenderer = (() => {
       mood: mood || 'reflective',
       intensity,
       silence,
-      weather: p.emotionalWeather || 'shifting sky',
+      weather: p.emotionalSeason?.title || p.emotionalWeather || 'shifting sky',
+      emotionalSeason: p.emotionalSeason?.title || 'Quiet Winter',
       archetype: a.archetypeName || 'The Unknown',
       voidStatus: safeMode === 'weekly' ? `${Number(p.voidCount) || 0} void entries` : (latest.void ? 'Void Signal' : 'Spoken Signal'),
       insight: p.oneLineInsight || 'You kept returning. That counts.',
@@ -3887,6 +3986,7 @@ const Rituals = (() => {
         <div class="receipt-line"><span>Mood</span><span>${escapeHTML(String(data.mood).toUpperCase())}</span></div>
         <div class="receipt-line"><span>Intensity</span><span>${escapeHTML(data.intensity)}/10</span></div>
         <div class="receipt-line"><span>Silence</span><span>${escapeHTML(data.silence)}/10</span></div>
+        <div class="receipt-line"><span>Emotional Season</span><span>${escapeHTML(data.emotionalSeason || data.weather)}</span></div>
         <div class="receipt-line"><span>Emotional Weather</span><span>${escapeHTML(data.weather)}</span></div>
         <div class="receipt-line"><span>Archetype</span><span>${escapeHTML(data.archetype)}</span></div>
         <div class="receipt-line"><span>Void status</span><span>${escapeHTML(data.voidStatus)}</span></div>
@@ -3981,6 +4081,7 @@ Coordinates: ${d.coordinates}
 Mood: ${d.mood}
 Intensity: ${d.intensity}/10
 Silence: ${d.silence}/10
+Emotional Season: ${d.emotionalSeason || d.weather}
 Emotional Weather: ${d.weather}
 Archetype: ${d.archetype}
 Void status: ${d.voidStatus}
@@ -4003,49 +4104,56 @@ Insight: ${d.insight}`;
   }
 
   function buildDNA() {
-    const mc = {}; state.echoes.forEach(e=>{ mc[e.mood]=(mc[e.mood]||0)+1; });
+    const patterns = PatternEngine.analyze(state.echoes);
+    const mc = patterns.moodCounts || {};
     const total  = state.echoes.length || 1;
     const sorted = Object.entries(mc).sort((a,b)=>b[1]-a[1]);
-    const arch   = getArchetype(mc);
-    const desc   = getArchetypeDesc(mc);
-    const traits = [];
-    if (mc.reflective) traits.push('introspective');
-    if (mc.calm)       traits.push('grounded');
-    if (mc.chaos)      traits.push('electric');
-    if (mc.anxious)    traits.push('hyper-aware');
-    if (mc.joyful)     traits.push('radiant');
-    if (mc.empty)      traits.push('depth-seeker');
+    const archetype = ArchetypeEngine.compute(patterns);
+    const season = patterns.emotionalSeason || getEmotionalSeason(state.echoes);
+    const traits = Array.from(new Set([...(season.traits || []), ...(archetype.dominantFactors || []).slice(0,3)])).slice(0,7);
     if (!traits.length) traits.push('undefined','becoming','open');
     const domEmoji = MOOD_EMOJIS[sorted[0]?.[0]] || '✨';
     return `<div class="dna-card">
       <div class="dna-title">Emotion DNA — v${state.echoes.length}</div>
       <div class="dna-emoji-row">${domEmoji}${domEmoji}${domEmoji}</div>
-      <div class="dna-archetype">${arch}</div>
-      <div class="dna-archetype-sub">${desc}</div>
-      <div class="dna-traits">${traits.map(t=>`<span class="dna-trait">${t}</span>`).join('')}</div>
+      <div class="dna-archetype">${escapeHTML(archetype.archetypeName || getArchetype(mc))}</div>
+      <div class="dna-archetype-sub">${escapeHTML(archetype.archetypeDescription || getArchetypeDesc(mc))}</div>
+      <div class="dna-season-mini">${escapeHTML(season.title)} · ${escapeHTML(season.interpretation)}</div>
+      <div class="dna-traits">${traits.map(t=>`<span class="dna-trait">${escapeHTML(t)}</span>`).join('')}</div>
       <div class="dna-bars">${sorted.slice(0,5).map(([mood,count])=>{
         const pct=Math.round(count/total*100);
         return `<div class="dna-bar-row">
-          <div class="dna-bar-name">${mood}</div>
-          <div class="dna-bar-track"><div class="dna-bar-fill" style="width:${pct}%;background:${MOOD_COLORS[mood]}"></div></div>
+          <div class="dna-bar-name">${escapeHTML(mood)}</div>
+          <div class="dna-bar-track"><div class="dna-bar-fill" style="width:${pct}%;background:${MOOD_COLORS[mood] || MOOD_COLORS[moodFamily(mood)]}"></div></div>
           <div class="dna-bar-pct">${pct}%</div>
         </div>`;
       }).join('')}</div>
-      <div class="dna-footer">EchoVault · Your Emotional Sequence</div>
+      <div class="dna-footer">EchoVault · Your Emotional Sequence · confidence ${escapeHTML(season.confidence || 0)}%</div>
     </div>`;
   }
 
   function buildCrash() {
     const recent = state.echoes[0];
+    const patterns = PatternEngine.analyze(state.echoes);
+    const shouldCrash = Boolean(recent && (Number(recent.intensity || 0) >= 8 || Number(recent.silence || 0) >= 8 || patterns.averageIntensity >= 7 || patterns.averageSilence >= 7));
+    if (!shouldCrash) {
+      return `<div class="crash-report crash-report-soft">
+        <div class="crash-header">SYSTEM STABLE: NO OVERFLOW DETECTED</div>
+        <div class="crash-line"><span class="crash-key">echoes_logged:</span> <span class="crash-val">${state.echoes.length}</span></div>
+        <div class="crash-line"><span class="crash-key">current_season:</span> <span class="crash-val">${escapeHTML(patterns.emotionalSeason?.title || 'Quiet Winter')}</span></div>
+        <div class="crash-stack">Crash Report appears when recent echoes show high intensity or high silence. For now, the system is choosing calm containment.</div>
+        <button class="crash-btn" id="crash-close">close gently</button>
+      </div>`;
+    }
     return `<div class="crash-report">
       <div class="crash-header">💥 PROCESS TERMINATED: EMOTIONAL_OVERFLOW</div>
       <div class="crash-line"><span class="crash-key">timestamp:</span> <span class="crash-val">${new Date().toISOString()}</span></div>
       <div class="crash-line"><span class="crash-key">error_code:</span> <span class="crash-val">FEELINGS_EXCEEDED_CAPACITY</span></div>
       <div class="crash-line"><span class="crash-key">echoes_logged:</span> <span class="crash-val">${state.echoes.length}</span></div>
-      ${recent?`<div class="crash-line"><span class="crash-key">last_emotion:</span> <span class="crash-val">${recent.mood} (intensity ${recent.intensity})</span></div>`:''}
-      <div class="crash-line"><span class="crash-key">memory_usage:</span> <span class="crash-val">97.3% (mostly you)</span></div>
-      <div class="crash-line"><span class="crash-key">recovery_mode:</span> <span class="crash-val">therapy / time / rest</span></div>
-      <div class="crash-stack">Stack trace:<br>&nbsp;&nbsp;at Human.feel() [feelings.js:${Math.floor(Math.random()*9999)}]<br>&nbsp;&nbsp;at Human.suppress() [coping.js:${Math.floor(Math.random()*9999)}]<br>&nbsp;&nbsp;at Human.tryAgain() [resilience.js:${Math.floor(Math.random()*999)}]<br>&nbsp;&nbsp;at Universe.continue() [existence.js:1]</div>
+      ${recent?`<div class="crash-line"><span class="crash-key">last_emotion:</span> <span class="crash-val">${escapeHTML(recent.mood)} (intensity ${escapeHTML(recent.intensity)})</span></div>`:''}
+      <div class="crash-line"><span class="crash-key">silence_level:</span> <span class="crash-val">${escapeHTML(recent?.silence ?? patterns.averageSilence)}/10</span></div>
+      <div class="crash-line"><span class="crash-key">recovery_mode:</span> <span class="crash-val">rest / water / one smaller breath</span></div>
+      <div class="crash-stack">Stack trace:<br>&nbsp;&nbsp;at Human.feel() [signal.js:${Math.floor(Math.random()*999)}]<br>&nbsp;&nbsp;at EchoVault.contain() [ritual.js:${Math.floor(Math.random()*99)}]<br>&nbsp;&nbsp;at Universe.continue() [existence.js:1]</div>
       <button class="crash-btn" id="crash-close">ignore &amp; continue</button>
     </div>`;
   }
@@ -4054,7 +4162,9 @@ Insight: ${d.insight}`;
     const recent = state.echoes[0];
     const mood   = recent?.mood || 'reflective';
     const family = moodFamily(mood);
-    const tracks = getSoundprintForEcho(recent || { mood:family, intensity:5, silence:5 }, PatternEngine.analyze(state.echoes));
+    const patterns = PatternEngine.analyze(state.echoes);
+    const tracks = getSoundprintForEcho(recent || { mood:family, intensity:5, silence:5 }, patterns);
+    const season = patterns.emotionalSeason || getEmotionalSeason(state.echoes);
     const color  = MOOD_COLORS[mood] || MOOD_COLORS[family];
     const coverEmoji = MOOD_COVER_EMOJI[mood] || MOOD_COVER_EMOJI[family] || '🎵';
 
@@ -4070,7 +4180,7 @@ Insight: ${d.insight}`;
 
     return `<div class="soundprint-card">
       <div class="soundprint-title">Echo Soundprint</div>
-      <div class="soundprint-sub">Resonating with your ${(MOOD_EMOJIS[mood] || MOOD_EMOJIS[family])} <strong style="color:var(--text);font-style:normal">${mood}</strong> frequency</div>
+      <div class="soundprint-sub">Resonating with your ${(MOOD_EMOJIS[mood] || MOOD_EMOJIS[family])} <strong style="color:var(--text);font-style:normal">${mood}</strong> frequency · ${escapeHTML(season.title)}</div>
       <div class="track-list">${tracks.map((t,i)=>`
         <div class="track-item">
           <div class="track-cover" style="background:linear-gradient(135deg,${color}55,${color}1a)">
@@ -4967,7 +5077,7 @@ document.addEventListener('keydown', e => {
   }
 });
 
-document.addEventListener('visibilitychange', () => { state.tabHidden = document.hidden; });
+document.addEventListener('visibilitychange', () => { state.tabHidden = document.hidden; if (document.hidden) ConnectionCanvas.stop(); else if (state.currentView === 'timeline') ConnectionCanvas.render(); });
 
 window.addEventListener('resize', () => {
   Cosmos.resize(); Ripple.resize(); ConnectionCanvas.resize(); Whip.resize();

@@ -1,8 +1,10 @@
 const APP_VERSION = 'echo-replay-drift';
 const CACHE = 'echovault-v14-replay-drift';
+const APP_VERSION = 'phase-2-emotional-universe';
+const CACHE = 'echovault-v14-phase-2-emotional-universe';
 
 const toScopeUrl = (path) => new URL(path, self.registration.scope).toString();
-const PRECACHE = ['./', 'index.html', 'styles.css', 'script.js', 'manifest.json', 'icons/icon.svg', 'wrapped-cinematic-module.js'];
+const PRECACHE = ['./', 'index.html', 'styles.css', 'phase2-emotional-intelligence.js', 'script.js', 'manifest.json', 'icons/icon.svg', 'wrapped-cinematic-module.js'];
 const PRECACHE_URLS = PRECACHE.map(toScopeUrl);
 const FALLBACK_INDEX = toScopeUrl('index.html');
 const ICON_URL = toScopeUrl('icons/icon.svg');
