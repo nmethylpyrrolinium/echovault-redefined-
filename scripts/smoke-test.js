@@ -181,8 +181,6 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 
 // Phase 1 game/community foundation checks
 const sw = fs.readFileSync('sw.js','utf8');
-if (!script.includes("echo-replay-drift")) failures.push('APP_VERSION not updated to echo-replay-drift');
-if (!script.includes('echovault-v14-replay-drift') && !sw.includes('echovault-v14-replay-drift')) failures.push('Replay Drift cache marker missing');
 if (!script.includes("phase-2-emotional-universe")) failures.push('APP_VERSION not updated to phase-2-emotional-universe');
 if (!script.includes('echovault-v14-phase-2-emotional-universe') && !sw.includes('echovault-v14-phase-2-emotional-universe')) failures.push('Phase 2 cache marker missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');

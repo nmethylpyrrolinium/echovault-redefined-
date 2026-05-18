@@ -1,8 +1,7 @@
 (function EchoVault() {
 'use strict';
 
-const APP_VERSION = 'echo-replay-drift';
-const SW_CACHE_VERSION = 'echovault-v14-replay-drift';
+// Keep these version constants declared once only; duplicate consts break startup after merge regressions.
 const APP_VERSION = 'phase-2-emotional-universe';
 const SW_CACHE_VERSION = 'echovault-v14-phase-2-emotional-universe';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
