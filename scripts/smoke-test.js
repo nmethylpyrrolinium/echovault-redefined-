@@ -181,9 +181,21 @@ if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-
 
 // Phase 1 game/community foundation checks
 const sw = fs.readFileSync('sw.js','utf8');
-if (!script.includes("phase-2-emotional-universe")) failures.push('APP_VERSION not updated to phase-2-emotional-universe');
-if (!script.includes('echovault-v14-phase-2-emotional-universe') && !sw.includes('echovault-v14-phase-2-emotional-universe')) failures.push('Phase 2 cache marker missing');
+if (!script.includes("scroll-unlock-overlay-cleanup")) failures.push('APP_VERSION not updated to scroll-unlock-overlay-cleanup');
+if (!script.includes('echovault-v15-scroll-unlock-overlay-cleanup') && !sw.includes('echovault-v15-scroll-unlock-overlay-cleanup')) failures.push('Scroll unlock cache marker missing');
 if (!index.includes('Refresh App Cache') && !script.includes('refresh-app-cache-btn')) failures.push('Refresh App Cache missing');
+
+
+// Scroll unlock regression checks
+const appVersionDecls = (script.match(/const\s+APP_VERSION\s*=/g) || []).length;
+if (appVersionDecls !== 1) failures.push(`Expected one APP_VERSION declaration in script.js, found ${appVersionDecls}`);
+const swCacheDecls = (sw.match(/const\s+CACHE\s*=/g) || []).length;
+if (swCacheDecls !== 1) failures.push(`Expected one service-worker CACHE declaration, found ${swCacheDecls}`);
+if (!script.includes('function cleanupOverlays') || !script.includes("login.classList.add('hidden')") || !script.includes("login.style.pointerEvents = 'none'")) failures.push('cleanupOverlays does not force login screen hidden/non-interactive');
+if (!script.includes('function finish()') || !script.includes("overlay.classList.remove('open')") || !script.includes('finally') || !script.includes('cleanupOverlays({ keepOnboarding:false })')) failures.push('Onboarding finish should remove .open and run cleanup in finally');
+if (!script.includes("document.body.style.overflow = ''") || !script.includes("document.documentElement.style.overflow = ''")) failures.push('Overlay cleanup must restore body/html overflow');
+if (!style.includes('max-height:calc(100dvh - 48px);overflow:auto') || !style.includes('#onboarding') || !style.includes('min-height:100dvh')) failures.push('Onboarding mobile dvh scrollability missing');
+if (!sw.includes("fetch(e.request, { cache: 'no-store' })") || !sw.includes('isFreshAsset')) failures.push('Service worker should network-refresh CSS/JS assets');
 ['EchoAvatar','echovault_avatar_v1','MaterialEngine','VaultInventory','echovault_inventory_v1','GentleQuests','echovault_quests_v1','Society Gate'].forEach((marker) => {
   if (!script.includes(marker) && !index.includes(marker)) failures.push(`Missing Phase 1 marker: ${marker}`);
 });

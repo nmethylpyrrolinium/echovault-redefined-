@@ -2,8 +2,8 @@
 'use strict';
 
 // Keep these version constants declared once only; duplicate consts break startup after merge regressions.
-const APP_VERSION = 'phase-2-emotional-universe';
-const SW_CACHE_VERSION = 'echovault-v14-phase-2-emotional-universe';
+const APP_VERSION = 'scroll-unlock-overlay-cleanup';
+const SW_CACHE_VERSION = 'echovault-v15-scroll-unlock-overlay-cleanup';
 console.info('[EchoVault]', APP_VERSION, SW_CACHE_VERSION);
 
 const AppEnvironment = (() => {
@@ -263,6 +263,62 @@ let state = {
   tabHidden: false,
   lsWriteTimer: null
 };
+
+
+/* ── SCROLL / OVERLAY SAFETY ── */
+function cleanupOverlays(options = {}) {
+  const keepOnboarding = Boolean(options.keepOnboarding);
+  document.documentElement.classList.add('app-unlocked');
+  document.body.classList.add('app-unlocked');
+  document.documentElement.style.overflow = '';
+  document.body.style.overflow = '';
+  document.documentElement.style.touchAction = '';
+  document.body.style.touchAction = '';
+
+  const login = document.getElementById('login-screen');
+  if (login) {
+    login.classList.add('hidden');
+    login.setAttribute('aria-hidden', 'true');
+    login.style.pointerEvents = 'none';
+  }
+
+  const onboarding = document.getElementById('onboarding');
+  if (onboarding && !keepOnboarding) {
+    onboarding.classList.remove('open');
+    onboarding.setAttribute('aria-hidden', 'true');
+    onboarding.style.pointerEvents = '';
+  }
+
+  [
+    '#settings-overlay',
+    '#fun-modal',
+    '#node-detail',
+    '#migration-modal',
+    '#import-preview-modal',
+    '#special-access-modal',
+    '#replay-drift-stage'
+  ].forEach((selector) => {
+    const el = document.querySelector(selector);
+    if (!el) return;
+    el.classList.remove('open');
+    el.setAttribute('aria-hidden', 'true');
+    el.style.pointerEvents = '';
+  });
+
+  document.querySelectorAll('.cinematic-modal.open, .courier-modal, #alam-ai-panel, #echosociety-overlay').forEach((el) => {
+    el.classList.remove('open');
+    if (el.id === 'courier-modal' || el.id === 'alam-ai-panel' || el.id === 'echosociety-overlay') el.remove();
+    else el.setAttribute('aria-hidden', 'true');
+  });
+
+  const shell = document.querySelector('.app-shell');
+  if (shell) {
+    shell.style.pointerEvents = '';
+    shell.style.overflowY = '';
+    shell.style.touchAction = '';
+  }
+  DebugPanel?.ensure?.();
+}
 
 /* ── STORAGE ── */
 const Storage = (() => {
@@ -932,7 +988,21 @@ const Login = (() => {
     authStatus.className = `auth-status ${tone}`.trim();
   }
   function validEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
-  function enterApp(){ screen.classList.add('hidden'); setTimeout(() => { screen.style.display='none'; if (!localStorage.getItem(OB_KEY)) Onboarding.start(); }, 950); }
+  function enterApp(){
+    document.documentElement.classList.add('app-unlocked');
+    document.body.classList.add('app-unlocked');
+    screen?.classList.add('hidden');
+    screen?.setAttribute('aria-hidden', 'true');
+    if (screen) screen.style.pointerEvents = 'none';
+    cleanupOverlays({ keepOnboarding:false });
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+    setTimeout(() => {
+      if (screen) screen.style.display = 'none';
+      cleanupOverlays({ keepOnboarding:false });
+      if (!localStorage.getItem(OB_KEY)) Onboarding.start();
+    }, prefersReducedMotion() ? 120 : 950);
+  }
   function setButtonLoading(btn, loading, idleText, busyText){ if(!btn) return; btn.disabled=loading; btn.setAttribute('aria-busy', String(loading)); btn.textContent=loading?busyText:idleText; }
   function setOtpUiStep(codeSent){
     authOtp.style.display = codeSent ? 'block' : 'none';
@@ -1237,14 +1307,23 @@ const Onboarding = (() => {
   }
 
   function start() {
+    cleanupOverlays({ keepOnboarding:true });
     overlay.classList.add('open');
+    overlay.setAttribute('aria-hidden', 'false');
+    overlay.style.pointerEvents = '';
     current = 0;
     render();
+    DebugPanel?.ensure?.();
   }
 
   function finish() {
-    overlay.classList.remove('open');
-    localStorage.setItem(OB_KEY, '1');
+    try {
+      overlay.classList.remove('open');
+      overlay.setAttribute('aria-hidden', 'true');
+      localStorage.setItem(OB_KEY, '1');
+    } finally {
+      cleanupOverlays({ keepOnboarding:false });
+    }
   }
 
   nextBtn.addEventListener('click', () => {
@@ -1259,6 +1338,7 @@ const Onboarding = (() => {
   document.addEventListener('keydown', (event) => {
     if (!overlay.classList.contains('open')) return;
     if (event.key === 'Enter') { event.preventDefault(); nextBtn.click(); }
+    if (event.key === 'Escape') { event.preventDefault(); finish(); }
   });
 
   return {start, finish};
@@ -5070,9 +5150,12 @@ document.getElementById('import-file').addEventListener('change', function() {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    document.getElementById('node-detail').classList.remove('open');
-    document.getElementById('fun-modal').classList.remove('open');
-    document.getElementById('onboarding').classList.remove('open');
+    document.getElementById('node-detail')?.classList.remove('open');
+    document.getElementById('fun-modal')?.classList.remove('open');
+    document.getElementById('onboarding')?.classList.remove('open');
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+    DebugPanel?.ensure?.();
   }
 });
 
@@ -5138,8 +5221,13 @@ const DebugPanel = (() => {
       document.body.appendChild(panel);
     }
     const profile = ProfileStore.read();
-    panel.innerHTML = `APP_VERSION:${APP_VERSION}<br>SW cache:${SW_CACHE_VERSION}<br>mode:${Auth.isLocalMode() ? 'local' : 'supabase'}<br>display:${AppEnvironment.isStandalone() ? 'standalone':'browser'}<br>echoes:${state.echoes.length}<br>artifacts:${ArtifactArchive.listArtifacts().length}<br>profile:${escapeHTML(profile.display_name || 'anon')}<br>access:${escapeHTML(UserAccess.getTier())} (${escapeHTML(UserAccess.getSource())})<br>sw:${navigator.serviceWorker?.controller ? 'active' : 'none'}`;
-    console.info('[EchoVault Debug]', { appVersion: APP_VERSION, swCacheVersion: SW_CACHE_VERSION, storageMode: Auth.isLocalMode() ? 'local' : 'supabase', standalone: AppEnvironment.isStandalone(), echoCount: state.echoes.length, artifactCount: ArtifactArchive.listArtifacts().length, accessTier: UserAccess.getTier(), accessSource: UserAccess.getSource() });
+    const activeOverlays = ['login-screen','onboarding','settings-overlay','fun-modal','node-detail','migration-modal','import-preview-modal','replay-drift-stage','special-access-modal']
+      .map((id) => document.getElementById(id))
+      .filter((el) => el && (el.classList.contains('open') || (!el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && ['login-screen'].includes(el.id))))
+      .map((el) => `${el.id}${el.classList.contains('open') ? '.open' : ''}`);
+    const swStatus = navigator.serviceWorker?.controller ? `active (${navigator.serviceWorker.controller.scriptURL || 'controller'})` : 'none';
+    panel.innerHTML = `APP_VERSION:${APP_VERSION}<br>SW cache:${SW_CACHE_VERSION}<br>mode:${Auth.isLocalMode() ? 'local' : 'supabase'}<br>display:${AppEnvironment.isStandalone() ? 'standalone':'browser'}<br>current view:${escapeHTML(state.currentView)}<br>active overlays:${escapeHTML(activeOverlays.join(', ') || 'none')}<br>html overflow:${escapeHTML(document.documentElement.style.overflow || getComputedStyle(document.documentElement).overflow)}<br>body overflow:${escapeHTML(document.body.style.overflow || getComputedStyle(document.body).overflow)}<br>sw:${escapeHTML(swStatus)}<br>echoes:${state.echoes.length}<br>artifacts:${ArtifactArchive.listArtifacts().length}<br>profile:${escapeHTML(profile.display_name || 'anon')}<br>access:${escapeHTML(UserAccess.getTier())} (${escapeHTML(UserAccess.getSource())})`;
+    console.info('[EchoVault Debug]', { appVersion: APP_VERSION, swCacheVersion: SW_CACHE_VERSION, storageMode: Auth.isLocalMode() ? 'local' : 'supabase', standalone: AppEnvironment.isStandalone(), currentView: state.currentView, activeOverlays, htmlOverflow: document.documentElement.style.overflow || getComputedStyle(document.documentElement).overflow, bodyOverflow: document.body.style.overflow || getComputedStyle(document.body).overflow, serviceWorker: swStatus, echoCount: state.echoes.length, artifactCount: ArtifactArchive.listArtifacts().length, accessTier: UserAccess.getTier(), accessSource: UserAccess.getSource() });
   }
   return { ensure };
 })();
