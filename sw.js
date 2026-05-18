@@ -1,5 +1,4 @@
-const APP_VERSION = 'echo-replay-drift';
-const CACHE = 'echovault-v14-replay-drift';
+// Keep these version constants declared once only; duplicate consts break service-worker startup after merge regressions.
 const APP_VERSION = 'phase-2-emotional-universe';
 const CACHE = 'echovault-v14-phase-2-emotional-universe';
 
