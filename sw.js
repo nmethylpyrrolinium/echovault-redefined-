@@ -1,6 +1,6 @@
 // Keep these version constants declared once only; duplicate consts break service-worker startup after merge regressions.
-const APP_VERSION = 'phase-2-emotional-universe';
-const CACHE = 'echovault-v14-phase-2-emotional-universe';
+const APP_VERSION = 'scroll-unlock-overlay-cleanup';
+const CACHE = 'echovault-v15-scroll-unlock-overlay-cleanup';
 
 const toScopeUrl = (path) => new URL(path, self.registration.scope).toString();
 const PRECACHE = ['./', 'index.html', 'styles.css', 'phase2-emotional-intelligence.js', 'script.js', 'manifest.json', 'icons/icon.svg', 'wrapped-cinematic-module.js'];
@@ -42,6 +42,24 @@ self.addEventListener('fetch', (e) => {
           return r;
         })
         .catch(() => caches.match(FALLBACK_INDEX))
+    );
+    return;
+  }
+
+  const isFreshAsset = ['script', 'style', 'worker'].includes(e.request.destination)
+    || /\.(?:css|js)$/i.test(url.pathname);
+
+  if (isFreshAsset) {
+    e.respondWith(
+      fetch(e.request, { cache: 'no-store' })
+        .then((r) => {
+          if (r.ok) {
+            const c = r.clone();
+            caches.open(CACHE).then((ca) => ca.put(e.request, c));
+          }
+          return r;
+        })
+        .catch(() => caches.match(e.request))
     );
     return;
   }
